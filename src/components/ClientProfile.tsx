@@ -1,4 +1,4 @@
-import { ArrowLeft, User, Mail, Phone, Calendar, Clock, CreditCard, History } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, Calendar, CreditCard, History } from 'lucide-react';
 
 interface ClientProfileProps {
     onBack: () => void;

@@ -1,4 +1,4 @@
-import { Plus, Clock, Edit2, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Plus, Clock, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { db } from '../firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
