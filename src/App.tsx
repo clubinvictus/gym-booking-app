@@ -8,7 +8,7 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
 
   if (loading) return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
-      <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>LOADING INVICTUS...</p>
+      <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>LOADING INVICTUS CALENDAR...</p>
     </div>
   );
 

@@ -129,7 +129,8 @@ export const LoginPage = () => {
         }}>
             <div className="card" style={{ width: '100%', maxWidth: '440px', padding: '40px' }}>
                 <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-                    <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>Invictus Fitness</h1>
+                    <img src="/logo black.png" alt="Invictus" style={{ width: '80px', height: '80px', objectFit: 'contain', marginBottom: '16px' }} />
+                    <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>Invictus Calendar</h1>
                     <p className="text-muted">Sign in to manage your bookings</p>
                 </div>
 

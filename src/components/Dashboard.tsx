@@ -227,9 +227,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 flexShrink: 0
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px', padding: '0 8px' }}>
-                    <div style={{ width: '32px', height: '32px', background: '#fff', borderRadius: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <div style={{ width: '16px', height: '16px', background: '#000', borderRadius: 0 }}></div>
-                    </div>
+                    <img src="/logo white.png" alt="Invictus" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
                     {isSidebarOpen && <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '-0.05em' }}>INVICTUS</span>}
                 </div>
 

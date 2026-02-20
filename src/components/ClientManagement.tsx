@@ -1,4 +1,4 @@
-import { Search, Plus, Filter, MoreVertical } from 'lucide-react';
+import { Search, Plus, Filter } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 
 interface ClientManagementProps {
@@ -54,12 +54,17 @@ export const ClientManagement = ({ onClientClick }: ClientManagementProps) => {
                             <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Contact</th>
                             <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Joined Date</th>
                             <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Status</th>
-                            <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {clients.map((client) => (
-                            <tr key={client.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                            <tr
+                                key={client.id}
+                                style={{ borderTop: '1px solid #f0f0f0', cursor: 'pointer', transition: 'background 0.15s ease' }}
+                                onClick={() => onClientClick(client)}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = '#f9f9f9')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            >
                                 <td style={{ padding: '16px 24px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                         <div style={{ width: '32px', height: '32px', background: '#000', borderRadius: 0 }}></div>
@@ -80,18 +85,6 @@ export const ClientManagement = ({ onClientClick }: ClientManagementProps) => {
                                         fontSize: '0.75rem',
                                         fontWeight: 700
                                     }}>Active</span>
-                                </td>
-                                <td style={{ padding: '16px 24px' }}>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button
-                                            className="button-secondary"
-                                            style={{ padding: '6px 12px', fontSize: '0.75rem' }}
-                                            onClick={() => onClientClick(client)}
-                                        >
-                                            View Profile
-                                        </button>
-                                        <button style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><MoreVertical size={18} /></button>
-                                    </div>
                                 </td>
                             </tr>
                         ))}
