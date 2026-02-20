@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getRole() {
+      return getUserData().role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getRole() == 'admin';
+    }
+
+    function isManager() {
+      return isSignedIn() && (getRole() == 'manager' || getRole() == 'admin');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Site isolation helper
+    function belongsToSite(data) {
+      // Admins are global for now, others must match siteId
+      return isAdmin() || data.siteId == getUserData().siteId;
+    }
+
+    // Rules for the 'users' collection (Profiles)
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isAdmin() || isOwner(userId));
+      allow write: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
+    }
+
+    // Rules for 'trainers'
+    match /trainers/{trainerId} {
+      allow read: if isSignedIn() && belongsToSite(resource.data);
+      allow write: if isManager() && belongsToSite(request.resource.data);
+    }
+
+    // Rules for 'managers'
+    match /managers/{managerId} {
+      allow read: if isSignedIn() && isManager() && belongsToSite(resource.data);
+      allow write: if isAdmin() && belongsToSite(request.resource.data);
+    }
+
+    // Rules for 'services'
+    match /services/{serviceId} {
+      allow read: if isSignedIn() && belongsToSite(resource.data);
+      allow write: if isManager() && belongsToSite(request.resource.data);
+    }
+
+    // Rules for 'clients'
+    match /clients/{clientId} {
+      allow read: if isManager() && belongsToSite(resource.data);
+      allow write: if isManager() && belongsToSite(request.resource.data);
+    }
+
+    // Rules for 'sessions'
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn() && belongsToSite(resource.data) && (
+        isManager() || 
+        (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId) ||
+        (getRole() == 'client' && resource.data.clientId == request.auth.uid)
+      );
+      
+      allow create: if isSignedIn() && belongsToSite(request.resource.data) && (
+        isManager() ||
+        (getRole() == 'trainer' && request.resource.data.trainerId == getUserData().trainerId) ||
+        (getRole() == 'client' && request.resource.data.clientId == request.auth.uid)
+      );
+
+      allow update: if isSignedIn() && belongsToSite(resource.data) && belongsToSite(request.resource.data) && (
+        isManager() ||
+        (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId && request.resource.data.trainerId == getUserData().trainerId) ||
+        (getRole() == 'client' && resource.data.clientId == request.auth.uid && request.resource.data.clientId == request.auth.uid)
+      );
+
+      allow delete: if isSignedIn() && belongsToSite(resource.data) && (
+        isManager() ||
+        (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId) ||
+        (getRole() == 'client' && resource.data.clientId == request.auth.uid)
+      );
+    }
+
+    // Rules for 'activity_logs'
+    match /activity_logs/{logId} {
+      allow read: if isManager() && belongsToSite(resource.data);
+      allow write: if isSignedIn() && belongsToSite(request.resource.data);
+    }
+    
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

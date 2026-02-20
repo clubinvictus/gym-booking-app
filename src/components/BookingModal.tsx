@@ -156,17 +156,26 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, on
             ? new Date(editingSession.date)
             : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
 
-        const getBookingData = (date: Date, dayIdx: number) => ({
-            clientName: isClient ? profile?.name : (selectedClient || editingSession?.clientName),
-            trainerName: selectedTrainer,
-            serviceName: selectedService || editingSession?.serviceName,
-            time: selectedTime,
-            day: dayIdx,
-            date: date.toISOString(),
-            status: 'Scheduled',
-            siteId: SITE_ID,
-            createdAt: new Date().toISOString()
-        });
+        const getBookingData = (date: Date, dayIdx: number) => {
+            const client = clients.find(c => c.name === selectedClient);
+            const trainer = trainers.find(t => t.name === selectedTrainer);
+            const service = services.find(s => s.name === (selectedService || editingSession?.serviceName));
+
+            return {
+                clientName: isClient ? profile?.name : (selectedClient || editingSession?.clientName),
+                clientId: isClient ? profile?.uid : (client?.id || null),
+                trainerName: selectedTrainer,
+                trainerId: trainer?.id || null,
+                serviceName: selectedService || editingSession?.serviceName,
+                serviceId: service?.id || null,
+                time: selectedTime,
+                day: dayIdx,
+                date: date.toISOString(),
+                status: 'Scheduled',
+                siteId: SITE_ID,
+                createdAt: new Date().toISOString()
+            };
+        };
 
         const logActivity = async (action: 'booked' | 'rescheduled', sessionDetails: any) => {
             try {

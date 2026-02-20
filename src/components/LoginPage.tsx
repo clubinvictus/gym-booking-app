@@ -21,7 +21,8 @@ export const LoginPage = () => {
                 await setDoc(doc(db, 'users', user.uid), {
                     email: user.email,
                     role: 'admin',
-                    name: user.displayName || fullName || 'Admin'
+                    name: user.displayName || fullName || 'Admin',
+                    siteId: 'invictus-booking' // Hardcoded for admin for now, or use SITE_ID
                 }, { merge: true });
                 navigate('/dashboard');
                 return;
@@ -37,7 +38,8 @@ export const LoginPage = () => {
                     email: user.email,
                     role: 'manager',
                     managerId: managerQuerySnapshot.docs[0].id,
-                    name: user.displayName || fullName || managerQuerySnapshot.docs[0].data().name
+                    name: user.displayName || fullName || managerQuerySnapshot.docs[0].data().name,
+                    siteId: managerQuerySnapshot.docs[0].data().siteId || 'invictus-booking'
                 }, { merge: true });
                 navigate('/dashboard');
                 return;
@@ -53,7 +55,8 @@ export const LoginPage = () => {
                     email: user.email,
                     role: 'trainer',
                     trainerId: querySnapshot.docs[0].id,
-                    name: user.displayName || fullName || querySnapshot.docs[0].data().name
+                    name: user.displayName || fullName || querySnapshot.docs[0].data().name,
+                    siteId: querySnapshot.docs[0].data().siteId || 'invictus-booking'
                 }, { merge: true });
                 navigate('/dashboard'); // Will be filtered by role later
                 return;
@@ -65,7 +68,8 @@ export const LoginPage = () => {
                 await setDoc(doc(db, 'users', user.uid), {
                     email: user.email,
                     role: 'client',
-                    name: user.displayName || fullName || 'New Client'
+                    name: user.displayName || fullName || 'New Client',
+                    siteId: 'invictus-booking' // Default site for new clients
                 });
             }
             navigate('/dashboard');
