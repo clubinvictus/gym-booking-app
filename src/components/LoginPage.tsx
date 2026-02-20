@@ -4,6 +4,7 @@ import { auth, googleProvider, db } from '../firebase';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { LogIn, UserPlus } from 'lucide-react';
+import { SITE_ID } from '../constants';
 
 export const LoginPage = () => {
     const [isSignIn, setIsSignIn] = useState(true);
@@ -16,13 +17,17 @@ export const LoginPage = () => {
 
     const determineRoleAndRedirect = async (user: any) => {
         try {
-            // 1. Check if Admin
-            if (user.email === 'marc@clubinvictus.com') {
+            // 1. Check if Admin (via Firestore 'admins' collection)
+            const adminsRef = collection(db, 'admins');
+            const adminQ = query(adminsRef, where('email', '==', user.email));
+            const adminQuerySnapshot = await getDocs(adminQ);
+
+            if (!adminQuerySnapshot.empty) {
                 await setDoc(doc(db, 'users', user.uid), {
                     email: user.email,
                     role: 'admin',
                     name: user.displayName || fullName || 'Admin',
-                    siteId: 'invictus-booking' // Hardcoded for admin for now, or use SITE_ID
+                    siteId: adminQuerySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
                 navigate('/dashboard');
                 return;
@@ -39,7 +44,7 @@ export const LoginPage = () => {
                     role: 'manager',
                     managerId: managerQuerySnapshot.docs[0].id,
                     name: user.displayName || fullName || managerQuerySnapshot.docs[0].data().name,
-                    siteId: managerQuerySnapshot.docs[0].data().siteId || 'invictus-booking'
+                    siteId: managerQuerySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
                 navigate('/dashboard');
                 return;
@@ -56,7 +61,7 @@ export const LoginPage = () => {
                     role: 'trainer',
                     trainerId: querySnapshot.docs[0].id,
                     name: user.displayName || fullName || querySnapshot.docs[0].data().name,
-                    siteId: querySnapshot.docs[0].data().siteId || 'invictus-booking'
+                    siteId: querySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
                 navigate('/dashboard'); // Will be filtered by role later
                 return;
@@ -69,7 +74,7 @@ export const LoginPage = () => {
                     email: user.email,
                     role: 'client',
                     name: user.displayName || fullName || 'New Client',
-                    siteId: 'invictus-booking' // Default site for new clients
+                    siteId: SITE_ID
                 });
             }
             navigate('/dashboard');

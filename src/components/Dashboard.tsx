@@ -171,7 +171,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>Dashboard</h1>
                                 <p className="text-muted">Welcome back, {profile?.name || 'User'}! Here's what's happening Today.</p>
                             </div>
-                            {isAdmin && !isManager && (
+                            {import.meta.env.DEV && isAdmin && !isManager && (
                                 <button
                                     onClick={handleSeedData}
                                     className="button-secondary"

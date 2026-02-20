@@ -6,14 +6,14 @@ import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
 
 export const ClientDashboardView = () => {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const { data: sessions } = useFirestore<any>('sessions');
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
 
-    // Filter to only the client's own sessions
+    // Filter to only the client's own sessions using UID (not name)
     const mySessions = sessions
-        .filter(s => s.clientName === profile?.name)
+        .filter(s => s.clientId === user?.uid || s.clientName === profile?.name)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Filter to only upcoming sessions

@@ -28,14 +28,22 @@ service cloud.firestore {
 
     // Site isolation helper
     function belongsToSite(data) {
-      // Admins are global for now, others must match siteId
       return isAdmin() || data.siteId == getUserData().siteId;
     }
 
     // Rules for the 'users' collection (Profiles)
+    // C2 FIX: Split create/update. New users can ONLY be created as 'client'.
+    // Role promotion must happen through admin or server-side.
     match /users/{userId} {
       allow read: if isSignedIn() && (isAdmin() || isOwner(userId));
-      allow write: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
+    }
+
+    // Rules for 'admins' collection (used for admin lookup during login)
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only editable via Firebase Console
     }
 
     // Rules for 'trainers'

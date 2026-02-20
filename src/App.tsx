@@ -35,7 +35,7 @@ function App() {
           <Route path="/services" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="services" /></ProtectedRoute>} />
           <Route path="/clients" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="clients" /></ProtectedRoute>} />
           <Route path="/activity" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="activity" /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Dashboard view="settings" /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="settings" /></ProtectedRoute>} />
 
           {/* Client/General Routes */}
           <Route path="/calendar" element={<ProtectedRoute><Dashboard view="calendar" /></ProtectedRoute>} />
