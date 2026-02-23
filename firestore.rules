@@ -28,7 +28,9 @@ service cloud.firestore {
 
     // Site isolation helper
     function belongsToSite(data) {
-      return isAdmin() || data.siteId == getUserData().siteId;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return (userDoc != null && userDoc.data.role == 'admin') || 
+             (userDoc != null && data.siteId == userDoc.data.siteId);
     }
 
     // Rules for the 'users' collection (Profiles)
@@ -42,20 +44,23 @@ service cloud.firestore {
 
     // Rules for 'admins' collection (used for admin lookup during login)
     match /admins/{adminId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && resource.data.email == request.auth.token.email;
       allow write: if false; // Only editable via Firebase Console
-    }
-
-    // Rules for 'trainers'
-    match /trainers/{trainerId} {
-      allow read: if isSignedIn() && belongsToSite(resource.data);
-      allow write: if isManager() && belongsToSite(request.resource.data);
     }
 
     // Rules for 'managers'
     match /managers/{managerId} {
-      allow read: if isSignedIn() && isManager() && belongsToSite(resource.data);
+      allow read: if isSignedIn() && (
+        (resource.data.email == request.auth.token.email) ||
+        (isManager() && belongsToSite(resource.data))
+      );
       allow write: if isAdmin() && belongsToSite(request.resource.data);
+    }
+
+    // Rules for 'trainers'
+    match /trainers/{trainerId} {
+      allow read: if isSignedIn(); // Allow all users to see trainers for booking
+      allow write: if isManager() && belongsToSite(request.resource.data);
     }
 
     // Rules for 'services'
