@@ -152,20 +152,27 @@ export const CalendarView = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
             <header style={{
-                padding: '20px 40px',
+                padding: window.innerWidth <= 768 ? '16px 20px' : '20px 40px',
                 borderBottom: '2px solid #000',
                 display: 'flex',
+                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                gap: '20px',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: window.innerWidth <= 768 ? 'stretch' : 'center',
                 background: '#fff'
             }}>
                 {/* Left: Branding/Title */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'space-between' }}>
                     <h1 style={{ fontSize: '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
+                    {window.innerWidth <= 768 && (
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
+                            {formatWeekRange(currentWeekStart)}
+                        </span>
+                    )}
                 </div>
 
                 {/* Center: Navigation & Date */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: window.innerWidth <= 768 ? '12px' : '32px', justifyContent: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <button onClick={handlePrevWeek} className="button-secondary" style={{ padding: '6px 10px', height: '36px' }}><ChevronLeft size={18} /></button>
                         <button
@@ -198,21 +205,24 @@ export const CalendarView = () => {
                             <ChevronRight size={18} />
                         </button>
                     </div>
-                    <span style={{ fontWeight: 800, fontSize: '1.1rem', whiteSpace: 'nowrap' }}>
-                        {formatWeekRange(currentWeekStart)}
-                    </span>
+                    {window.innerWidth > 768 && (
+                        <span style={{ fontWeight: 800, fontSize: '1.1rem', whiteSpace: 'nowrap' }}>
+                            {formatWeekRange(currentWeekStart)}
+                        </span>
+                    )}
                 </div>
 
                 {/* Right: Controls & Primary Action */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
                     {isAdmin && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
                             <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>
                             <select
                                 value={selectedTrainerId}
                                 onChange={(e) => setSelectedTrainerId(e.target.value)}
                                 style={{
                                     height: '42px',
+                                    flex: window.innerWidth <= 768 ? 1 : 'none',
                                     padding: '0 16px',
                                     border: '2px solid #000',
                                     borderRadius: 0,
@@ -235,6 +245,7 @@ export const CalendarView = () => {
                         onClick={handleBookButtonClick}
                         style={{
                             height: '42px',
+                            width: window.innerWidth <= 768 ? '100%' : 'auto',
                             padding: '0 20px',
                             background: '#000',
                             color: '#fff',
@@ -244,6 +255,7 @@ export const CalendarView = () => {
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'center',
                             gap: '10px',
                             letterSpacing: '0.02em'
                         }}
@@ -254,11 +266,11 @@ export const CalendarView = () => {
                 </div>
             </header>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: '0 40px' }}>
+            <div style={{ flex: 1, overflow: 'auto', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: '80px repeat(7, 1fr)',
-                    minWidth: '1000px',
+                    gridTemplateColumns: '60px repeat(7, 1fr)',
+                    minWidth: window.innerWidth <= 768 ? '800px' : '1000px',
                     borderLeft: '2px solid #000',
                     borderRight: '2px solid #000'
                 }}>

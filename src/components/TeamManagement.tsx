@@ -21,20 +21,52 @@ export const TeamManagement = ({ onTrainerClick, onAddTrainerClick, onAddManager
     if (trainersError || managersError) return <div style={{ padding: '40px', color: 'red' }}>Error loading data.</div>;
 
     return (
-        <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto' }}>
-            <header style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px', maxWidth: '1200px', margin: '0 auto' }}>
+            <header style={{
+                marginBottom: '40px',
+                display: 'flex',
+                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                justifyContent: 'space-between',
+                alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                gap: '24px'
+            }}>
                 <div>
-                    <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>Team</h1>
+                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', marginBottom: '8px' }}>Team</h1>
                     <p className="text-muted">Manage your trainers and managers</p>
                 </div>
                 {!isManager && (
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        <button onClick={onAddTrainerClick} className="button-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Plus size={20} />
+                    <div style={{ display: 'flex', gap: '12px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
+                        <button
+                            onClick={onAddTrainerClick}
+                            className="button-primary"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                flex: window.innerWidth <= 768 ? 1 : 'none',
+                                padding: window.innerWidth <= 768 ? '10px' : '12px 24px',
+                                fontSize: window.innerWidth <= 768 ? '0.8rem' : '1rem'
+                            }}
+                        >
+                            <Plus size={window.innerWidth <= 768 ? 18 : 20} />
                             Add Trainer
                         </button>
-                        <button onClick={onAddManagerClick} className="button-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#333' }}>
-                            <Shield size={20} />
+                        <button
+                            onClick={onAddManagerClick}
+                            className="button-primary"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                background: '#333',
+                                flex: window.innerWidth <= 768 ? 1 : 'none',
+                                padding: window.innerWidth <= 768 ? '10px' : '12px 24px',
+                                fontSize: window.innerWidth <= 768 ? '0.8rem' : '1rem'
+                            }}
+                        >
+                            <Shield size={window.innerWidth <= 768 ? 18 : 20} />
                             Add Manager
                         </button>
                     </div>
@@ -75,7 +107,7 @@ export const TeamManagement = ({ onTrainerClick, onAddTrainerClick, onAddManager
             </div>
 
             {view === 'trainers' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '24px' }}>
                     {trainers.map(trainer => (
                         <div
                             key={trainer.id}
@@ -114,7 +146,14 @@ export const TeamManagement = ({ onTrainerClick, onAddTrainerClick, onAddManager
                         <div
                             key={manager.id}
                             className="card"
-                            style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                            style={{
+                                padding: '24px',
+                                display: 'flex',
+                                alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                                justifyContent: 'space-between',
+                                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                                gap: '16px'
+                            }}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                                 <div style={{ width: '64px', height: '64px', background: '#f5f5f5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

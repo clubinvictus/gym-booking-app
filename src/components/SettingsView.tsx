@@ -1,4 +1,4 @@
-import { Bell, Shield, Smartphone, User, Globe, Moon, Briefcase } from 'lucide-react';
+import { Bell, Shield, User, Moon, Briefcase } from 'lucide-react';
 import { ServiceManagement } from './ServiceManagement';
 
 interface SettingsViewProps {
@@ -10,15 +10,26 @@ interface SettingsViewProps {
 
 export const SettingsView = ({ activeTab = 'general', onTabChange, onAddService, onEditService }: SettingsViewProps) => {
     return (
-        <div style={{ padding: '40px' }}>
+        <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px' }}>
             <header style={{ marginBottom: '40px' }}>
-                <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>Settings</h1>
+                <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', marginBottom: '8px' }}>Settings</h1>
                 <p className="text-muted">Manage your studio configuration and account</p>
             </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '48px' }}>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '250px 1fr',
+                gap: window.innerWidth <= 768 ? '32px' : '48px'
+            }}>
                 {/* Sidebar Nav */}
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <nav style={{
+                    display: 'flex',
+                    flexDirection: window.innerWidth <= 768 ? 'row' : 'column',
+                    gap: '8px',
+                    overflowX: window.innerWidth <= 768 ? 'auto' : 'visible',
+                    paddingBottom: window.innerWidth <= 768 ? '8px' : '0',
+                    borderBottom: window.innerWidth <= 768 ? '2px solid #eee' : 'none'
+                }}>
                     <div onClick={() => onTabChange?.('general')}>
                         <SettingsNavItem icon={<User size={18} />} label="General" active={activeTab === 'general'} />
                     </div>
@@ -27,8 +38,6 @@ export const SettingsView = ({ activeTab = 'general', onTabChange, onAddService,
                     </div>
                     <SettingsNavItem icon={<Bell size={18} />} label="Notifications" />
                     <SettingsNavItem icon={<Shield size={18} />} label="Security" />
-                    <SettingsNavItem icon={<Smartphone size={18} />} label="Mobile App" />
-                    <SettingsNavItem icon={<Globe size={18} />} label="Integrations" />
                 </nav>
 
                 {/* Content */}
@@ -83,8 +92,10 @@ export const SettingsView = ({ activeTab = 'general', onTabChange, onAddService,
                                     border: '2px solid #ff4444',
                                     borderRadius: 0,
                                     display: 'flex',
+                                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
                                     justifyContent: 'space-between',
-                                    alignItems: 'center'
+                                    alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                                    gap: '20px'
                                 }}>
                                     <div>
                                         <h3 style={{ color: '#ff4444', fontWeight: 800, marginBottom: '4px' }}>Danger Zone</h3>
@@ -93,10 +104,12 @@ export const SettingsView = ({ activeTab = 'general', onTabChange, onAddService,
                                     <button style={{
                                         background: '#ff4444',
                                         color: '#fff',
+                                        padding: '12px 24px',
                                         border: 'none',
                                         borderRadius: 0,
                                         fontWeight: 800,
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        width: window.innerWidth <= 768 ? '100%' : 'auto'
                                     }}>Delete Account</button>
                                 </div>
                             </section>

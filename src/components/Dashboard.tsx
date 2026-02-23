@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from './CalendarView';
@@ -15,6 +15,7 @@ import { ActivityLogView } from './ActivityLogView';
 import { TeamManagement } from './TeamManagement';
 import { AddTrainerModal } from './AddTrainerModal';
 import { AddManagerModal } from './AddManagerModal';
+import { AddClientModal } from './AddClientModal';
 import { AddServiceModal } from './AddServiceModal';
 import { EditTrainerModal } from './EditTrainerModal';
 import { seedInitialData } from '../seed';
@@ -29,11 +30,12 @@ interface DashboardProps {
 }
 
 export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
-    const [isSidebarOpen, setSidebarOpen] = useState(true);
+    const [isSidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
     const [selectedTrainerId, setSelectedTrainerId] = useState<string | null>(null);
     const [selectedClient, setSelectedClient] = useState<any>(null);
     const [trainerModalOpen, setTrainerModalOpen] = useState(false);
     const [managerModalOpen, setManagerModalOpen] = useState(false);
+    const [clientModalOpen, setClientModalOpen] = useState(false);
     const [editTrainerOpen, setEditTrainerOpen] = useState(false);
     const [serviceModalOpen, setServiceModalOpen] = useState(false);
     const [selectedService, setSelectedService] = useState<any>(null);
@@ -41,6 +43,18 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [isSeeding, setIsSeeding] = useState(false);
     const { profile } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth <= 768) {
+                setSidebarOpen(false);
+            } else {
+                setSidebarOpen(true);
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const isAdmin = profile?.role === 'admin';
     const isManager = profile?.role === 'manager';
@@ -136,7 +150,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     />
                 );
             case 'clients':
-                return <ClientManagement onClientClick={handleClientClick} />;
+                return <ClientManagement onClientClick={handleClientClick} onAddClick={() => setClientModalOpen(true)} />;
             case 'activity':
                 return <ActivityLogView />;
             case 'settings':
@@ -165,10 +179,17 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     : sessions;
 
                 return (
-                    <div style={{ padding: '40px' }}>
-                        <header style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px' }}>
+                        <header style={{
+                            marginBottom: '40px',
+                            display: 'flex',
+                            flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                            justifyContent: 'space-between',
+                            alignItems: window.innerWidth <= 768 ? 'stretch' : 'flex-start',
+                            gap: '24px'
+                        }}>
                             <div>
-                                <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>Dashboard</h1>
+                                <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', marginBottom: '8px' }}>Dashboard</h1>
                                 <p className="text-muted">Welcome back, {profile?.name || 'User'}! Here's what's happening Today.</p>
                             </div>
                             {import.meta.env.DEV && isAdmin && !isManager && (
@@ -176,7 +197,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                     onClick={handleSeedData}
                                     className="button-secondary"
                                     disabled={isSeeding}
-                                    style={{ opacity: isSeeding ? 0.5 : 1 }}
+                                    style={{ opacity: isSeeding ? 0.5 : 1, width: window.innerWidth <= 768 ? '100%' : 'auto' }}
                                 >
                                     {isSeeding ? 'Seeding...' : 'Seed Initial Data'}
                                 </button>
@@ -214,8 +235,25 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     };
 
     return (
-        <div className="app-container" style={{ display: 'flex', minHeight: '100vh', background: '#fff' }}>
-            <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'} `} style={{
+        <div className="app-container">
+            {/* Mobile Header */}
+            <header className="mobile-header">
+                <img src="/logo white.png" alt="Invictus" style={{ height: '32px' }} />
+                <button
+                    onClick={() => setSidebarOpen(true)}
+                    style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}
+                >
+                    <Menu size={24} />
+                </button>
+            </header>
+
+            {/* Sidebar Overlay (Mobile Only) */}
+            <div
+                className={`sidebar-overlay ${isSidebarOpen && window.innerWidth <= 768 ? 'visible' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+            />
+
+            <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`} style={{
                 width: isSidebarOpen ? '280px' : '80px',
                 backgroundColor: '#000',
                 color: '#fff',
@@ -232,24 +270,54 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 </div>
 
                 <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div onClick={() => { navigate('/dashboard'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                    <div onClick={() => {
+                        window.innerWidth <= 768 && setSidebarOpen(false);
+                        navigate('/dashboard');
+                        setSelectedTrainerId(null);
+                        setSelectedClient(null);
+                    }}>
                         <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={view === 'dashboard'} isOpen={isSidebarOpen} />
                     </div>
-                    <div onClick={() => { navigate('/calendar'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                    <div onClick={() => {
+                        window.innerWidth <= 768 && setSidebarOpen(false);
+                        navigate('/calendar');
+                        setSelectedTrainerId(null);
+                        setSelectedClient(null);
+                    }}>
                         <NavItem icon={<Calendar size={20} />} label="Calendar" active={view === 'calendar'} isOpen={isSidebarOpen} />
                     </div>
                     {(isAdmin || isManager) && (
                         <>
-                            <div onClick={() => { navigate('/team'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                            <div onClick={() => {
+                                window.innerWidth <= 768 && setSidebarOpen(false);
+                                navigate('/team');
+                                setSelectedTrainerId(null);
+                                setSelectedClient(null);
+                            }}>
                                 <NavItem icon={<Users size={20} />} label="Team" active={view === 'team'} isOpen={isSidebarOpen} />
                             </div>
-                            <div onClick={() => { navigate('/services'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                            <div onClick={() => {
+                                window.innerWidth <= 768 && setSidebarOpen(false);
+                                navigate('/services');
+                                setSelectedTrainerId(null);
+                                setSelectedClient(null);
+                            }}>
                                 <NavItem icon={<Briefcase size={20} />} label="Services" active={view === 'services'} isOpen={isSidebarOpen} />
                             </div>
-                            <div onClick={() => { navigate('/clients'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                            <div onClick={() => {
+                                window.innerWidth <= 768 && setSidebarOpen(false);
+                                navigate('/clients');
+                                setSelectedTrainerId(null);
+                                setSelectedClient(null);
+                            }}>
                                 <NavItem icon={<Users size={20} />} label="Clients" active={view === 'clients'} isOpen={isSidebarOpen} />
                             </div>
-                            <div onClick={() => { navigate('/activity'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                            <div onClick={() => {
+                                window.innerWidth <= 768 && setSidebarOpen(false);
+                                navigate('/activity');
+                                setSelectedTrainerId(null);
+                                setSelectedClient(null);
+                            }}>
                                 <NavItem icon={<Clock size={20} />} label="Activity Log" active={view === 'activity'} isOpen={isSidebarOpen} />
                             </div>
                         </>
@@ -257,7 +325,12 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 </nav>
 
                 <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div onClick={() => { navigate('/settings'); setSelectedTrainerId(null); setSelectedClient(null); }}>
+                    <div onClick={() => {
+                        window.innerWidth <= 768 && setSidebarOpen(false);
+                        navigate('/settings');
+                        setSelectedTrainerId(null);
+                        setSelectedClient(null);
+                    }}>
                         <NavItem icon={<Settings size={20} />} label="Settings" active={view === 'settings'} isOpen={isSidebarOpen} />
                     </div>
                     <button
@@ -294,7 +367,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 </button>
             </aside>
 
-            <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <main className="main-content">
                 {renderContent()}
             </main>
 
@@ -362,6 +435,25 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 onAdd={() => {
                     setServiceModalOpen(false);
                     setSelectedService(null);
+                }}
+            />
+            <AddClientModal
+                isOpen={clientModalOpen}
+                onClose={() => setClientModalOpen(false)}
+                onAdd={async (data) => {
+                    try {
+                        await addDoc(collection(db, 'clients'), {
+                            ...data,
+                            siteId: SITE_ID,
+                            status: 'Active',
+                            createdAt: new Date().toISOString()
+                        });
+                        setClientModalOpen(false);
+                        alert('Client added successfully!');
+                    } catch (error) {
+                        console.error('Error adding client:', error);
+                        alert('Failed to add client.');
+                    }
                 }}
             />
         </div>

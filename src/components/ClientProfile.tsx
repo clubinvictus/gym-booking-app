@@ -4,7 +4,9 @@ import { useFirestore } from '../hooks/useFirestore';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
 import { db } from '../firebase';
-import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, collection, addDoc } from 'firebase/firestore';
+import { useAuth } from '../AuthContext';
+import { SITE_ID } from '../constants';
 
 interface ClientProfileProps {
     onBack: () => void;
@@ -26,6 +28,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const [editName, setEditName] = useState(client.name);
     const [editEmail, setEditEmail] = useState(client.email);
     const [editPhone, setEditPhone] = useState(client.phone);
+    const { profile } = useAuth();
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -62,20 +65,56 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     };
 
     const handleDeleteClient = async () => {
-        if (window.confirm(`Are you sure you want to delete ${client.name}? This cannot be undone.`)) {
+        if (window.confirm(`Are you sure you want to delete ${client.name}? This will also cancel all ${upcomingSessions.length} future bookings.`)) {
             try {
-                await deleteDoc(doc(db, 'clients', client.id));
-                alert('Client deleted.');
+                const batch = writeBatch(db);
+
+                // Delete the client document
+                batch.delete(doc(db, 'clients', client.id));
+
+                // Delete all future sessions
+                upcomingSessions.forEach(session => {
+                    batch.delete(doc(db, 'sessions', session.id));
+                });
+
+                await batch.commit();
+
+                // Log activities for session cancellations
+                const logPromises = upcomingSessions.map(session =>
+                    addDoc(collection(db, 'activity_logs'), {
+                        action: 'cancelled',
+                        sessionDetails: {
+                            clientName: session.clientName,
+                            trainerName: session.trainerName,
+                            serviceName: session.serviceName,
+                            date: session.date,
+                            time: session.time
+                        },
+                        performedBy: {
+                            uid: profile?.uid || 'unknown',
+                            name: profile?.name || 'Unknown User',
+                            role: profile?.role || 'unknown'
+                        },
+                        timestamp: new Date().toISOString(),
+                        siteId: SITE_ID
+                    })
+                );
+
+                if (logPromises.length > 0) {
+                    await Promise.all(logPromises);
+                }
+
+                alert('Client and future bookings deleted.');
                 onBack();
             } catch (err) {
-                console.error('Error deleting client:', err);
+                console.error('Error deleting client and sessions:', err);
                 alert('Failed to delete client.');
             }
         }
     };
 
     return (
-        <div style={{ padding: '40px', maxWidth: '1000px', margin: '0 auto' }}>
+        <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px', maxWidth: '1000px', margin: '0 auto' }}>
             <button
                 onClick={onBack}
                 style={{
@@ -95,101 +134,109 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
             </button>
 
             {/* Client Info Card */}
-            <div className="card" style={{ padding: '32px', marginBottom: '32px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-                        <div style={{
-                            width: '80px',
-                            height: '80px',
-                            background: '#000',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#fff',
-                            flexShrink: 0
-                        }}>
-                            <User size={36} />
-                        </div>
-                        {isEditing ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    style={{ padding: '8px 12px', border: '2px solid #000', fontWeight: 700, fontSize: '1.1rem' }}
-                                    placeholder="Name"
-                                />
-                                <input
-                                    type="email"
-                                    value={editEmail}
-                                    onChange={(e) => setEditEmail(e.target.value)}
-                                    style={{ padding: '8px 12px', border: '2px solid #000', fontSize: '0.9rem' }}
-                                    placeholder="Email"
-                                />
-                                <input
-                                    type="tel"
-                                    value={editPhone}
-                                    onChange={(e) => setEditPhone(e.target.value)}
-                                    style={{ padding: '8px 12px', border: '2px solid #000', fontSize: '0.9rem' }}
-                                    placeholder="Phone"
-                                />
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button className="button-primary" onClick={handleSaveEdit} style={{ padding: '8px 20px' }}>
-                                        Save
-                                    </button>
-                                    <button className="button-secondary" onClick={() => { setIsEditing(false); setEditName(client.name); setEditEmail(client.email); setEditPhone(client.phone); }} style={{ padding: '8px 20px' }}>
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{client.name}</h2>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-                                        <Mail size={16} className="text-muted" />
-                                        <span>{client.email}</span>
-                                    </div>
-                                    {client.phone && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-                                            <Phone size={16} className="text-muted" />
-                                            <span>{client.phone}</span>
-                                        </div>
-                                    )}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-                                        <Calendar size={16} className="text-muted" />
-                                        <span className="text-muted">Joined {client.joined}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+            <div className="card" style={{ padding: window.innerWidth <= 768 ? '20px' : '32px', marginBottom: '32px' }}>
+                <div style={{
+                    display: 'flex',
+                    gap: window.innerWidth <= 768 ? '16px' : '24px',
+                    alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row'
+                }}>
+                    <div style={{
+                        width: window.innerWidth <= 768 ? '60px' : '80px',
+                        height: window.innerWidth <= 768 ? '60px' : '80px',
+                        background: '#000',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        flexShrink: 0
+                    }}>
+                        <User size={36} />
                     </div>
-                    {!isEditing && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="button-secondary"
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px' }}
-                            >
-                                <Edit2 size={16} /> Edit
-                            </button>
-                            <button
-                                onClick={handleDeleteClient}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                    padding: '8px 16px', background: '#ff4444', color: '#fff',
-                                    border: 'none', fontWeight: 700, cursor: 'pointer'
-                                }}
-                            >
-                                <Trash2 size={16} /> Delete
-                            </button>
+                    {isEditing ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+                            <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                style={{ padding: '8px 12px', border: '2px solid #000', fontWeight: 700, fontSize: '1.1rem' }}
+                                placeholder="Name"
+                            />
+                            <input
+                                type="email"
+                                value={editEmail}
+                                onChange={(e) => setEditEmail(e.target.value)}
+                                style={{ padding: '8px 12px', border: '2px solid #000', fontSize: '0.9rem' }}
+                                placeholder="Email"
+                            />
+                            <input
+                                type="tel"
+                                value={editPhone}
+                                onChange={(e) => setEditPhone(e.target.value)}
+                                style={{ padding: '8px 12px', border: '2px solid #000', fontSize: '0.9rem' }}
+                                placeholder="Phone"
+                            />
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="button-primary" onClick={handleSaveEdit} style={{ padding: '8px 20px' }}>
+                                    Save
+                                </button>
+                                <button className="button-secondary" onClick={() => { setIsEditing(false); setEditName(client.name); setEditEmail(client.email); setEditPhone(client.phone); }} style={{ padding: '8px 20px' }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{client.name}</h2>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                                    <Mail size={16} className="text-muted" />
+                                    <span>{client.email}</span>
+                                </div>
+                                {client.phone && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                                        <Phone size={16} className="text-muted" />
+                                        <span>{client.phone}</span>
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                                    <Calendar size={16} className="text-muted" />
+                                    <span className="text-muted">Joined {client.joined}</span>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
+                {!isEditing && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="button-secondary"
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px' }}
+                        >
+                            <Edit2 size={16} /> Edit
+                        </button>
+                        <button
+                            onClick={handleDeleteClient}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '6px',
+                                padding: '8px 16px', background: '#ff4444', color: '#fff',
+                                border: 'none', fontWeight: 700, cursor: 'pointer'
+                            }}
+                        >
+                            <Trash2 size={16} /> Delete
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Stats Row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : 'repeat(3, 1fr)',
+                gap: '16px',
+                marginBottom: '32px'
+            }}>
                 <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
                     <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: '8px' }}>UPCOMING</p>
                     <p style={{ fontSize: '1.8rem', fontWeight: 800 }}>{upcomingSessions.length}</p>
@@ -205,16 +252,24 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #eee', paddingBottom: '16px' }}>
+            <div style={{
+                display: 'flex',
+                gap: '4px',
+                marginBottom: '24px',
+                borderBottom: '2px solid #eee',
+                paddingBottom: '16px',
+                overflowX: 'auto'
+            }}>
                 <button
                     onClick={() => setTab('upcoming')}
                     style={{
-                        padding: '8px 24px',
+                        padding: window.innerWidth <= 768 ? '8px 16px' : '8px 24px',
                         background: tab === 'upcoming' ? '#000' : 'transparent',
                         color: tab === 'upcoming' ? '#fff' : '#666',
                         border: 'none',
                         fontWeight: 700,
                         cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                         transition: 'all 0.2s ease'
                     }}
                 >
@@ -223,12 +278,13 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                 <button
                     onClick={() => setTab('past')}
                     style={{
-                        padding: '8px 24px',
+                        padding: window.innerWidth <= 768 ? '8px 16px' : '8px 24px',
                         background: tab === 'past' ? '#000' : 'transparent',
                         color: tab === 'past' ? '#fff' : '#666',
                         border: 'none',
                         fontWeight: 700,
                         cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                         transition: 'all 0.2s ease'
                     }}
                 >
