@@ -11,6 +11,7 @@ interface BookingModalProps {
     onClose: () => void;
     selectedSlot: { day: number; time: string; date?: Date; trainerId?: string | null } | null;
     editingSession?: any;
+    excludedTrainerId?: string | null;
     onBook: (data: any) => void;
 }
 
@@ -25,7 +26,7 @@ const daysMap: { [key: number]: string } = {
     0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday', 5: 'saturday', 6: 'sunday'
 };
 
-export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, onBook }: BookingModalProps) => {
+export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, excludedTrainerId, onBook }: BookingModalProps) => {
     const { data: clients } = useFirestore<any>('clients');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: services } = useFirestore<any>('services');
@@ -124,7 +125,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, on
 
     const availableTrainers = trainers.filter(t =>
         (selectedService ? (t.specialties?.includes(selectedService)) : true) &&
-        isAvailable(t)
+        isAvailable(t) &&
+        (excludedTrainerId ? t.id !== excludedTrainerId : true)
     );
 
     useEffect(() => {
@@ -533,9 +535,19 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, on
                                 </select>
                             </div>
                             {availableTrainers.length === 0 && (
-                                <p style={{ fontSize: '0.8rem', color: '#ff4444', fontWeight: 700, marginTop: '8px' }}>
-                                    No trainer available for this service at the selected day/time.
-                                </p>
+                                <div style={{
+                                    padding: '16px',
+                                    background: '#fff5f5',
+                                    border: '2px solid #ff4444',
+                                    marginTop: '8px'
+                                }}>
+                                    <p style={{ fontSize: '0.85rem', color: '#ff4444', fontWeight: 800, margin: 0 }}>
+                                        No trainers available for this service at the selected time.
+                                    </p>
+                                    <p style={{ fontSize: '0.75rem', color: '#ff4444', fontWeight: 600, marginTop: '4px' }}>
+                                        Please try a different time slot or day from the options above.
+                                    </p>
+                                </div>
                             )}
                         </div>
 

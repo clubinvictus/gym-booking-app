@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
+import { OffDayModal } from './OffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
 
@@ -28,6 +29,9 @@ const getStartOfWeek = (d: Date) => {
 export const CalendarView = () => {
     const [selectedSlot, setSelectedSlot] = useState<{ day: number; time: string; date?: Date; trainerId?: string | null } | null>(null);
     const [selectedSession, setSelectedSession] = useState<any>(null);
+    const [excludedTrainerId, setExcludedTrainerId] = useState<string | null>(null);
+    const [offDayModalOpen, setOffDayModalOpen] = useState(false);
+    const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const { profile } = useAuth();
@@ -134,6 +138,19 @@ export const CalendarView = () => {
 
         if (available) {
             setSelectedSlot({ day: dayIndex, time, trainerId: effectiveTrainerId, date: slotDate });
+        }
+    };
+
+    const handleDayHeaderClick = (dayIndex: number) => {
+        if (!isAdmin || selectedTrainerId === 'all') return;
+
+        const date = new Date(currentWeekStart);
+        date.setDate(date.getDate() + dayIndex);
+        const trainer = trainers.find(t => t.id === selectedTrainerId);
+
+        if (window.confirm(`Call off day for ${trainer.name} on ${date.toLocaleDateString()}?`)) {
+            setOffDayDate(date);
+            setOffDayModalOpen(true);
         }
     };
 
@@ -277,15 +294,28 @@ export const CalendarView = () => {
                     {/* Header */}
                     <div style={{ height: '60px', borderBottom: '2px solid #000' }}></div>
                     {days.map((day, i) => (
-                        <div key={day} style={{
-                            height: '60px',
-                            borderBottom: '2px solid #000',
-                            borderLeft: '1px solid #eee',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}>
+                        <div
+                            key={day}
+                            onClick={() => handleDayHeaderClick(i)}
+                            style={{
+                                height: '60px',
+                                borderBottom: '2px solid #000',
+                                borderLeft: '1px solid #eee',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: (isAdmin && selectedTrainerId !== 'all') ? 'pointer' : 'default',
+                                background: (isAdmin && selectedTrainerId !== 'all') ? '#fff' : '#fff',
+                                transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = '#f9f9f9';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#fff';
+                            }}
+                        >
                             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666' }}>{day}</span>
                             <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>{getDayDate(currentWeekStart, i)}</span>
                         </div>
@@ -366,13 +396,16 @@ export const CalendarView = () => {
                 onClose={() => {
                     setSelectedSlot(null);
                     setSelectedSession(null);
+                    setExcludedTrainerId(null);
                 }}
                 selectedSlot={selectedSlot}
                 editingSession={selectedSession}
+                excludedTrainerId={excludedTrainerId}
                 onBook={(data) => {
                     console.log('Session booked/updated:', data);
                     setSelectedSlot(null);
                     setSelectedSession(null);
+                    setExcludedTrainerId(null);
                 }}
             />
 
@@ -391,6 +424,33 @@ export const CalendarView = () => {
                         trainerId: session.trainerId
                     });
                     // selectedSession stays set so BookingModal knows we are editing
+                }}
+            />
+
+            <OffDayModal
+                isOpen={offDayModalOpen}
+                onClose={() => setOffDayModalOpen(false)}
+                trainer={trainers.find(t => t.id === selectedTrainerId)}
+                date={offDayDate || new Date()}
+                sessions={sessions.filter((s: any) => {
+                    if (!offDayDate) return false;
+                    const logDate = new Date(s.date).toISOString().split('T')[0];
+                    const selectedDate = offDayDate.toISOString().split('T')[0];
+                    return s.trainerId === selectedTrainerId && logDate === selectedDate;
+                })}
+                onReschedule={(session) => {
+                    setSelectedSession(session);
+                    setExcludedTrainerId(session.trainerId);
+                    setSelectedSlot({
+                        day: session.day,
+                        time: session.time,
+                        trainerId: session.trainerId,
+                        date: new Date(session.date)
+                    });
+                    setOffDayModalOpen(false);
+                }}
+                onRefresh={() => {
+                    // Firestore handles live updates via useFirestore
                 }}
             />
         </div>
