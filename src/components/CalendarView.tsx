@@ -91,10 +91,14 @@ export const CalendarView = () => {
 
         return activeTrainers.some(trainer => {
             const daySchedule = trainer.availability?.[dayName];
-            if (!daySchedule || !daySchedule.active) return false;
-            const startTime = convertTo24h(daySchedule.start);
-            const endTime = convertTo24h(daySchedule.end);
-            return slotTime >= startTime && slotTime < endTime;
+            if (!daySchedule || !daySchedule.active || !daySchedule.shifts) return false;
+
+            // Check if slot falls within ANY of the trainer's shifts for that day
+            return daySchedule.shifts.some((shift: any) => {
+                const startTime = convertTo24h(shift.start);
+                const endTime = convertTo24h(shift.end);
+                return slotTime >= startTime && slotTime < endTime;
+            });
         });
     };
 

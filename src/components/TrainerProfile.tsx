@@ -153,14 +153,20 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
 
                     <div className="card" style={{ padding: '24px' }}>
                         <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Availability</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
                                 const dayData = trainer.availability?.[day];
-                                if (!dayData || !dayData.active) return null;
+                                if (!dayData || !dayData.active || !dayData.shifts) return null;
                                 return (
-                                    <div key={day} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                    <div key={day} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', alignItems: 'flex-start' }}>
                                         <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{day}</span>
-                                        <span>{dayData.start} - {dayData.end}</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'right' }}>
+                                            {dayData.shifts.map((shift: any, idx: number) => (
+                                                <span key={idx} style={{ fontWeight: 600 }}>
+                                                    {shift.start} - {shift.end}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                 );
                             })}
