@@ -3,8 +3,12 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
 import { OffDayModal } from './OffDayModal';
+import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
+import { db } from '../firebase';
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { SITE_ID } from '../constants';
 
 const formatWeekRange = (start: Date) => {
     const end = new Date(start);
@@ -34,7 +38,7 @@ export const CalendarView = () => {
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const isAdmin = profile?.role === 'admin';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
@@ -49,9 +53,10 @@ export const CalendarView = () => {
         return nextWeekStart > limitDate;
     })();
 
-    // Fetch live sessions and trainers
+    // Fetch live sessions, trainers, and off-days
     const { data: sessions } = useFirestore<any>('sessions');
     const { data: trainers } = useFirestore<any>('trainers');
+    const { data: offDays } = useFirestore<any>('off_days');
 
     // Auto-filter for trainers
     React.useEffect(() => {
@@ -62,8 +67,9 @@ export const CalendarView = () => {
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const timeSlots = [
-        '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-        '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM'
+        '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+        '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM',
+        '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM'
     ];
 
     const daysMap: { [key: number]: string } = {
@@ -89,7 +95,15 @@ export const CalendarView = () => {
             ? trainers
             : trainers.filter(t => t.id === selectedTrainerId);
 
+        const slotDate = new Date(currentWeekStart);
+        slotDate.setDate(slotDate.getDate() + dayIndex);
+        const dateStr = slotDate.toISOString().split('T')[0];
+
         return activeTrainers.some(trainer => {
+            // Check if day is marked as persistent OFF in Firestore
+            const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
+            if (isOff) return false;
+
             const daySchedule = trainer.availability?.[dayName];
             if (!daySchedule || !daySchedule.active || !daySchedule.shifts) return false;
 
@@ -121,41 +135,49 @@ export const CalendarView = () => {
     const handleSlotClick = (dayIndex: number, time: string) => {
         const effectiveTrainerId = isTrainer ? profile?.trainerId : (selectedTrainerId === 'all' ? null : selectedTrainerId);
 
-        const existingSession = sessions.find((s: any) => {
-            const matchDay = s.day === dayIndex && s.time === time;
-            if (selectedTrainerId === 'all') return matchDay;
-            return matchDay && s.trainerId === selectedTrainerId;
-        });
-
-        if (existingSession) {
-            if (!isClient || existingSession.clientName === profile?.name) {
-                setSelectedSession(existingSession);
-            }
-            return;
-        }
-
         const slotDate = new Date(currentWeekStart);
         slotDate.setDate(slotDate.getDate() + dayIndex);
         const isPastLimit = isClient && slotDate > limitDate;
 
-        const available = isTrainerAvailable(dayIndex, time) && !isPastLimit;
+        let available = isTrainerAvailable(dayIndex, time) && !isPastLimit;
 
-        if (available) {
+        // Block double booking the same trainer if viewing individually
+        if (selectedTrainerId !== 'all') {
+            const isBooked = sessions.some((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
+            if (isBooked) available = false;
+        }
+
+        // Prevent trainers from booking sessions
+        if (available && !isTrainer) {
             setSelectedSlot({ day: dayIndex, time, trainerId: effectiveTrainerId, date: slotDate });
         }
     };
 
-    const handleDayHeaderClick = (dayIndex: number) => {
+    const [confirmOffDayOpen, setConfirmOffDayOpen] = useState(false);
+
+    const handleDayHeaderClick = async (dayIndex: number) => {
         if (!isAdmin || selectedTrainerId === 'all') return;
 
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + dayIndex);
-        const trainer = trainers.find(t => t.id === selectedTrainerId);
+        const dateStr = date.toISOString().split('T')[0];
 
-        if (window.confirm(`Call off day for ${trainer.name} on ${date.toLocaleDateString()}?`)) {
-            setOffDayDate(date);
-            setOffDayModalOpen(true);
+        // Check if already an off-day
+        const existingOffDay = offDays.find((od: any) => od.trainerId === selectedTrainerId && od.date === dateStr);
+
+        if (existingOffDay) {
+            if (window.confirm('Remove off-day status for this date?')) {
+                try {
+                    await deleteDoc(doc(db, 'off_days', existingOffDay.id));
+                } catch (err) {
+                    console.error('Error removing off-day:', err);
+                }
+            }
+            return;
         }
+
+        setOffDayDate(date);
+        setConfirmOffDayOpen(true);
     };
 
     const handleBookButtonClick = () => {
@@ -261,29 +283,30 @@ export const CalendarView = () => {
                             </select>
                         </div>
                     )}
-
-                    <button
-                        onClick={handleBookButtonClick}
-                        style={{
-                            height: '42px',
-                            width: window.innerWidth <= 768 ? '100%' : 'auto',
-                            padding: '0 20px',
-                            background: '#000',
-                            color: '#fff',
-                            border: '2px solid #000',
-                            fontWeight: 900,
-                            fontSize: '0.8rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '10px',
-                            letterSpacing: '0.02em'
-                        }}
-                    >
-                        <Plus size={18} />
-                        BOOK SESSION
-                    </button>
+                    {!isTrainer && (
+                        <button
+                            onClick={handleBookButtonClick}
+                            style={{
+                                height: '42px',
+                                width: window.innerWidth <= 768 ? '100%' : 'auto',
+                                padding: '0 20px',
+                                background: '#000',
+                                color: '#fff',
+                                border: '2px solid #000',
+                                fontWeight: 900,
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '10px',
+                                letterSpacing: '0.02em'
+                            }}
+                        >
+                            <Plus size={18} />
+                            BOOK SESSION
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -329,7 +352,7 @@ export const CalendarView = () => {
                     {timeSlots.map(time => (
                         <React.Fragment key={time}>
                             <div style={{
-                                height: '100px',
+                                minHeight: '100px',
                                 borderBottom: '1px solid #eee',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -341,19 +364,20 @@ export const CalendarView = () => {
                                 {time}
                             </div>
                             {days.map((_, dayIndex) => {
-                                const slotSession = sessions.find((s: any) => {
+                                const slotSessions = sessions.filter((s: any) => {
                                     const matchDay = s.day === dayIndex && s.time === time;
                                     if (selectedTrainerId === 'all') return matchDay;
                                     return matchDay && s.trainerId === selectedTrainerId;
                                 });
 
-                                const displaySession = slotSession && (!isClient || slotSession.clientName === profile?.name) ? slotSession : null;
+                                const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
                                 const slotDate = new Date(currentWeekStart);
                                 slotDate.setDate(slotDate.getDate() + dayIndex);
                                 const isPastLimit = isClient && slotDate > limitDate;
 
-                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && !slotSession;
+                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && slotSessions.length === 0;
+                                const showAsAvailable = selectedTrainerId === 'all' || available;
 
                                 return (
                                     <div
@@ -363,34 +387,50 @@ export const CalendarView = () => {
                                             borderBottom: '1px solid #eee',
                                             borderLeft: '1px solid #eee',
                                             position: 'relative',
-                                            cursor: displaySession ? 'pointer' : (available ? 'pointer' : 'not-allowed'),
-                                            backgroundColor: displaySession ? '#000' : (available ? 'transparent' : '#fafafa'),
-                                            backgroundImage: !displaySession && !available
+                                            minHeight: '100px',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '4px',
+                                            cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
+                                            backgroundColor: showAsAvailable ? 'transparent' : '#fafafa',
+                                            backgroundImage: displaySessions.length === 0 && !showAsAvailable
                                                 ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #f0f0f0 10px, #f0f0f0 20px)'
                                                 : 'none',
                                             transition: 'all 0.2s ease'
                                         }}
                                     >
-                                        {displaySession && (
-                                            <div style={{
-                                                padding: '12px',
-                                                color: '#fff',
-                                                height: '100%',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'space-between'
-                                            }}>
+                                        {displaySessions.map((displaySession: any, idx: number) => (
+                                            <div
+                                                key={idx}
+                                                className="session-card"
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // prevent triggering a new booking
+                                                    setSelectedSession(displaySession);
+                                                }}
+                                                style={{
+                                                    backgroundColor: '#000',
+                                                    borderRadius: '4px',
+                                                    padding: '8px',
+                                                    color: '#fff',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    cursor: 'pointer',
+                                                    flexShrink: 0
+                                                }}
+                                            >
                                                 <div>
                                                     <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>{displaySession.clientName}</div>
                                                     <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{displaySession.serviceName}</div>
                                                 </div>
-                                                <div style={{ fontSize: '0.65rem', fontWeight: 700 }}>{displaySession.trainerName}</div>
+                                                <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
                                 );
                             })}
                         </React.Fragment>
+
                     ))}
                 </div>
             </div>
@@ -429,6 +469,33 @@ export const CalendarView = () => {
                     });
                     // selectedSession stays set so BookingModal knows we are editing
                 }}
+            />
+
+            <ConfirmOffDayModal
+                isOpen={confirmOffDayOpen}
+                onClose={() => setConfirmOffDayOpen(false)}
+                onConfirm={async () => {
+                    if (!selectedTrainerId || !offDayDate) return;
+
+                    try {
+                        const dateStr = offDayDate.toISOString().split('T')[0];
+                        await addDoc(collection(db, 'off_days'), {
+                            trainerId: selectedTrainerId,
+                            date: dateStr,
+                            siteId: SITE_ID,
+                            createdBy: user?.uid || 'unknown',
+                            timestamp: new Date().toISOString()
+                        });
+
+                        setConfirmOffDayOpen(false);
+                        setOffDayModalOpen(true);
+                    } catch (err) {
+                        console.error('Error saving off-day:', err);
+                        alert('Failed to save off-day status.');
+                    }
+                }}
+                trainerName={trainers.find(t => t.id === selectedTrainerId)?.name || ''}
+                date={offDayDate || new Date()}
             />
 
             <OffDayModal

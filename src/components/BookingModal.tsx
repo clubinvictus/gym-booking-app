@@ -16,8 +16,9 @@ interface BookingModalProps {
 }
 
 const timeSlots = [
-    '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM'
+    '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+    '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM',
+    '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM'
 ];
 
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -30,8 +31,10 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const { data: clients } = useFirestore<any>('clients');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: services } = useFirestore<any>('services');
+    const { data: offDays } = useFirestore<any>('off_days');
 
     const [selectedClient, setSelectedClient] = useState('');
+    const [showClientDropdown, setShowClientDropdown] = useState(false);
     const [selectedTrainer, setSelectedTrainer] = useState('');
     const [selectedService, setSelectedService] = useState('');
     const [selectedTime, setSelectedTime] = useState('09:00 AM');
@@ -100,10 +103,28 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         return `${hours}:${minutes}`;
     };
 
+    const getTargetDateForDayIndex = (dayIdx: number) => {
+        const baseDate = editingSession?.date
+            ? new Date(editingSession.date)
+            : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
+
+        const currentDay = baseDate.getDay();
+        const targetDay = (dayIdx + 1) % 7;
+        const diff = targetDay - currentDay;
+        baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+        return baseDate;
+    };
+
     const isAvailable = (trainer: any) => {
         const dayName = daysMap[selectedDay];
         const daySchedule = trainer.availability?.[dayName];
         if (!daySchedule || !daySchedule.active) return false;
+
+        // Check for persistent off-day
+        const targetDate = getTargetDateForDayIndex(selectedDay);
+        const dateStr = targetDate.toISOString().split('T')[0];
+        const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
+        if (isOff) return false;
 
         const slotTime = convertTo24h(selectedTime);
 
@@ -137,22 +158,16 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
     if (!isOpen || !selectedSlot) return null;
 
-    const getTargetDateForDayIndex = (dayIdx: number) => {
-        const baseDate = editingSession?.date
-            ? new Date(editingSession.date)
-            : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
-
-        const currentDay = baseDate.getDay();
-        const targetDay = (dayIdx + 1) % 7;
-        const diff = targetDay - currentDay;
-        baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
-        return baseDate;
-    };
-
     const handleConfirm = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isSubmitting) return;
         setIsSubmitting(true);
+
+        if (!isClient && !clients.some((c: any) => c.name === selectedClient)) {
+            alert('Please select a valid client from the list.');
+            setIsSubmitting(false);
+            return;
+        }
 
         const baseDate = editingSession?.date
             ? new Date(editingSession.date)
@@ -398,11 +413,18 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>CLIENT</label>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ position: 'absolute', left: '16px', top: '14px' }}><User size={18} className="text-muted" /></div>
-                                    <select
+                                    <input
+                                        type="text"
                                         name="clientName"
                                         required={!isClient}
+                                        placeholder="Search for a client"
                                         value={selectedClient}
-                                        onChange={(e) => setSelectedClient(e.target.value)}
+                                        onChange={(e) => {
+                                            setSelectedClient(e.target.value);
+                                            setShowClientDropdown(true);
+                                        }}
+                                        onFocus={() => setShowClientDropdown(true)}
+                                        onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                                         style={{
                                             width: '100%',
                                             padding: '12px 12px 12px 48px',
@@ -410,13 +432,49 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             border: '2px solid #000',
                                             fontSize: '1rem',
                                             fontWeight: 600,
-                                            appearance: 'none',
                                             backgroundColor: '#fff'
                                         }}
-                                    >
-                                        <option value="">Select a client</option>
-                                        {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                    </select>
+                                        autoComplete="off"
+                                    />
+                                    {showClientDropdown && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            background: '#fff',
+                                            border: '2px solid #000',
+                                            borderTop: 'none',
+                                            maxHeight: '200px',
+                                            overflowY: 'auto',
+                                            zIndex: 20,
+                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                        }}>
+                                            {clients.filter((c: any) => c.name.toLowerCase().includes(selectedClient.toLowerCase())).length > 0 ? (
+                                                clients.filter((c: any) => c.name.toLowerCase().includes(selectedClient.toLowerCase())).map((c: any) => (
+                                                    <div
+                                                        key={c.id}
+                                                        onClick={() => {
+                                                            setSelectedClient(c.name);
+                                                            setShowClientDropdown(false);
+                                                        }}
+                                                        style={{
+                                                            padding: '12px 16px',
+                                                            cursor: 'pointer',
+                                                            borderBottom: '1px solid #111',
+                                                            fontWeight: 600
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                                                    >
+                                                        {c.name}
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div style={{ padding: '12px 16px', color: '#666', fontStyle: 'italic', fontWeight: 600 }}>No clients found</div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

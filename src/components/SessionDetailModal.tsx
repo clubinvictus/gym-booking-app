@@ -20,6 +20,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const [deleteScope, setDeleteScope] = useState<'single' | 'future'>('single');
     const [error, setError] = useState<string | null>(null);
     const { profile } = useAuth();
+    const isTrainer = profile?.role === 'trainer';
 
     // Reset state when modal opens/closes or session changes
     useEffect(() => {
@@ -301,35 +302,37 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <button
-                                onClick={() => onReschedule(session)}
-                                className="button-secondary"
-                                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', height: '54px' }}
-                            >
-                                <Edit2 size={18} />
-                                RESCHEDULE
-                            </button>
-                            <button
-                                onClick={() => setIsDeleting(true)}
-                                style={{
-                                    flex: 1,
-                                    height: '54px',
-                                    background: '#ff4444',
-                                    color: '#fff',
-                                    border: 'none',
-                                    fontWeight: 800,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '10px'
-                                }}
-                            >
-                                <Trash2 size={18} />
-                                DELETE
-                            </button>
-                        </div>
+                        {!isTrainer && (
+                            <div style={{ display: 'flex', gap: '16px' }}>
+                                <button
+                                    onClick={() => onReschedule(session)}
+                                    className="button-secondary"
+                                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', height: '54px' }}
+                                >
+                                    <Edit2 size={18} />
+                                    RESCHEDULE
+                                </button>
+                                <button
+                                    onClick={() => setIsDeleting(true)}
+                                    style={{
+                                        flex: 1,
+                                        height: '54px',
+                                        background: '#ff4444',
+                                        color: '#fff',
+                                        border: 'none',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '10px'
+                                    }}
+                                >
+                                    <Trash2 size={18} />
+                                    DELETE
+                                </button>
+                            </div>
+                        )}
                     </>
                 )}
             </div>

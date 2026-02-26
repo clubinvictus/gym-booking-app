@@ -108,6 +108,11 @@ service cloud.firestore {
       allow write: if isSignedIn() && belongsToSite(request.resource.data);
     }
     
+    match /off_days/{offDayId} {
+      allow read: if isSignedIn();
+      allow write: if (isAdmin() || isManager()) && belongsToSite(request.resource.data);
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
