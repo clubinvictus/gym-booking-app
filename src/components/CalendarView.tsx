@@ -7,7 +7,7 @@ import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
 const formatWeekRange = (start: Date) => {
@@ -130,6 +130,39 @@ export const CalendarView = () => {
 
     const handleToday = () => {
         setCurrentWeekStart(getStartOfWeek(new Date()));
+    };
+
+    const handleCleanDilip = async () => {
+        if (!isAdmin) return;
+        const confirmMsg = "Are you sure you want to clean up Dilip's bugged sessions? This will delete all sessions for 'Dilip Sinha' created in the last 24 hours.";
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            const sessionsRef = collection(db, 'sessions');
+            const q = query(sessionsRef, where('clientName', '==', 'Dilip Sinha'));
+            const snapshot = await getDocs(q);
+
+            let deletedCount = 0;
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            const deletePromises: Promise<void>[] = [];
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                if (data.createdAt) {
+                    const createdAtDate = new Date(data.createdAt);
+                    if (createdAtDate > yesterday) {
+                        deletePromises.push(deleteDoc(doc(db, 'sessions', docSnap.id)));
+                        deletedCount++;
+                    }
+                }
+            });
+
+            await Promise.all(deletePromises);
+            alert(`Cleanup complete! Deleted ${deletedCount} bugged sessions.`);
+        } catch (err) {
+            console.error(err);
+            alert("Error cleaning up sessions.");
+        }
     };
 
     const handleSlotClick = (dayIndex: number, time: string) => {
@@ -282,6 +315,28 @@ export const CalendarView = () => {
                                 ))}
                             </select>
                         </div>
+                    )}
+                    {isAdmin && (
+                        <button
+                            onClick={handleCleanDilip}
+                            style={{
+                                height: '42px',
+                                padding: '0 20px',
+                                background: '#e11d48',
+                                color: '#fff',
+                                border: '2px solid #e11d48',
+                                fontWeight: 900,
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                letterSpacing: '0.02em',
+                                width: window.innerWidth <= 768 ? '100%' : 'auto',
+                            }}
+                        >
+                            CLEAN BUGGED BOOKINGS
+                        </button>
                     )}
                     {!isTrainer && (
                         <button
