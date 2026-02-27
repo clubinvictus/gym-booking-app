@@ -332,25 +332,25 @@ export const CalendarView = () => {
                                 style={{
                                     height: '60px',
                                     borderBottom: '2px solid #000',
-                                    borderLeft: '1px solid #eee',
+                                    borderLeft: isToday ? '2px solid #000' : '1px solid #eee',
+                                    borderRight: isToday ? '2px solid #000' : 'none',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     cursor: (isAdmin && selectedTrainerId !== 'all') ? 'pointer' : 'default',
-                                    background: isToday ? '#e8f4fd' : ((isAdmin && selectedTrainerId !== 'all') ? '#fff' : '#fff'),
+                                    background: isToday ? '#000' : ((isAdmin && selectedTrainerId !== 'all') ? '#fff' : '#fff'),
                                     transition: 'background 0.2s',
-                                    borderTop: isToday ? '4px solid #0066cc' : 'none'
                                 }}
                                 onMouseEnter={(e) => {
-                                    if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = isToday ? '#dceffd' : '#f9f9f9';
+                                    if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = isToday ? '#222' : '#f9f9f9';
                                 }}
                                 onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = isToday ? '#e8f4fd' : '#fff';
+                                    e.currentTarget.style.background = isToday ? '#000' : '#fff';
                                 }}
                             >
-                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? '#0066cc' : '#666' }}>{day}</span>
-                                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isToday ? '#0066cc' : 'inherit' }}>{getDayDate(currentWeekStart, i)}</span>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? '#fff' : '#666' }}>{day}</span>
+                                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isToday ? '#fff' : 'inherit' }}>{getDayDate(currentWeekStart, i)}</span>
                             </div>
                         );
                     })}
@@ -389,7 +389,7 @@ export const CalendarView = () => {
 
                                 let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
                                 if (isToday && showAsAvailable) {
-                                    baseBackgroundColor = '#f5fafe'; // very subtle blue tint for today's empty slots
+                                    baseBackgroundColor = '#f5f5f5'; // muted gray for today's empty slots
                                 }
 
                                 return (
@@ -398,8 +398,8 @@ export const CalendarView = () => {
                                         onClick={() => handleSlotClick(dayIndex, time)}
                                         style={{
                                             borderBottom: '1px solid #eee',
-                                            borderLeft: isToday ? '2px solid #e8f4fd' : '1px solid #eee',
-                                            borderRight: isToday ? '2px solid #e8f4fd' : 'none',
+                                            borderLeft: isToday ? '2px solid #000' : '1px solid #eee',
+                                            borderRight: isToday ? '2px solid #000' : 'none',
                                             position: 'relative',
                                             minHeight: '100px',
                                             padding: '4px',
@@ -409,7 +409,7 @@ export const CalendarView = () => {
                                             cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
                                             backgroundColor: baseBackgroundColor,
                                             backgroundImage: displaySessions.length === 0 && !showAsAvailable
-                                                ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #f0f0f0 10px, #f0f0f0 20px)'
+                                                ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'
                                                 : 'none',
                                             transition: 'all 0.2s ease'
                                         }}
