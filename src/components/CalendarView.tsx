@@ -320,33 +320,40 @@ export const CalendarView = () => {
                 }}>
                     {/* Header */}
                     <div style={{ height: '60px', borderBottom: '2px solid #000' }}></div>
-                    {days.map((day, i) => (
-                        <div
-                            key={day}
-                            onClick={() => handleDayHeaderClick(i)}
-                            style={{
-                                height: '60px',
-                                borderBottom: '2px solid #000',
-                                borderLeft: '1px solid #eee',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: (isAdmin && selectedTrainerId !== 'all') ? 'pointer' : 'default',
-                                background: (isAdmin && selectedTrainerId !== 'all') ? '#fff' : '#fff',
-                                transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = '#f9f9f9';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.background = '#fff';
-                            }}
-                        >
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666' }}>{day}</span>
-                            <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>{getDayDate(currentWeekStart, i)}</span>
-                        </div>
-                    ))}
+                    {days.map((day, i) => {
+                        const slotDate = new Date(currentWeekStart);
+                        slotDate.setDate(slotDate.getDate() + i);
+                        const isToday = slotDate.toDateString() === new Date().toDateString();
+
+                        return (
+                            <div
+                                key={day}
+                                onClick={() => handleDayHeaderClick(i)}
+                                style={{
+                                    height: '60px',
+                                    borderBottom: '2px solid #000',
+                                    borderLeft: '1px solid #eee',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: (isAdmin && selectedTrainerId !== 'all') ? 'pointer' : 'default',
+                                    background: isToday ? '#e8f4fd' : ((isAdmin && selectedTrainerId !== 'all') ? '#fff' : '#fff'),
+                                    transition: 'background 0.2s',
+                                    borderTop: isToday ? '4px solid #0066cc' : 'none'
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = isToday ? '#dceffd' : '#f9f9f9';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = isToday ? '#e8f4fd' : '#fff';
+                                }}
+                            >
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? '#0066cc' : '#666' }}>{day}</span>
+                                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isToday ? '#0066cc' : 'inherit' }}>{getDayDate(currentWeekStart, i)}</span>
+                            </div>
+                        );
+                    })}
 
                     {/* Time Slots */}
                     {timeSlots.map(time => (
@@ -364,6 +371,11 @@ export const CalendarView = () => {
                                 {time}
                             </div>
                             {days.map((_, dayIndex) => {
+                                const slotDate = new Date(currentWeekStart);
+                                slotDate.setDate(slotDate.getDate() + dayIndex);
+                                const isPastLimit = isClient && slotDate > limitDate;
+                                const isToday = slotDate.toDateString() === new Date().toDateString();
+
                                 const slotSessions = sessions.filter((s: any) => {
                                     const matchDay = s.day === dayIndex && s.time === time;
                                     if (selectedTrainerId === 'all') return matchDay;
@@ -372,12 +384,13 @@ export const CalendarView = () => {
 
                                 const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
-                                const slotDate = new Date(currentWeekStart);
-                                slotDate.setDate(slotDate.getDate() + dayIndex);
-                                const isPastLimit = isClient && slotDate > limitDate;
-
                                 const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && slotSessions.length === 0;
                                 const showAsAvailable = selectedTrainerId === 'all' || available;
+
+                                let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
+                                if (isToday && showAsAvailable) {
+                                    baseBackgroundColor = '#f5fafe'; // very subtle blue tint for today's empty slots
+                                }
 
                                 return (
                                     <div
@@ -385,7 +398,8 @@ export const CalendarView = () => {
                                         onClick={() => handleSlotClick(dayIndex, time)}
                                         style={{
                                             borderBottom: '1px solid #eee',
-                                            borderLeft: '1px solid #eee',
+                                            borderLeft: isToday ? '2px solid #e8f4fd' : '1px solid #eee',
+                                            borderRight: isToday ? '2px solid #e8f4fd' : 'none',
                                             position: 'relative',
                                             minHeight: '100px',
                                             padding: '4px',
@@ -393,7 +407,7 @@ export const CalendarView = () => {
                                             flexDirection: 'column',
                                             gap: '4px',
                                             cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
-                                            backgroundColor: showAsAvailable ? 'transparent' : '#fafafa',
+                                            backgroundColor: baseBackgroundColor,
                                             backgroundImage: displaySessions.length === 0 && !showAsAvailable
                                                 ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #f0f0f0 10px, #f0f0f0 20px)'
                                                 : 'none',
