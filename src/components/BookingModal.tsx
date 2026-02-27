@@ -288,6 +288,13 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                 if (repeatFrequency === 'daily') {
                     let currentDate = new Date(baseDate);
+
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+                    if (currentDate < todayStart) {
+                        currentDate = new Date(todayStart);
+                    }
+
                     while (currentDate <= endDate) {
                         const sessDay = (currentDate.getDay() + 6) % 7;
                         sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), sessDay));
@@ -296,6 +303,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         currentDate.setDate(currentDate.getDate() + 1);
                     }
                 } else {
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+
                     for (const dayIdx of selectedDays) {
                         let currentDate = new Date(baseDate);
                         const currentDay = currentDate.getDay();
@@ -303,6 +313,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         let diff = targetDay - currentDay;
                         if (diff < 0) diff += 7;
                         currentDate.setDate(currentDate.getDate() + diff);
+
+                        // Ensure recurring series starts on or after today
+                        if (currentDate < todayStart) {
+                            currentDate.setDate(currentDate.getDate() + 7);
+                        }
 
                         while (currentDate <= endDate) {
                             sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), dayIdx));
