@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, AlertTriangle } from 'lucide-react';
+import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
@@ -300,6 +300,29 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                     <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{session.time} (Day {session.day + 1})</div>
                                 </div>
                             </div>
+
+                            {session.recurringDetails && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={{ width: '40px', height: '40px', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <RefreshCw size={20} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#999', textTransform: 'uppercase' }}>Recurrence</label>
+                                        <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{session.recurringDetails}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {session.createdBy && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={{ width: '40px', height: '40px', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <CalendarIcon size={20} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#555' }}>Created by: {session.createdBy}</div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {!isTrainer && (

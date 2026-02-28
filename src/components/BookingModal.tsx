@@ -190,7 +190,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 date: date.toISOString(),
                 status: 'Scheduled',
                 siteId: SITE_ID,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                createdBy: profile?.name || 'Unknown User'
             };
         };
 
@@ -262,6 +263,18 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             } else if (isRepeating) {
                 const seriesId = `series_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+                let recurringDetails = '';
+                if (repeatFrequency === 'daily') {
+                    recurringDetails = 'Daily';
+                } else {
+                    const sortedDays = [...selectedDays].sort((a, b) => a - b);
+                    const dayNames = sortedDays.map(d => {
+                        const name = daysMap[d];
+                        return name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
+                    });
+                    recurringDetails = `Weekly on ${dayNames.join(', ')}`;
+                }
+
                 // If "Never", set endDate to 2 years from now (admin only)
                 // If client, force end date to max 14 days
                 const endDate = isClient
@@ -272,7 +285,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                 const getSeriesData = (date: Date, dayIdx: number) => ({
                     ...getBookingData(date, dayIdx),
-                    seriesId
+                    seriesId,
+                    recurringDetails
                 });
 
                 let sessionBatch = writeBatch(db);
