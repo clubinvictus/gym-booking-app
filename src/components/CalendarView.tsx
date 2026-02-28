@@ -141,14 +141,15 @@ export const CalendarView = () => {
             const snapshot = await getDocs(q);
 
             let deletedCount = 0;
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            // The bugged bookings were from Feb 27th, so let's expand the window to the last 3 days
+            const targetDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 
             const deletePromises: Promise<void>[] = [];
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
                 if (data.createdAt) {
                     const createdAtDate = new Date(data.createdAt);
-                    if (createdAtDate > yesterday) {
+                    if (createdAtDate > targetDate) {
                         deletePromises.push(deleteDoc(doc(db, 'sessions', docSnap.id)));
                         deletedCount++;
                     }
