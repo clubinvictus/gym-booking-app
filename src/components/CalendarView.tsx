@@ -134,8 +134,6 @@ export const CalendarView = () => {
 
     const handleCleanDilip = async () => {
         if (!isAdmin) return;
-        const confirmMsg = "Are you sure you want to clean up Dilip's bugged sessions? This will delete all sessions for 'Dilip Sinha' created in the last 24 hours.";
-        if (!window.confirm(confirmMsg)) return;
 
         try {
             const sessionsRef = collection(db, 'sessions');
