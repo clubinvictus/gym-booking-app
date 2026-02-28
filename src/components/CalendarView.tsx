@@ -7,7 +7,7 @@ import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
 const formatWeekRange = (start: Date) => {
@@ -137,15 +137,17 @@ export const CalendarView = () => {
 
         try {
             const sessionsRef = collection(db, 'sessions');
-            const q = query(sessionsRef, where('clientName', '==', 'Dilip Sinha'));
-            const snapshot = await getDocs(q);
+            const snapshot = await getDocs(sessionsRef);
 
             let deletedCount = 0;
 
             const deletePromises: Promise<void>[] = [];
             snapshot.forEach((docSnap) => {
-                deletePromises.push(deleteDoc(doc(db, 'sessions', docSnap.id)));
-                deletedCount++;
+                const data = docSnap.data();
+                if (data.clientName && data.clientName.toLowerCase().includes('dilip')) {
+                    deletePromises.push(deleteDoc(doc(db, 'sessions', docSnap.id)));
+                    deletedCount++;
+                }
             });
 
             await Promise.all(deletePromises);
