@@ -71,16 +71,23 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             setSelectedDay(selectedSlot.day);
             setSelectedDays([selectedSlot.day]);
 
-            // If user is a client, default the clientName to their profile name
-            if (isClient && profile?.name) {
+            // Reset other fields for a fresh booking
+            if (!isClient) {
+                setSelectedClient('');
+            } else if (profile?.name) {
                 setSelectedClient(profile.name);
             }
+
+            setSelectedService('');
+            setIsRepeating(false);
+            setRepeatFrequency('weekly');
+
             const initialTrainer = selectedSlot?.trainerId
                 ? (trainers.find(t => t.id === selectedSlot.trainerId)?.name || '')
                 : '';
             setSelectedTrainer(initialTrainer);
         }
-    }, [editingSession, selectedSlot, trainers]);
+    }, [editingSession, selectedSlot, trainers, isClient, profile]);
 
 
     const toggleDay = (dayIdx: number) => {
