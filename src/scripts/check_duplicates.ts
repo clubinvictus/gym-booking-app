@@ -1,40 +1,59 @@
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
-import { firebaseConfig } from "./firebase"; // Assuming firebase.ts exports firebaseConfig or similar
-// If firebase.ts initializes app directly, we might need to adjust.
-// Let's use the env vars pattern or just import from firebase.ts if possible.
-// Actually, let's just use the existing firebase.ts if it exports db.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-import { db } from '../firebase';
+const envFile = readFileSync(resolve(__dirname, '../../.env'), 'utf8');
+const env: Record<string, string> = {};
+envFile.split('\n').forEach(line => {
+    const match = line.match(/^([^=]+)=(.*)$/);
+    if (match) {
+        env[match[1]] = match[2].replace(/['"]/g, '').trim();
+    }
+});
+
+const firebaseConfig = {
+    apiKey: env.VITE_FIREBASE_API_KEY,
+    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: env.VITE_FIREBASE_APP_ID
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 const checkDuplicates = async () => {
     const sessionsRef = collection(db, 'sessions');
-    const snapshot = await getDocs(sessionsRef);
+    const q = query(sessionsRef, where('clientName', '==', 'Dilip Sinha'));
+    const snapshot = await getDocs(q);
 
-    const slots: { [key: string]: number } = {};
-    const duplicates: string[] = [];
+    console.log(`Found ${snapshot.size} sessions.`);
 
+    // Group by date and time
+    const sessionMap = new Map();
     snapshot.forEach(doc => {
         const data = doc.data();
-        // Key by day + time (and maybe trainer?)
-        // data.day is index 0-6. data.time is "09:00 AM".
-        // Let's just key by day/time for now.
-        const key = `${data.day}-${data.time}-${data.trainerName}`; // Using trainerName as part of key
-
-        if (slots[key]) {
-            slots[key]++;
-            duplicates.push(key);
-        } else {
-            slots[key] = 1;
-        }
+        const key = `${data.date}_${data.time}`;
+        if (!sessionMap.has(key)) sessionMap.set(key, []);
+        sessionMap.get(key).push({ id: doc.id, ...data });
     });
 
-    console.log(`Checked ${snapshot.size} sessions.`);
-    console.log(`Found ${duplicates.length} duplicates.`);
-    if (duplicates.length > 0) {
-        console.log("Duplicate keys:", [...new Set(duplicates)]);
+    let duplicateFound = false;
+    for (const [key, sessions] of sessionMap.entries()) {
+        if (sessions.length > 1) {
+            duplicateFound = true;
+            console.log(`\nDUPLICATES DETECTED FOR: ${key}`);
+            sessions.forEach((s: any) => console.log(`  - ID: ${s.id} | SeriesID: ${s.seriesId}`));
+        }
     }
+
+    if (!duplicateFound) console.log("No duplicate records found in database. The issue is likely UI-side.");
 };
 
 checkDuplicates().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });

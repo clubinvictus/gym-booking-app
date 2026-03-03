@@ -167,6 +167,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
     const handleConfirm = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log(`[DEBUG] handleConfirm triggered! isSubmitting: ${isSubmitting}`);
         if (isSubmitting) return;
         setIsSubmitting(true);
 
