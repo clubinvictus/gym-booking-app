@@ -59,6 +59,10 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     };
 
     useEffect(() => {
+        setIsSubmitting(false);
+    }, [isOpen]);
+
+    useEffect(() => {
         if (editingSession) {
             setSelectedClient(editingSession.clientName);
             setSelectedTrainer(editingSession.trainerName);
