@@ -376,28 +376,25 @@ export const CalendarView = () => {
                                 const isPastLimit = isClient && slotDate > limitDate;
                                 const isToday = slotDate.toDateString() === new Date().toDateString();
 
-                                const slotY = slotDate.getFullYear();
-                                const slotM = slotDate.getMonth();
-                                const slotD = slotDate.getDate();
+                                // Compute week boundaries for filtering
+                                const weekStartMs = new Date(currentWeekStart).setHours(0, 0, 0, 0);
+                                const weekEndDate = new Date(currentWeekStart);
+                                weekEndDate.setDate(weekEndDate.getDate() + 7);
+                                const weekEndMs = weekEndDate.setHours(0, 0, 0, 0);
 
                                 const slotSessions = sessions.filter((s: any) => {
-                                    const sd = new Date(s.date);
-                                    const sameDate = sd.getFullYear() === slotY && sd.getMonth() === slotM && sd.getDate() === slotD;
-                                    const matchDay = sameDate && s.time === time;
+                                    // Primary match: day-of-week and time
+                                    if (s.day !== dayIndex || s.time !== time) return false;
 
-                                    // Debug: log mismatch details for first time slot on first day only
-                                    if (dayIndex === 0 && time === '09:00 AM' && s.clientName) {
-                                        console.log(`[FILTER DEBUG] session: ${s.clientName} | s.date="${s.date}" | s.day=${s.day} | s.time="${s.time}" | parsed=${sd.toDateString()} y=${sd.getFullYear()} m=${sd.getMonth()} d=${sd.getDate()} | slot=${slotDate.toDateString()} y=${slotY} m=${slotM} d=${slotD} | sameDate=${sameDate} matchDay=${matchDay}`);
+                                    // Week guard: only show sessions that belong to this displayed week
+                                    if (s.date) {
+                                        const sessionMs = new Date(s.date).getTime();
+                                        if (sessionMs < weekStartMs || sessionMs >= weekEndMs) return false;
                                     }
 
-                                    if (selectedTrainerId === 'all') return matchDay;
-                                    return matchDay && s.trainerId === selectedTrainerId;
+                                    if (selectedTrainerId === 'all') return true;
+                                    return s.trainerId === selectedTrainerId;
                                 });
-
-                                // Log total sessions count once
-                                if (dayIndex === 0 && time === '06:00 AM') {
-                                    console.log(`[CALENDAR DEBUG] Total sessions loaded: ${sessions.length} | currentWeekStart: ${currentWeekStart.toDateString()}`);
-                                }
 
                                 const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
