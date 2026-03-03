@@ -376,12 +376,14 @@ export const CalendarView = () => {
                                 const isPastLimit = isClient && slotDate > limitDate;
                                 const isToday = slotDate.toDateString() === new Date().toDateString();
 
-                                const slotDateStr = slotDate.toISOString().split('T')[0];
+                                const slotY = slotDate.getFullYear();
+                                const slotM = slotDate.getMonth();
+                                const slotD = slotDate.getDate();
 
                                 const slotSessions = sessions.filter((s: any) => {
-                                    const sessionDateObj = new Date(s.date);
-                                    const sessionDateStr = sessionDateObj.toISOString().split('T')[0];
-                                    const matchDay = sessionDateStr === slotDateStr && s.time === time;
+                                    const sd = new Date(s.date);
+                                    const sameDate = sd.getFullYear() === slotY && sd.getMonth() === slotM && sd.getDate() === slotD;
+                                    const matchDay = sameDate && s.time === time;
 
                                     if (selectedTrainerId === 'all') return matchDay;
                                     return matchDay && s.trainerId === selectedTrainerId;
