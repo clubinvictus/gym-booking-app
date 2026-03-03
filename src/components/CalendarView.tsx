@@ -385,9 +385,19 @@ export const CalendarView = () => {
                                     const sameDate = sd.getFullYear() === slotY && sd.getMonth() === slotM && sd.getDate() === slotD;
                                     const matchDay = sameDate && s.time === time;
 
+                                    // Debug: log mismatch details for first time slot on first day only
+                                    if (dayIndex === 0 && time === '09:00 AM' && s.clientName) {
+                                        console.log(`[FILTER DEBUG] session: ${s.clientName} | s.date="${s.date}" | s.day=${s.day} | s.time="${s.time}" | parsed=${sd.toDateString()} y=${sd.getFullYear()} m=${sd.getMonth()} d=${sd.getDate()} | slot=${slotDate.toDateString()} y=${slotY} m=${slotM} d=${slotD} | sameDate=${sameDate} matchDay=${matchDay}`);
+                                    }
+
                                     if (selectedTrainerId === 'all') return matchDay;
                                     return matchDay && s.trainerId === selectedTrainerId;
                                 });
+
+                                // Log total sessions count once
+                                if (dayIndex === 0 && time === '06:00 AM') {
+                                    console.log(`[CALENDAR DEBUG] Total sessions loaded: ${sessions.length} | currentWeekStart: ${currentWeekStart.toDateString()}`);
+                                }
 
                                 const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
