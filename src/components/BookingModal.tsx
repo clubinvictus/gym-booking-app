@@ -171,7 +171,6 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
     const handleConfirm = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log(`[DEBUG] handleConfirm triggered! isSubmitting: ${isSubmitting}`);
         if (isSubmitting) return;
         setIsSubmitting(true);
 
@@ -289,11 +288,20 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                 // If "Never", set endDate to 2 years from now (admin only)
                 // If client, force end date to max 14 days
-                const endDate = isClient
-                    ? getClientMaxDate()
-                    : (repeatEndType === 'never'
-                        ? new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate())
-                        : new Date(repeatUntil));
+                let endDate: Date;
+                if (isClient) {
+                    endDate = getClientMaxDate();
+                } else if (repeatEndType === 'never') {
+                    endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
+                } else if (repeatUntil) {
+                    endDate = new Date(repeatUntil + 'T23:59:59');
+                } else {
+                    // Fallback: default to 3 months if no end date specified
+                    endDate = new Date();
+                    endDate.setMonth(endDate.getMonth() + 3);
+                }
+
+                console.log(`[BOOKING] Recurring: freq=${repeatFrequency}, endType=${repeatEndType}, repeatUntil="${repeatUntil}", endDate=${endDate.toISOString()}, selectedDays=${JSON.stringify(selectedDays)}`);
 
                 const getSeriesData = (date: Date, dayIdx: number) => ({
                     ...getBookingData(date, dayIdx),
@@ -354,6 +362,12 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     }
                 }
                 if (opCount > 0) await sessionBatch.commit();
+                console.log(`[BOOKING] Created ${opCount} recurring sessions`);
+                if (opCount === 0) {
+                    alert(`No sessions were created. Please check your selected days and end date.`);
+                    setIsSubmitting(false);
+                    return;
+                }
                 await logActivity('booked', getBookingData(baseDate, selectedDay));
             } else {
                 // Single booking
