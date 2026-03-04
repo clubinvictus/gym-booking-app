@@ -42,12 +42,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const [isRepeating, setIsRepeating] = useState(false);
     const [repeatFrequency, setRepeatFrequency] = useState<'daily' | 'weekly'>('weekly');
     const [selectedDays, setSelectedDays] = useState<number[]>([]);
-    const [repeatUntil, setRepeatUntil] = useState('');
     const { profile } = useAuth();
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const isClient = profile?.role === 'client';
-    const limitDays = isAdmin ? 730 : 14;
-    const [repeatEndType, setRepeatEndType] = useState<'never' | 'on_date'>('on_date');
     const [editMode, setEditMode] = useState<'single' | 'future'>('single');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -286,22 +283,16 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     recurringDetails = `Weekly on ${dayNames.join(', ')}`;
                 }
 
-                // If "Never", set endDate to 2 years from now (admin only)
-                // If client, force end date to max 14 days
-                let endDate: Date;
-                if (isClient) {
-                    endDate = getClientMaxDate();
-                } else if (repeatEndType === 'never') {
-                    endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
-                } else if (repeatUntil) {
-                    endDate = new Date(repeatUntil + 'T23:59:59');
-                } else {
-                    // Fallback: default to 3 months if no end date specified
-                    endDate = new Date();
-                    endDate.setMonth(endDate.getMonth() + 3);
-                }
+                // Admin/managers: always weekly, 2 years out
+                // Clients: max 14 days
+                const endDate = isClient
+                    ? getClientMaxDate()
+                    : new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
 
-                console.log(`[BOOKING] Recurring: freq=${repeatFrequency}, endType=${repeatEndType}, repeatUntil="${repeatUntil}", endDate=${endDate.toISOString()}, selectedDays=${JSON.stringify(selectedDays)}`);
+                // For admin/managers, always use weekly
+                const effectiveFrequency = isAdmin ? 'weekly' : repeatFrequency;
+
+                console.log(`[BOOKING] Recurring: freq=${effectiveFrequency}, endDate=${endDate.toISOString()}, selectedDays=${JSON.stringify(selectedDays)}`);
 
                 const getSeriesData = (date: Date, dayIdx: number) => ({
                     ...getBookingData(date, dayIdx),
@@ -320,7 +311,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     }
                 };
 
-                if (repeatFrequency === 'daily') {
+                if (effectiveFrequency === 'daily') {
                     let currentDate = new Date(baseDate);
 
                     const todayStart = new Date();
@@ -687,59 +678,12 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                                 {isAdmin ? (
-                                                    // Admin/Manager View
-                                                    <>
-                                                        <div style={{ display: 'flex', gap: '12px' }}>
-                                                            <select
-                                                                value={repeatFrequency}
-                                                                onChange={(e) => setRepeatFrequency(e.target.value as 'daily' | 'weekly')}
-                                                                style={{
-                                                                    flex: 1,
-                                                                    padding: '8px',
-                                                                    border: '2px solid #000',
-                                                                    fontWeight: 700,
-                                                                    borderRadius: 0,
-                                                                    fontSize: '0.9rem'
-                                                                }}
-                                                            >
-                                                                <option value="daily">Daily</option>
-                                                                <option value="weekly">Weekly</option>
-                                                            </select>
-                                                            <select
-                                                                value={repeatEndType}
-                                                                onChange={(e) => setRepeatEndType(e.target.value as 'never' | 'on_date')}
-                                                                style={{
-                                                                    flex: 1,
-                                                                    padding: '8px',
-                                                                    border: '2px solid #000',
-                                                                    fontWeight: 700,
-                                                                    borderRadius: 0,
-                                                                    fontSize: '0.9rem'
-                                                                }}
-                                                            >
-                                                                <option value="never">Never ends</option>
-                                                                <option value="on_date">Ends on date</option>
-                                                            </select>
-                                                        </div>
-
-                                                        {repeatEndType === 'on_date' && (
-                                                            <input
-                                                                type="date"
-                                                                required={isRepeating && repeatEndType === 'on_date'}
-                                                                value={repeatUntil}
-                                                                onChange={(e) => setRepeatUntil(e.target.value)}
-                                                                min={new Date().toISOString().split('T')[0]}
-                                                                max={new Date(new Date().getTime() + limitDays * 86400000).toISOString().split('T')[0]}
-                                                                style={{
-                                                                    padding: '8px',
-                                                                    border: '2px solid #000',
-                                                                    fontWeight: 700,
-                                                                    borderRadius: 0,
-                                                                    fontSize: '0.85rem'
-                                                                }}
-                                                            />
-                                                        )}
-                                                    </>
+                                                    // Admin/Manager View — simplified: weekly + 2 years, auto
+                                                    <div style={{ background: '#f5f5f5', padding: '12px', border: '1px solid #ddd' }}>
+                                                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#333' }}>
+                                                            Repeats <strong>weekly</strong> from the selected date. Select the days below.
+                                                        </p>
+                                                    </div>
                                                 ) : (
                                                     // Client View
                                                     <div style={{ background: '#fff5f5', padding: '12px', border: '1px solid #ffcccc' }}>
@@ -750,7 +694,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                                 )}
                                             </div>
 
-                                            {repeatFrequency === 'weekly' && (
+                                            {(isAdmin || repeatFrequency === 'weekly') && (
                                                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                                                     {days.map((day, i) => (
                                                         <button
