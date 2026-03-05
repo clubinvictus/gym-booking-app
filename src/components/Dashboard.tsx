@@ -12,6 +12,7 @@ import { TrainerProfile } from './TrainerProfile';
 import { ClientProfile } from './ClientProfile';
 import { ClientDashboardView } from './ClientDashboardView';
 import { ActivityLogView } from './ActivityLogView';
+import { SessionDetailModal } from './SessionDetailModal';
 import { TeamManagement } from './TeamManagement';
 import { AddTrainerModal } from './AddTrainerModal';
 import { AddManagerModal } from './AddManagerModal';
@@ -41,6 +42,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [selectedService, setSelectedService] = useState<any>(null);
     const [settingsTab, setSettingsTab] = useState('general');
     const [isSeeding, setIsSeeding] = useState(false);
+    const [selectedSession, setSelectedSession] = useState<any>(null);
     const { profile } = useAuth();
     const navigate = useNavigate();
 
@@ -238,7 +240,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             <h2 style={{ marginBottom: '24px' }}>Upcoming Sessions</h2>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 {upcomingSessions.length > 0 ? upcomingSessions.map((session: any) => (
-                                    <SessionItem key={session.id} name={session.clientName} type={session.serviceName} time={session.time} />
+                                    <SessionItem
+                                        key={session.id}
+                                        name={session.clientName}
+                                        type={session.serviceName}
+                                        time={session.time}
+                                        onClick={() => setSelectedSession(session)}
+                                    />
                                 )) : (
                                     <p className="text-muted">No sessions scheduled for today.</p>
                                 )}
@@ -471,6 +479,19 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     }
                 }}
             />
+
+            {selectedSession && (
+                <SessionDetailModal
+                    isOpen={!!selectedSession}
+                    session={selectedSession}
+                    onClose={() => setSelectedSession(null)}
+                    onDelete={() => setSelectedSession(null)}
+                    onReschedule={() => {
+                        setSelectedSession(null);
+                        navigate('/calendar');
+                    }}
+                />
+            )}
         </div>
     );
 };
@@ -509,16 +530,33 @@ function StatCard({ title, value, icon }: { title: string, value: string, icon: 
     );
 }
 
-function SessionItem({ name, type, time }: { name: string, type: string, time: string }) {
+function SessionItem({ name, type, time, onClick }: { name: string, type: string, time: string, onClick?: () => void }) {
     return (
-        <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px',
-            border: '2px solid #000',
-            borderRadius: 0
-        }}>
+        <div
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px',
+                border: '2px solid #000',
+                borderRadius: 0,
+                cursor: onClick ? 'pointer' : 'default',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+                if (onClick) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '4px 4px 0px #000';
+                }
+            }}
+            onMouseLeave={(e) => {
+                if (onClick) {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                }
+            }}
+        >
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ width: '40px', height: '40px', background: '#000', borderRadius: 0 }}></div>
                 <div>
