@@ -70,10 +70,38 @@ export const LoginPage = () => {
             // 4. Default to Client
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (!userDoc.exists()) {
+                const clientName = user.displayName || fullName || 'New Client';
+                let clientId = '';
+
+                // Check if admin already created a client record for this email
+                const clientsRef = collection(db, 'clients');
+                const clientQ = query(clientsRef, where('email', '==', user.email));
+                const clientQuerySnapshot = await getDocs(clientQ);
+
+                if (!clientQuerySnapshot.empty) {
+                    // Link to existing client record
+                    clientId = clientQuerySnapshot.docs[0].id;
+                } else {
+                    // Create new client record
+                    const { addDoc } = await import('firebase/firestore');
+                    const newClientRef = await addDoc(collection(db, 'clients'), {
+                        name: clientName,
+                        email: user.email,
+                        phone: '', // Can be filled later by client/admin
+                        joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                        status: 'Active',
+                        siteId: SITE_ID,
+                        createdAt: new Date().toISOString()
+                    });
+                    clientId = newClientRef.id;
+                }
+
+                // Create the user profile with the linked clientId
                 await setDoc(doc(db, 'users', user.uid), {
                     email: user.email,
                     role: 'client',
-                    name: user.displayName || fullName || 'New Client',
+                    name: clientName,
+                    clientId: clientId,
                     siteId: SITE_ID
                 });
             }
