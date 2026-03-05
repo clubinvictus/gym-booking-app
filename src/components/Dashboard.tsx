@@ -177,7 +177,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
                 const now = new Date();
                 const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
                 // Filter sessions according to role
                 const userSessions = isTrainer
@@ -189,11 +188,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     const sessionDate = new Date(s.date);
                     return sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
                 });
-
-                // Upcoming sessions: today or in the future
-                const upcomingSessions = userSessions
-                    .filter((s: any) => new Date(s.date).getTime() >= todayStart)
-                    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
                 return (
                     <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px' }}>
@@ -237,9 +231,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         </div>
 
                         <div className="card" style={{ padding: '32px' }}>
-                            <h2 style={{ marginBottom: '24px' }}>Upcoming Sessions</h2>
+                            <h2 style={{ marginBottom: '24px' }}>Today's Sessions</h2>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {upcomingSessions.length > 0 ? upcomingSessions.map((session: any) => (
+                                {todaySessions.length > 0 ? todaySessions.map((session: any) => (
                                     <SessionItem
                                         key={session.id}
                                         name={session.clientName}
