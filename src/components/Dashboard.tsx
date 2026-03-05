@@ -173,10 +173,25 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     return <ClientDashboardView />;
                 }
 
-                // Filter sessions if trainer
-                const displaySessions = isTrainer
-                    ? sessions.filter(s => s.trainerId === profile.trainerId)
+                const now = new Date();
+                const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+                // Filter sessions according to role
+                const userSessions = isTrainer
+                    ? sessions.filter((s: any) => s.trainerId === profile.trainerId)
                     : sessions;
+
+                // Today's sessions: exactly today
+                const todaySessions = userSessions.filter((s: any) => {
+                    const sessionDate = new Date(s.date);
+                    return sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
+                });
+
+                // Upcoming sessions: today or in the future
+                const upcomingSessions = userSessions
+                    .filter((s: any) => new Date(s.date).getTime() >= todayStart)
+                    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
                 return (
                     <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px' }}>
@@ -210,10 +225,10 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             gap: '24px',
                             marginBottom: '40px'
                         }}>
-                            <StatCard title="Today's Sessions" value={displaySessions.length.toString()} icon={<Calendar size={24} />} />
+                            <StatCard title="Today's Sessions" value={todaySessions.length.toString()} icon={<Calendar size={24} />} />
                             {isAdmin && (
                                 <>
-                                    <StatCard title="Active Trainers" value={trainers.filter(t => t.status === 'Active').length.toString()} icon={<Users size={24} />} />
+                                    <StatCard title="Active Trainers" value={trainers.filter((t: any) => t.status === 'Active').length.toString()} icon={<Users size={24} />} />
                                     <StatCard title="Total Clients" value={clients.length.toString()} icon={<Users size={24} />} />
                                 </>
                             )}
@@ -222,7 +237,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         <div className="card" style={{ padding: '32px' }}>
                             <h2 style={{ marginBottom: '24px' }}>Upcoming Sessions</h2>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {displaySessions.length > 0 ? displaySessions.map(session => (
+                                {upcomingSessions.length > 0 ? upcomingSessions.map((session: any) => (
                                     <SessionItem key={session.id} name={session.clientName} type={session.serviceName} time={session.time} />
                                 )) : (
                                     <p className="text-muted">No sessions scheduled for today.</p>
