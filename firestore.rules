@@ -71,8 +71,9 @@ service cloud.firestore {
 
     // Rules for 'clients'
     match /clients/{clientId} {
-      allow read: if isManager() && belongsToSite(resource.data);
-      allow write: if isManager() && belongsToSite(request.resource.data);
+      allow read: if isManager() && belongsToSite(resource.data) || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow create: if isManager() && belongsToSite(request.resource.data) || (isSignedIn() && request.resource.data.email == request.auth.token.email);
+      allow update, delete: if isManager() && belongsToSite(request.resource.data);
     }
 
     // Rules for 'sessions'
