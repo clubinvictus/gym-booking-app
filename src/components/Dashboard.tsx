@@ -183,10 +183,35 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     ? sessions.filter((s: any) => s.trainerId === profile.trainerId)
                     : sessions;
 
-                // Today's sessions: exactly today
+                // Today's upcoming sessions: exactly today AND time has not passed
                 const todaySessions = userSessions.filter((s: any) => {
                     const sessionDate = new Date(s.date);
-                    return sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
+                    const isToday = sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
+
+                    if (!isToday) return false;
+
+                    // Parse the time string (e.g., "09:00 AM")
+                    const match = s.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                    if (match) {
+                        let hours = parseInt(match[1]);
+                        const minutes = parseInt(match[2]);
+                        const modifier = match[3].toUpperCase();
+
+                        if (modifier === 'PM' && hours < 12) hours += 12;
+                        if (modifier === 'AM' && hours === 12) hours = 0;
+
+                        const sessionTime = new Date(now);
+                        sessionTime.setHours(hours, minutes, 0, 0);
+
+                        return sessionTime.getTime() >= now.getTime();
+                    }
+
+                    return true; // if time parsing fails, keep it
+                }).sort((a: any, b: any) => {
+                    // Sort remaining sessions chronologically by time
+                    const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
+                    const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
+                    return timeA - timeB;
                 });
 
                 return (
