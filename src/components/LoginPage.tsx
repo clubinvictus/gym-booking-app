@@ -1,7 +1,8 @@
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, googleProvider, db } from '../firebase';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { LogIn, UserPlus } from 'lucide-react';
 import { SITE_ID } from '../constants';
@@ -13,6 +14,7 @@ export const LoginPage = () => {
     const [fullName, setFullName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [resetSent, setResetSent] = useState(false);
     const navigate = useNavigate();
 
     const determineRoleAndRedirect = async (user: any) => {
@@ -146,6 +148,26 @@ export const LoginPage = () => {
         }
     };
 
+    const handleForgotPassword = async () => {
+        if (!email) {
+            setError("Please enter your email address first.");
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        setResetSent(false);
+
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setResetSent(true);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="login-container" style={{
             minHeight: '100vh',
@@ -242,6 +264,12 @@ export const LoginPage = () => {
                         </div>
                     )}
 
+                    {resetSent && (
+                        <div style={{ padding: '12px', background: '#e6fffa', border: '2px solid #000', color: '#000', fontWeight: 800, fontSize: '0.85rem' }}>
+                            Password reset email sent! Check your inbox.
+                        </div>
+                    )}
+
                     {!isSignIn && (
                         <div>
                             <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.85rem' }}>FULL NAME</label>
@@ -298,6 +326,24 @@ export const LoginPage = () => {
                             }}
                             placeholder="••••••••"
                         />
+                        {isSignIn && (
+                            <button
+                                type="button"
+                                onClick={handleForgotPassword}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#666',
+                                    fontSize: '0.8rem',
+                                    marginTop: '8px',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    textDecoration: 'underline'
+                                }}
+                            >
+                                Forgot your password? Reset it here.
+                            </button>
+                        )}
                     </div>
                     <button type="submit" disabled={loading} className="button-primary" style={{ marginTop: '12px', height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                         {loading ? 'PROCESSING...' : (isSignIn ? <><LogIn size={20} /> SIGN IN</> : <><UserPlus size={20} /> CREATE ACCOUNT</>)}
