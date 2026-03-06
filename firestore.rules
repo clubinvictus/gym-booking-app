@@ -65,7 +65,7 @@ service cloud.firestore {
 
     // Rules for 'services'
     match /services/{serviceId} {
-      allow read: if isSignedIn() && belongsToSite(resource.data);
+      allow read: if isSignedIn();
       allow write: if isManager() && belongsToSite(request.resource.data);
     }
 

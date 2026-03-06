@@ -7,7 +7,7 @@ import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
 const formatWeekRange = (start: Date) => {
@@ -53,8 +53,16 @@ export const CalendarView = () => {
         return nextWeekStart > limitDate;
     })();
 
+    // Auto-filter for trainers
+    React.useEffect(() => {
+        if (isTrainer && profile?.trainerId) {
+            setSelectedTrainerId(profile.trainerId);
+        }
+    }, [isTrainer, profile]);
+
     // Fetch live sessions, trainers, and off-days
-    const { data: sessions } = useFirestore<any>('sessions');
+    // Clients only fetch their own sessions to avoid permission errors
+    const { data: sessions } = useFirestore<any>('sessions', isClient && user ? [where('clientId', '==', user.uid)] : []);
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
 

@@ -28,7 +28,14 @@ const daysMap: { [key: number]: string } = {
 };
 
 export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, excludedTrainerId, onBook }: BookingModalProps) => {
-    const { data: clients } = useFirestore<any>('clients');
+    const { profile } = useAuth();
+    const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
+    const isClient = profile?.role === 'client';
+
+    // The firestore rule for clients requires the email to match the auth token if not a manager.
+    const clientConstraints = isClient && profile?.email ? [where('email', '==', profile.email)] : [];
+
+    const { data: clients } = useFirestore<any>('clients', clientConstraints);
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: services } = useFirestore<any>('services');
     const { data: offDays } = useFirestore<any>('off_days');
@@ -42,9 +49,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const [isRepeating, setIsRepeating] = useState(false);
     const [repeatFrequency, setRepeatFrequency] = useState<'daily' | 'weekly'>('weekly');
     const [selectedDays, setSelectedDays] = useState<number[]>([]);
-    const { profile } = useAuth();
-    const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
-    const isClient = profile?.role === 'client';
+
     const [editMode, setEditMode] = useState<'single' | 'future'>('single');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
