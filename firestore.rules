@@ -37,9 +37,9 @@ service cloud.firestore {
     // C2 FIX: Split create/update. New users can ONLY be created as 'client'.
     // Role promotion must happen through admin or server-side.
     match /users/{userId} {
-      allow read: if isSignedIn() && (isAdmin() || isOwner(userId));
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
     }
 
     // Rules for 'admins' collection (used for admin lookup during login)

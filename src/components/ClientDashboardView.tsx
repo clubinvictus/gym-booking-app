@@ -4,17 +4,17 @@ import { useAuth } from '../AuthContext';
 import { Calendar, Clock, Briefcase } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
+import { where } from 'firebase/firestore';
 
 export const ClientDashboardView = () => {
     const { profile, user } = useAuth();
-    const { data: sessions } = useFirestore<any>('sessions');
+    // Use where constraint to strictly limit the query to the user's sessions to pass firestore.rules
+    const { data: sessions } = useFirestore<any>('sessions', user ? [where('clientId', '==', user.uid)] : []);
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
 
-    // Filter to only the client's own sessions using UID (not name)
-    const mySessions = sessions
-        .filter(s => s.clientId === user?.uid || s.clientName === profile?.name)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Filter to only the client's own sessions using UID
+    const mySessions = [...sessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Filter to only upcoming sessions
     const now = new Date();
