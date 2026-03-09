@@ -8,10 +8,10 @@ import { where } from 'firebase/firestore';
 
 export const ClientDashboardView = () => {
     const { profile, user } = useAuth();
-    // Use where constraint to strictly limit the query to the user's sessions to pass firestore.rules
     const { data: sessions } = useFirestore<any>('sessions', user ? [where('clientId', '==', user.uid)] : []);
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
+    const [visibleCount, setVisibleCount] = useState(10);
 
     // Filter to only the client's own sessions using UID
     const mySessions = [...sessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -23,6 +23,8 @@ export const ClientDashboardView = () => {
     const upcomingSessions = mySessions.filter(s => {
         return new Date(s.date) >= today;
     });
+
+    const displayedSessions = upcomingSessions.slice(0, visibleCount);
 
     const formatSessionDate = (dateString: string) => {
         const d = new Date(dateString);
@@ -37,7 +39,7 @@ export const ClientDashboardView = () => {
             </header>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {upcomingSessions.length > 0 ? upcomingSessions.map(session => (
+                {displayedSessions.length > 0 ? displayedSessions.map(session => (
                     <div
                         key={session.id}
                         onClick={() => setSelectedSession(session)}
@@ -90,6 +92,16 @@ export const ClientDashboardView = () => {
                         <p style={{ fontWeight: 700, color: '#666', fontSize: '1.1rem' }}>You have no upcoming sessions booked.</p>
                         <p className="text-muted" style={{ marginTop: '8px' }}>Go to the Calendar to book your next visit!</p>
                     </div>
+                )}
+
+                {visibleCount < upcomingSessions.length && (
+                    <button
+                        onClick={() => setVisibleCount(prev => prev + 10)}
+                        className="button-secondary"
+                        style={{ marginTop: '16px', width: '100%', padding: '16px', fontSize: '1rem', border: '3px solid #000' }}
+                    >
+                        LOAD MORE SESSIONS
+                    </button>
                 )}
             </div>
 
