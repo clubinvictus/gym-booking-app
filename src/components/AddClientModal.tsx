@@ -10,22 +10,36 @@ interface AddClientModalProps {
 export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [countryCode, setCountryCode] = useState('+91');
     const [phone, setPhone] = useState('');
+    const [phoneError, setPhoneError] = useState('');
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // E.164 basic validation: starts with +, then up to 15 digits
+        const fullPhone = `${countryCode}${phone.replace(/\D/g, '')}`;
+        const phoneRegex = /^\+[1-9]\d{6,14}$/;
+        if (!phoneRegex.test(fullPhone)) {
+            setPhoneError('Invalid phone number format.');
+            return;
+        }
+
         onAdd({
             name,
             email,
-            phone,
+            phone: fullPhone,
             joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         });
+
         // Reset fields
         setName('');
         setEmail('');
         setPhone('');
+        setCountryCode('+91');
+        setPhoneError('');
     };
 
     return (
@@ -107,22 +121,54 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) 
 
                     <div>
                         <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>PHONE NUMBER</label>
-                        <div style={{ position: 'relative' }}>
-                            <div style={{ position: 'absolute', left: '16px', top: '14px' }}><Phone size={18} className="text-muted" /></div>
-                            <input
-                                type="tel"
-                                placeholder="+1 (555) 000-0000"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <select
+                                value={countryCode}
+                                onChange={(e) => setCountryCode(e.target.value)}
                                 style={{
-                                    width: '100%',
-                                    padding: '12px 12px 12px 48px',
+                                    padding: '12px',
                                     borderRadius: 0,
                                     border: '2px solid #000',
                                     fontSize: '1rem',
-                                    fontWeight: 600
+                                    fontWeight: 600,
+                                    width: '110px',
+                                    backgroundColor: '#f9f9f9',
+                                    cursor: 'pointer'
                                 }}
-                            />
+                            >
+                                <option value="+91">+91 (IN)</option>
+                                <option value="+1">+1 (US/CA)</option>
+                                <option value="+44">+44 (UK)</option>
+                                <option value="+61">+61 (AU)</option>
+                                <option value="+971">+971 (AE)</option>
+                                <option value="+65">+65 (SG)</option>
+                            </select>
+                            <div style={{ position: 'relative', flex: 1 }}>
+                                <div style={{ position: 'absolute', left: '16px', top: '14px' }}><Phone size={18} className="text-muted" /></div>
+                                <input
+                                    type="tel"
+                                    required
+                                    value={phone}
+                                    onChange={(e) => {
+                                        setPhone(e.target.value.replace(/\D/g, ''));
+                                        setPhoneError('');
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 12px 12px 48px',
+                                        borderRadius: 0,
+                                        border: phoneError ? '2px solid #ff4444' : '2px solid #000',
+                                        fontSize: '1rem',
+                                        fontWeight: 600
+                                    }}
+                                    placeholder="Phone Number"
+                                />
+                                {phoneError && (
+                                    <p style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 600, margin: '4px 0 0 0', position: 'absolute' }}>
+                                        {phoneError}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
 

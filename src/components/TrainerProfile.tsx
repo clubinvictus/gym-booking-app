@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { ArrowLeft, User, Mail, Calendar, Star, Edit2, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, User, Mail, Calendar, Star, Edit2, Trash2, AlertTriangle, Phone } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { db } from '../firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 interface TrainerProfileProps {
     onBack: () => void;
@@ -11,8 +13,41 @@ interface TrainerProfileProps {
 
 export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerProfileProps) => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState(trainer.name);
+    const [editRole, setEditRole] = useState(trainer.role || 'trainer');
+    const [editPhone, setEditPhone] = useState(trainer.phone || '');
+    const [phoneError, setPhoneError] = useState('');
     const { profile } = useAuth();
     const isManager = profile?.role === 'manager';
+
+    const handleSaveEdit = async () => {
+        // E.164 basic validation
+        const phoneRegex = /^\+[1-9]\d{10,14}$/;
+        if (editPhone && !phoneRegex.test(editPhone.replace(/\s+/g, ''))) {
+            setPhoneError('Phone number must start with a + country code and contain 10-15 digits (e.g., +1234567890).');
+            return;
+        }
+
+        try {
+            await updateDoc(doc(db, 'trainers', trainer.id), {
+                name: editName,
+                role: editRole,
+                phone: editPhone ? editPhone.replace(/\s+/g, '') : ''
+            });
+
+            // If updating a trainer to manager role, make sure they are included in users collection correctly
+            // (Note: full role sync usually happens via AdminDashboard cloud functions or specific hooks, 
+            // but we at least update the trainer doc here)
+
+            setIsEditing(false);
+            setPhoneError('');
+        } catch (err) {
+            console.error('Error updating trainer:', err);
+            alert('Failed to update trainer.');
+        }
+    };
+
     return (
         <div style={{ padding: '40px' }}>
             <div
@@ -73,7 +108,59 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                             </div>
                         </div>
                     ) : (
-                        !isManager && (
+                        isManager ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {isEditing ? (
+                                    <>
+                                        <button className="button-primary" onClick={handleSaveEdit} style={{ padding: '8px 16px' }}>Save</button>
+                                        <button
+                                            className="button-secondary"
+                                            onClick={() => {
+                                                setIsEditing(false);
+                                                setEditName(trainer.name);
+                                                setEditRole(trainer.role || 'trainer');
+                                                setEditPhone(trainer.phone || '');
+                                                setPhoneError('');
+                                            }}
+                                            style={{ padding: '8px 16px' }}
+                                        >
+                                            Cancel
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            className="button-secondary"
+                                            onClick={() => setIsEditing(true)}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                padding: '8px 16px'
+                                            }}
+                                        >
+                                            <Edit2 size={16} /> Edit
+                                        </button>
+                                        <button
+                                            onClick={() => setShowDeleteConfirm(true)}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                padding: '8px 16px',
+                                                background: '#ff4444',
+                                                color: '#fff',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                fontWeight: 700
+                                            }}
+                                        >
+                                            <Trash2 size={16} /> Delete
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        ) : (
                             <>
                                 <button
                                     type="button"
@@ -140,14 +227,43 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'left' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <Mail size={18} className="text-muted" />
-                                <span style={{ fontSize: '0.9rem' }}>{trainer.name.toLowerCase().replace(' ', '.')}@invictus.com</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <Star size={18} className="text-muted" />
-                                <span style={{ fontSize: '0.9rem' }}>4.9 Rating (120 reviews)</span>
-                            </div>
+                            {isEditing ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <input
+                                        type="tel"
+                                        value={editPhone}
+                                        required
+                                        onChange={(e) => {
+                                            setEditPhone(e.target.value);
+                                            setPhoneError('');
+                                        }}
+                                        style={{ padding: '8px 12px', border: phoneError ? '2px solid #ff4444' : '2px solid #000', fontSize: '0.9rem', width: '100%' }}
+                                        placeholder="Phone (e.g., +1234567890)"
+                                    />
+                                    {phoneError && (
+                                        <p style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 600, margin: '0' }}>
+                                            {phoneError}
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <Mail size={18} className="text-muted" />
+                                        <span style={{ fontSize: '0.9rem' }}>{trainer.name.toLowerCase().replace(' ', '.')}@invictus.com</span>
+                                    </div>
+                                    {trainer.phone && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <Phone size={18} className="text-muted" />
+                                            <span style={{ fontSize: '0.9rem' }}>{trainer.phone}</span>
+                                        </div>
+                                    )}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <Star size={18} className="text-muted" />
+                                        <span style={{ fontSize: '0.9rem' }}>4.9 Rating (120 reviews)</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
 

@@ -11,6 +11,9 @@ interface EditTrainerModalProps {
 
 export const EditTrainerModal = ({ isOpen, onClose, trainer }: EditTrainerModalProps) => {
     const [name, setName] = useState('');
+    const [countryCode, setCountryCode] = useState('+91');
+    const [phone, setPhone] = useState('');
+    const [phoneError, setPhoneError] = useState('');
     const [status, setStatus] = useState('Active');
     const [specialties, setSpecialties] = useState<string[]>([]);
     const [availability, setAvailability] = useState<any>({});
@@ -25,9 +28,24 @@ export const EditTrainerModal = ({ isOpen, onClose, trainer }: EditTrainerModalP
         fetchServices();
     }, []);
 
+    const getInitialPhone = (phone: string | undefined) => {
+        if (!phone) return { code: '+91', number: '' };
+        const codes = ['+91', '+1', '+44', '+61', '+971', '+65'];
+        for (const c of codes) {
+            if (phone.startsWith(c)) {
+                return { code: c, number: phone.slice(c.length) };
+            }
+        }
+        return { code: '+91', number: phone };
+    };
+
     useEffect(() => {
         if (trainer) {
             setName(trainer.name || '');
+            const initialPhone = getInitialPhone(trainer.phone);
+            setCountryCode(initialPhone.code);
+            setPhone(initialPhone.number);
+            setPhoneError('');
             setStatus(trainer.status || 'Active');
             setSpecialties(trainer.specialties || []);
 
@@ -53,11 +71,20 @@ export const EditTrainerModal = ({ isOpen, onClose, trainer }: EditTrainerModalP
     if (!isOpen || !trainer) return null;
 
     const handleSave = async () => {
+        // E.164 basic validation: starts with +, then up to 15 digits
+        const fullPhone = `${countryCode}${phone.replace(/\D/g, '')}`;
+        const phoneRegex = /^\+[1-9]\d{6,14}$/;
+        if (phone && !phoneRegex.test(fullPhone)) {
+            setPhoneError('Invalid phone number format.');
+            return;
+        }
+
         setIsSaving(true);
         try {
             const trainerRef = doc(db, 'trainers', trainer.id);
             await updateDoc(trainerRef, {
                 name,
+                phone: phone ? fullPhone : '',
                 status,
                 specialties,
                 availability
@@ -183,6 +210,59 @@ export const EditTrainerModal = ({ isOpen, onClose, trainer }: EditTrainerModalP
                                     fontWeight: 600
                                 }}
                             />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>PHONE NUMBER</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <select
+                                value={countryCode}
+                                onChange={(e) => setCountryCode(e.target.value)}
+                                style={{
+                                    padding: '12px',
+                                    borderRadius: 0,
+                                    border: '2px solid #000',
+                                    fontSize: '1rem',
+                                    fontWeight: 600,
+                                    width: '110px',
+                                    backgroundColor: '#f9f9f9',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="+91">+91 (IN)</option>
+                                <option value="+1">+1 (US/CA)</option>
+                                <option value="+44">+44 (UK)</option>
+                                <option value="+61">+61 (AU)</option>
+                                <option value="+971">+971 (AE)</option>
+                                <option value="+65">+65 (SG)</option>
+                            </select>
+                            <div style={{ position: 'relative', flex: 1 }}>
+                                <div style={{ position: 'absolute', left: '16px', top: '14px' }}><User size={18} className="text-muted" /></div>
+                                <input
+                                    type="tel"
+                                    required
+                                    value={phone}
+                                    onChange={(e) => {
+                                        setPhone(e.target.value.replace(/\D/g, ''));
+                                        setPhoneError('');
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 12px 12px 48px',
+                                        borderRadius: 0,
+                                        border: phoneError ? '2px solid #ff4444' : '2px solid #000',
+                                        fontSize: '1rem',
+                                        fontWeight: 600
+                                    }}
+                                    placeholder="Phone Number"
+                                />
+                                {phoneError && (
+                                    <p style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 600, margin: '4px 0 0 0', position: 'absolute' }}>
+                                        {phoneError}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
 

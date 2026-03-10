@@ -24,10 +24,25 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [editingSession, setEditingSession] = useState<any>(null);
+    const getInitialPhone = (phone: string | undefined) => {
+        if (!phone) return { code: '+91', number: '' };
+        const codes = ['+91', '+1', '+44', '+61', '+971', '+65'];
+        for (const c of codes) {
+            if (phone.startsWith(c)) {
+                return { code: c, number: phone.slice(c.length) };
+            }
+        }
+        return { code: '+91', number: phone };
+    };
+
+    const initialPhone = getInitialPhone(client.phone);
+
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState(client.name);
     const [editEmail, setEditEmail] = useState(client.email);
-    const [editPhone, setEditPhone] = useState(client.phone);
+    const [countryCode, setCountryCode] = useState(initialPhone.code);
+    const [editPhone, setEditPhone] = useState(initialPhone.number);
+    const [phoneError, setPhoneError] = useState('');
     const { profile } = useAuth();
 
     const now = new Date();
@@ -50,13 +65,22 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     };
 
     const handleSaveEdit = async () => {
+        // E.164 basic validation
+        const fullPhone = `${countryCode}${editPhone.replace(/\D/g, '')}`;
+        const phoneRegex = /^\+[1-9]\d{6,14}$/;
+        if (editPhone && !phoneRegex.test(fullPhone)) {
+            setPhoneError('Invalid phone number format.');
+            return;
+        }
+
         try {
             await updateDoc(doc(db, 'clients', client.id), {
                 name: editName,
                 email: editEmail,
-                phone: editPhone
+                phone: editPhone ? fullPhone : ''
             });
             setIsEditing(false);
+            setPhoneError('');
             alert('Client updated successfully!');
         } catch (err) {
             console.error('Error updating client:', err);
@@ -169,18 +193,59 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                                 style={{ padding: '8px 12px', border: '2px solid #000', fontSize: '0.9rem' }}
                                 placeholder="Email"
                             />
-                            <input
-                                type="tel"
-                                value={editPhone}
-                                onChange={(e) => setEditPhone(e.target.value)}
-                                style={{ padding: '8px 12px', border: '2px solid #000', fontSize: '0.9rem' }}
-                                placeholder="Phone"
-                            />
+                            <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                                <select
+                                    value={countryCode}
+                                    onChange={(e) => setCountryCode(e.target.value)}
+                                    style={{
+                                        padding: '8px',
+                                        border: '2px solid #000',
+                                        fontSize: '0.9rem',
+                                        width: '100px',
+                                        backgroundColor: '#f9f9f9',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="+91">+91 (IN)</option>
+                                    <option value="+1">+1 (US/CA)</option>
+                                    <option value="+44">+44 (UK)</option>
+                                    <option value="+61">+61 (AU)</option>
+                                    <option value="+971">+971 (AE)</option>
+                                    <option value="+65">+65 (SG)</option>
+                                </select>
+                                <div style={{ flex: 1, position: 'relative' }}>
+                                    <input
+                                        type="tel"
+                                        value={editPhone}
+                                        required
+                                        onChange={(e) => {
+                                            setEditPhone(e.target.value.replace(/\D/g, ''));
+                                            setPhoneError('');
+                                        }}
+                                        style={{ padding: '8px 12px', border: phoneError ? '2px solid #ff4444' : '2px solid #000', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box' }}
+                                        placeholder="Phone Number"
+                                    />
+                                    {phoneError && (
+                                        <p style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 600, margin: '4px 0 0 0', position: 'absolute' }}>
+                                            {phoneError}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button className="button-primary" onClick={handleSaveEdit} style={{ padding: '8px 20px' }}>
                                     Save
                                 </button>
-                                <button className="button-secondary" onClick={() => { setIsEditing(false); setEditName(client.name); setEditEmail(client.email); setEditPhone(client.phone); }} style={{ padding: '8px 20px' }}>
+                                <button className="button-secondary" onClick={() => {
+                                    setIsEditing(false);
+                                    setEditName(client.name);
+                                    setEditEmail(client.email);
+
+                                    const resetPhone = getInitialPhone(client.phone);
+                                    setCountryCode(resetPhone.code);
+                                    setEditPhone(resetPhone.number);
+                                    setPhoneError('');
+                                }} style={{ padding: '8px 20px' }}>
                                     Cancel
                                 </button>
                             </div>
