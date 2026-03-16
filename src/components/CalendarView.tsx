@@ -66,6 +66,7 @@ export const CalendarView = () => {
     // Clients only fetch their own sessions to avoid permission errors
     const clientIds = isClient ? [user?.uid, profile?.clientId].filter(Boolean) : [];
     const { data: sessions } = useFirestore<any>('sessions', isClient ? (clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []) : []);
+    const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
 
@@ -275,7 +276,7 @@ export const CalendarView = () => {
 
                 {/* Right: Controls & Primary Action */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
-                    {isAdmin && (
+                    {(isAdmin || isClient) && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
                             <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>
                             <select
@@ -414,9 +415,18 @@ export const CalendarView = () => {
                                     return s.trainerId === selectedTrainerId;
                                 });
 
+                                // Find if this slot is busy for the selected trainer (for clients)
+                                const slotDateStr = slotDate.toISOString().split('T')[0];
+                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && busySlots.some((bs: any) => 
+                                    bs.trainerId === selectedTrainerId && 
+                                    bs.date === slotDateStr && 
+                                    bs.time === time &&
+                                    !sessions.some((s: any) => s.id === bs.id) // Ensure it's not the client's own session
+                                );
+
                                 const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
-                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && slotSessions.length === 0;
+                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && slotSessions.length === 0 && !isBusyByOthers;
                                 const showAsAvailable = selectedTrainerId === 'all' || available;
 
                                 let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
@@ -472,6 +482,25 @@ export const CalendarView = () => {
                                                 <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
                                             </div>
                                         ))}
+
+                                        {isBusyByOthers && (
+                                            <div
+                                                style={{
+                                                    backgroundColor: '#e0e0e0',
+                                                    borderRadius: '4px',
+                                                    padding: '8px',
+                                                    color: '#888',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    height: '100%',
+                                                    border: '1px dashed #ccc'
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '0.75rem', fontWeight: 800 }}>BUSY</div>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
