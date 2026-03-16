@@ -115,6 +115,12 @@ service cloud.firestore {
       allow read: if isManager();
       allow write: if isSignedIn();
     }
+
+    // New: Non-sensitive trainer busy slots for client-side conflict checking
+    match /trainer_busy_slots/{slotId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable by Cloud Functions
+    }
     
     match /off_days/{offDayId} {
       allow read: if isSignedIn();

@@ -205,7 +205,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             if (trainer) {
                 // Fetch all existing sessions for this trainer
                 const existingSnap = await getDocs(
-                    query(collection(db, 'sessions'), where('trainerId', '==', trainer.id))
+                    query(collection(db, 'trainer_busy_slots'), where('trainerId', '==', trainer.id))
                 );
                 const existingTimes = new Map<string, boolean>();
                 existingSnap.forEach(d => {
@@ -714,7 +714,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         }}
                                     >
                                         {timeSlots.map(t => {
-                                            const slotDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                                            const slotDate = getTargetDateForDayIndex(selectedDay);
                                             const isToday = slotDate.toDateString() === new Date().toDateString();
                                             let isPast = false;
                                             if (isToday) {

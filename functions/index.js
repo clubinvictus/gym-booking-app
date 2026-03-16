@@ -127,6 +127,19 @@ exports.onSessionWritten = functions.firestore
         const isUpdate = change.before.exists && change.after.exists;
 
         const data = isDelete ? beforeData : afterData;
+        const sessionId = context.params.sessionId;
+
+        // Sync trainer_busy_slots collection for conflict detection
+        if (isDelete) {
+            await db.collection('trainer_busy_slots').doc(sessionId).delete();
+        } else {
+            await db.collection('trainer_busy_slots').doc(sessionId).set({
+                trainerId: data.trainerId,
+                date: data.date,
+                time: data.time,
+                siteId: data.siteId || 'default'
+            });
+        }
 
         // Setup Date and Time explicitly
         const sessionDate = new Date(data.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
