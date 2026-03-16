@@ -459,7 +459,7 @@ export const CalendarView = () => {
                                             gap: '4px',
                                             cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
                                             backgroundColor: baseBackgroundColor,
-                                            backgroundImage: (displaySessions.length === 0 && !showAsAvailable) || isBusyByOthers
+                                            backgroundImage: displaySessions.length === 0 && !showAsAvailable
                                                 ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'
                                                 : 'none',
                                             transition: 'all 0.2s ease'
@@ -491,6 +491,26 @@ export const CalendarView = () => {
                                                 <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
                                             </div>
                                         ))}
+
+                                        {isBusyByOthers && (
+                                            <div
+                                                style={{
+                                                    backgroundColor: '#f0f0f0',
+                                                    border: '1px solid #ddd',
+                                                    borderRadius: '4px',
+                                                    padding: '8px',
+                                                    color: '#999',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    minHeight: '60px',
+                                                    cursor: 'not-allowed'
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>BOOKED</div>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
