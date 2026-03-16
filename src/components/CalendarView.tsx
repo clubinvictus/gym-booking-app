@@ -157,6 +157,15 @@ export const CalendarView = () => {
         if (selectedTrainerId !== 'all') {
             const isBooked = sessions.some((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
             if (isBooked) available = false;
+
+            // Also check busySlots (for clients)
+            const slotDateStr = slotDate.toISOString().split('T')[0];
+            const isBusy = busySlots.some((bs: any) => 
+                bs.trainerId === selectedTrainerId && 
+                bs.date === slotDateStr && 
+                bs.time === time
+            );
+            if (isBusy) available = false;
         }
 
         // Prevent trainers from booking sessions
@@ -450,7 +459,7 @@ export const CalendarView = () => {
                                             gap: '4px',
                                             cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
                                             backgroundColor: baseBackgroundColor,
-                                            backgroundImage: displaySessions.length === 0 && !showAsAvailable
+                                            backgroundImage: (displaySessions.length === 0 && !showAsAvailable) || isBusyByOthers
                                                 ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'
                                                 : 'none',
                                             transition: 'all 0.2s ease'
@@ -482,25 +491,6 @@ export const CalendarView = () => {
                                                 <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
                                             </div>
                                         ))}
-
-                                        {isBusyByOthers && (
-                                            <div
-                                                style={{
-                                                    backgroundColor: '#e0e0e0',
-                                                    borderRadius: '4px',
-                                                    padding: '8px',
-                                                    color: '#888',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    height: '100%',
-                                                    border: '1px dashed #ccc'
-                                                }}
-                                            >
-                                                <div style={{ fontSize: '0.75rem', fontWeight: 800 }}>BUSY</div>
-                                            </div>
-                                        )}
                                     </div>
                                 );
                             })}
