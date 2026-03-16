@@ -8,7 +8,8 @@ import { where } from 'firebase/firestore';
 
 export const ClientDashboardView = () => {
     const { profile, user } = useAuth();
-    const { data: sessions } = useFirestore<any>('sessions', user ? [where('clientId', '==', user.uid)] : []);
+    const clientIds = [user?.uid, profile?.clientId].filter(Boolean);
+    const { data: sessions } = useFirestore<any>('sessions', clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []);
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
     const [visibleCount, setVisibleCount] = useState(10);
@@ -33,9 +34,41 @@ export const ClientDashboardView = () => {
 
     return (
         <div style={{ padding: '40px' }}>
-            <header style={{ marginBottom: '40px' }}>
-                <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>My Dashboard</h1>
-                <p className="text-muted">Welcome back, {profile?.name || 'Client'}! Here are your upcoming sessions.</p>
+            <header style={{
+                marginBottom: '40px',
+                display: 'flex',
+                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                justifyContent: 'space-between',
+                alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                gap: '24px'
+            }}>
+                <div>
+                    <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>My Dashboard</h1>
+                    <p className="text-muted">Welcome back, {profile?.name || 'Client'}! Here are your upcoming sessions.</p>
+                </div>
+                <button
+                    onClick={() => {
+                        const nextHour = new Date();
+                        nextHour.setHours(nextHour.getHours() + 1);
+                        nextHour.setMinutes(0);
+                        
+                        setSelectedSlot({
+                            time: nextHour.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                            day: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+                            trainerId: 'all'
+                        });
+                    }}
+                    className="button-primary"
+                    style={{
+                        padding: '12px 24px',
+                        fontSize: '1rem',
+                        fontWeight: 800,
+                        width: window.innerWidth <= 768 ? '100%' : 'auto',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    + NEW BOOKING
+                </button>
             </header>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

@@ -1,9 +1,8 @@
-import { Plus, Clock, Edit2, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Clock, Edit2, Trash2 } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { db } from '../firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
-import { useState } from 'react';
-
+import { useConfirm } from '../ConfirmContext';
 import { useAuth } from '../AuthContext';
 
 interface ServiceManagementProps {
@@ -13,25 +12,10 @@ interface ServiceManagementProps {
 
 export const ServiceManagement = ({ onAddClick, onEditClick }: ServiceManagementProps) => {
     const { data: services, loading } = useFirestore<any>('services');
-    const [serviceToDelete, setServiceToDelete] = useState<any>(null);
-    const [isDeleting, setIsDeleting] = useState(false);
+    const confirm = useConfirm();
     const { profile } = useAuth();
     const isManager = profile?.role === 'manager';
 
-    const performDelete = async () => {
-        if (!serviceToDelete) return;
-
-        setIsDeleting(true);
-        try {
-            await deleteDoc(doc(db, 'services', serviceToDelete.id));
-            setServiceToDelete(null);
-        } catch (error) {
-            console.error('Error deleting service:', error);
-            alert('Failed to delete service.');
-        } finally {
-            setIsDeleting(false);
-        }
-    };
 
     if (loading) {
         return (
@@ -117,7 +101,22 @@ export const ServiceManagement = ({ onAddClick, onEditClick }: ServiceManagement
                                             gap: '4px',
                                             cursor: 'pointer'
                                         }}
-                                        onClick={() => setServiceToDelete(service)}
+                                        onClick={async () => {
+                                            const confirmed = await confirm({
+                                                title: 'Delete Service',
+                                                message: `Are you sure you want to delete "${service.name}"? This will remove it from all trainer profiles and cannot be undone.`,
+                                                confirmLabel: 'Delete Service',
+                                                type: 'danger'
+                                            });
+
+                                            if (confirmed) {
+                                                try {
+                                                    await deleteDoc(doc(db, 'services', service.id));
+                                                } catch (error) {
+                                                    console.error('Error deleting service:', error);
+                                                }
+                                            }
+                                        }}
                                     >
                                         <Trash2 size={14} /> Delete
                                     </button>
@@ -127,71 +126,6 @@ export const ServiceManagement = ({ onAddClick, onEditClick }: ServiceManagement
                     </div>
                 ))}
             </div>
-
-            {/* Deletion Confirmation Modal */}
-            {serviceToDelete && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0,0,0,0.85)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 2000,
-                    backdropFilter: 'blur(8px)',
-                    padding: '20px'
-                }}>
-                    <div className="card" style={{
-                        maxWidth: '400px',
-                        width: '100%',
-                        padding: '32px',
-                        background: '#fff',
-                        border: '4px solid #000',
-                        textAlign: 'center'
-                    }}>
-                        <div style={{
-                            width: '64px',
-                            height: '64px',
-                            background: '#fff',
-                            border: '4px solid #ff4444',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            margin: '0 auto 24px',
-                            color: '#ff4444'
-                        }}>
-                            <AlertTriangle size={32} />
-                        </div>
-
-                        <h2 style={{ fontSize: '1.5rem', marginBottom: '12px' }}>Delete Service?</h2>
-                        <p className="text-muted" style={{ marginBottom: '32px', lineHeight: '1.5' }}>
-                            Are you sure you want to delete <strong>"{serviceToDelete.name}"</strong>? This will remove it from all trainer profiles and cannot be undone.
-                        </p>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <button
-                                className="button-primary"
-                                style={{ background: '#ff4444', border: 'none', padding: '16px' }}
-                                onClick={performDelete}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? 'DELETING...' : 'YES, DELETE SERVICE'}
-                            </button>
-                            <button
-                                className="button-secondary"
-                                style={{ padding: '16px' }}
-                                onClick={() => setServiceToDelete(null)}
-                                disabled={isDeleting}
-                            >
-                                CANCEL
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

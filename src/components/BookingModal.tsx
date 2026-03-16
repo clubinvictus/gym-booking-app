@@ -5,6 +5,7 @@ import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where }
 import { useAuth } from '../AuthContext';
 import { SITE_ID } from '../constants';
 import { useFirestore } from '../hooks/useFirestore';
+import { useConfirm } from '../ConfirmContext';
 
 interface BookingModalProps {
     isOpen: boolean;
@@ -28,7 +29,8 @@ const daysMap: { [key: number]: string } = {
 };
 
 export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, excludedTrainerId, onBook }: BookingModalProps) => {
-    const { profile } = useAuth();
+    const confirm = useConfirm();
+    const { user, profile } = useAuth();
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const isClient = profile?.role === 'client';
 
@@ -176,8 +178,104 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         if (isSubmitting) return;
         setIsSubmitting(true);
 
+        // Block past bookings
+        if (!editingSession) {
+            const slotDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+            const [timePart, modifier] = selectedTime.split(' ');
+            let [hours, minutes] = timePart.split(':').map(Number);
+            if (modifier === 'PM' && hours !== 12) hours += 12;
+            if (modifier === 'AM' && hours === 12) hours = 0;
+            slotDate.setHours(hours, minutes, 0, 0);
+            if (slotDate < new Date()) {
+                alert('You cannot book a session in the past. Please select a future date and time.');
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
         if (!isClient && !clients.some((c: any) => c.name === selectedClient)) {
             alert('Please select a valid client from the list.');
+            setIsSubmitting(false);
+            return;
+        }
+
+        // --- Trainer double-booking check ---
+        if (!editingSession && selectedTrainer) {
+            const trainer = trainers.find((t: any) => t.name === selectedTrainer);
+            if (trainer) {
+                // Fetch all existing sessions for this trainer
+                const existingSnap = await getDocs(
+                    query(collection(db, 'sessions'), where('trainerId', '==', trainer.id))
+                );
+                const existingTimes = new Map<string, boolean>();
+                existingSnap.forEach(d => {
+                    const s = d.data();
+                    // Key = date string (YYYY-MM-DD) + time
+                    const dateKey = new Date(s.date).toDateString();
+                    existingTimes.set(`${dateKey}|${s.time}`, true);
+                });
+
+                const conflicts: string[] = [];
+                const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+
+                if (isRepeating) {
+                    // Generate all dates in the series and check each
+                    const endDate = isClient
+                        ? getClientMaxDate()
+                        : new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+
+                    for (const dayIdx of selectedDays) {
+                        let currentDate = new Date(baseDate);
+                        const currentDay = currentDate.getDay();
+                        const targetDay = (dayIdx + 1) % 7;
+                        let diff = targetDay - currentDay;
+                        if (diff < 0) diff += 7;
+                        currentDate.setDate(currentDate.getDate() + diff);
+                        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+
+                        while (currentDate <= endDate) {
+                            const key = `${currentDate.toDateString()}|${selectedTime}`;
+                            if (existingTimes.has(key)) {
+                                conflicts.push(currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + selectedTime);
+                            }
+                            currentDate.setDate(currentDate.getDate() + 7);
+                        }
+                    }
+                } else {
+                    // Single booking: compute exact target date
+                    const currentDay = baseDate.getDay();
+                    const targetDay = (selectedDay + 1) % 7;
+                    const diff = targetDay - currentDay;
+                    baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+                    const key = `${baseDate.toDateString()}|${selectedTime}`;
+                    if (existingTimes.has(key)) {
+                        conflicts.push(baseDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + selectedTime);
+                    }
+                }
+
+                if (conflicts.length > 0) {
+                    const conflictList = conflicts.slice(0, 5).join('\n  • ');
+                    const more = conflicts.length > 5 ? `\n  ...and ${conflicts.length - 5} more.` : '';
+                    alert(`⚠️ Double-booking detected!\n\n${selectedTrainer} already has a session booked on:\n  • ${conflictList}${more}\n\nPlease choose a different trainer or time.`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+        }
+        // --- End conflict check ---
+
+        const confirmed = await confirm({
+            title: editingSession ? 'Confirm Changes?' : 'Confirm Booking?',
+            message: isRepeating 
+                ? `Are you sure you want to schedule this recurring series for ${selectedClient}?`
+                : `Are you sure you want to book this session for ${selectedClient} on ${selectedTime}?`,
+            confirmLabel: editingSession ? 'Save Changes' : 'Confirm Booking',
+            type: 'info'
+        });
+
+        if (!confirmed) {
             setIsSubmitting(false);
             return;
         }
@@ -192,8 +290,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             const service = services.find(s => s.name === (selectedService || editingSession?.serviceName));
 
             return {
-                clientName: isClient ? profile?.name : (selectedClient || editingSession?.clientName),
-                clientId: isClient ? profile?.uid : (client?.id || null),
+                clientName: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
+                clientId: isClient ? (profile?.clientId || user?.uid) : (client?.id || null),
                 trainerName: selectedTrainer,
                 trainerId: trainer?.id || null,
                 serviceName: selectedService || editingSession?.serviceName,
@@ -371,8 +469,12 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 const targetDay = (selectedDay + 1) % 7;
                 const diff = targetDay - currentDay;
                 baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
-                await addDoc(collection(db, 'sessions'), getBookingData(baseDate, selectedDay));
+                const bookingData = getBookingData(baseDate, selectedDay);
+                await addDoc(collection(db, 'sessions'), bookingData);
+                await logActivity('booked', bookingData);
             }
+            
+            setIsSubmitting(false);
             onBook({});
             onClose();
         } catch (error) {
@@ -611,9 +713,25 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             backgroundColor: '#fff'
                                         }}
                                     >
-                                        {timeSlots.map(t => (
-                                            <option key={t} value={t}>{t}</option>
-                                        ))}
+                                        {timeSlots.map(t => {
+                                            const slotDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                                            const isToday = slotDate.toDateString() === new Date().toDateString();
+                                            let isPast = false;
+                                            if (isToday) {
+                                                const [timePart, mod] = t.split(' ');
+                                                let [h, m] = timePart.split(':').map(Number);
+                                                if (mod === 'PM' && h !== 12) h += 12;
+                                                if (mod === 'AM' && h === 12) h = 0;
+                                                const slotMinutes = h * 60 + m;
+                                                const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+                                                isPast = slotMinutes <= nowMinutes;
+                                            }
+                                            return (
+                                                <option key={t} value={t} disabled={isPast} style={{ color: isPast ? '#ccc' : undefined }}>
+                                                    {t}{isPast ? ' (past)' : ''}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                             </div>
@@ -732,23 +850,26 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             </div>
                         )}
 
-                        <button
-                            type="submit"
-                            className="button-primary"
-                            disabled={(availableTrainers.length === 0 && !editingSession) || isSubmitting}
-                            style={{
-                                width: '100%',
-                                padding: '16px',
-                                marginTop: '12px',
-                                position: 'sticky',
-                                bottom: '0',
-                                boxShadow: '0 -10px 10px #fff',
-                                opacity: ((availableTrainers.length === 0 && !editingSession) || isSubmitting) ? 0.5 : 1,
-                                cursor: isSubmitting ? 'wait' : 'pointer'
-                            }}
-                        >
-                            {isSubmitting ? 'Processing...' : `Confirm ${editingSession ? 'Changes' : 'Booking'}`}
-                        </button>
+                        <div style={{
+                            borderTop: '2px solid #eee',
+                            paddingTop: '16px',
+                            paddingBottom: '4px',
+                            marginTop: '12px',
+                        }}>
+                            <button
+                                type="submit"
+                                className="button-primary"
+                                disabled={(availableTrainers.length === 0 && !editingSession) || isSubmitting}
+                                style={{
+                                    width: '100%',
+                                    padding: '16px',
+                                    opacity: ((availableTrainers.length === 0 && !editingSession) || isSubmitting) ? 0.5 : 1,
+                                    cursor: isSubmitting ? 'wait' : 'pointer'
+                                }}
+                            >
+                                {isSubmitting ? 'Processing...' : `Confirm ${editingSession ? 'Changes' : 'Booking'}`}
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>

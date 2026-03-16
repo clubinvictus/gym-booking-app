@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, User, Trash2, Mail, Shield } from 'lucide-react';
+import { Plus, User, Trash2, Mail, Shield, Phone } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
 
@@ -161,10 +161,16 @@ export const TeamManagement = ({ onTrainerClick, onAddTrainerClick, onAddManager
                                 </div>
                                 <div>
                                     <h3 style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{manager.name}</h3>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: '#666' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: '#666', marginTop: '4px' }}>
                                         <Mail size={16} />
                                         {manager.email}
                                     </div>
+                                    {manager.phone && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: '#666', marginTop: '4px' }}>
+                                            <Phone size={16} />
+                                            {manager.phone}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             {!isManager && (

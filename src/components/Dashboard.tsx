@@ -25,6 +25,7 @@ import { doc, deleteDoc, addDoc, collection } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 import { useAuth } from '../AuthContext';
 import { signOut } from 'firebase/auth';
+import { useConfirm } from '../ConfirmContext';
 
 interface DashboardProps {
     view?: 'dashboard' | 'calendar' | 'team' | 'services' | 'clients' | 'activity' | 'settings';
@@ -45,6 +46,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const { profile } = useAuth();
     const navigate = useNavigate();
+    const confirm = useConfirm();
 
     useEffect(() => {
         const handleResize = () => {
@@ -128,7 +130,14 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         onAddTrainerClick={() => setTrainerModalOpen(true)}
                         onAddManagerClick={() => setManagerModalOpen(true)}
                         onDeleteManagerClick={async (id) => {
-                            if (window.confirm('Are you sure you want to remove this manager?')) {
+                            const confirmed = await confirm({
+                                title: 'Remove Manager',
+                                message: 'Are you sure you want to remove this manager? This action cannot be undone.',
+                                confirmLabel: 'Remove Manager',
+                                type: 'danger'
+                            });
+
+                            if (confirmed) {
                                 try {
                                     await deleteDoc(doc(db, 'managers', id));
                                 } catch (error) {

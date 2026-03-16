@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, RefreshCw } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
+import { useConfirm } from '../ConfirmContext';
 import { SITE_ID } from '../constants';
 
 interface SessionDetailModalProps {
@@ -14,11 +15,10 @@ interface SessionDetailModalProps {
 }
 
 export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onReschedule }: SessionDetailModalProps) => {
+    const confirm = useConfirm();
     const [isDeleting, setIsDeleting] = useState(false);
-    const [isFinalConfirming, setIsFinalConfirming] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [deleteScope, setDeleteScope] = useState<'single' | 'future'>('single');
-    const [error, setError] = useState<string | null>(null);
     const { profile } = useAuth();
     const isTrainer = profile?.role === 'trainer';
 
@@ -26,10 +26,8 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     useEffect(() => {
         if (isOpen) {
             setIsDeleting(false);
-            setIsFinalConfirming(false);
             setIsProcessing(false);
             setDeleteScope('single');
-            setError(null);
         }
     }, [isOpen, session]);
 
@@ -37,7 +35,6 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
 
     const confirmDelete = async () => {
         setIsProcessing(true);
-        setError(null);
 
         const logActivity = async () => {
             try {
@@ -82,9 +79,9 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             } catch (err: any) {
                 console.error('Error deleting series:', err);
                 if (err.message && err.message.includes('requires an index')) {
-                    setError('System Error: Missing database index. The admin needs to create a composite index in Firebase Console.');
+                    alert('System Error: Missing database index. The admin needs to create a composite index in Firebase Console.');
                 } else {
-                    setError('Failed to delete series. Please try again.');
+                    alert('Failed to delete series. Please try again.');
                 }
                 setIsProcessing(false);
             }
@@ -97,7 +94,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                 onClose();
             } catch (err: any) {
                 console.error('Error deleting session:', err);
-                setError('Failed to delete session. Please try again.');
+                alert('Failed to delete session. Please try again.');
                 setIsProcessing(false);
             }
         }
@@ -141,56 +138,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                     <X size={24} />
                 </button>
 
-                {isFinalConfirming ? (
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                            <AlertTriangle size={32} color="#ff4444" />
-                            <h2 style={{ fontSize: '1.8rem', color: '#ff4444', margin: 0 }}>Are you sure?</h2>
-                        </div>
-                        <p className="text-muted" style={{ marginBottom: '24px', fontSize: '1.1rem', fontWeight: 500 }}>
-                            {deleteScope === 'future' ? 'You are about to delete this and all future sessions in the series.' : 'You are about to delete this session.'} <br />
-                            <strong style={{ color: '#000' }}>This action cannot be undone.</strong>
-                        </p>
-
-                        {error && (
-                            <div style={{ padding: '12px', background: '#fff5f5', border: '2px solid #ff4444', marginBottom: '16px', color: '#ff4444', fontWeight: 700, fontSize: '0.9rem' }}>
-                                {error}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', gap: '16px' }}>
-                            <button
-                                onClick={() => setIsFinalConfirming(false)}
-                                disabled={isProcessing}
-                                className="button-secondary"
-                                style={{ flex: 1, height: '54px', opacity: isProcessing ? 0.5 : 1 }}
-                            >
-                                CANCEL
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                disabled={isProcessing}
-                                style={{
-                                    flex: 1,
-                                    height: '54px',
-                                    background: '#ff4444',
-                                    color: '#fff',
-                                    border: 'none',
-                                    fontWeight: 800,
-                                    cursor: isProcessing ? 'wait' : 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '10px',
-                                    opacity: isProcessing ? 0.7 : 1
-                                }}
-                            >
-                                <Trash2 size={18} />
-                                {isProcessing ? 'DELETING...' : 'YES, DELETE'}
-                            </button>
-                        </div>
-                    </div>
-                ) : isDeleting ? (
+                {isDeleting ? (
                     <div>
                         <h2 style={{ fontSize: '1.8rem', marginBottom: '8px', color: '#ff4444' }}>Delete Options</h2>
                         <p className="text-muted" style={{ marginBottom: '24px' }}>
@@ -236,7 +184,20 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                 CANCEL
                             </button>
                             <button
-                                onClick={() => setIsFinalConfirming(true)}
+                                onClick={async () => {
+                                    const confirmed = await confirm({
+                                        title: 'Delete Session?',
+                                        message: deleteScope === 'future' 
+                                            ? 'Are you sure you want to delete this and all future sessions in the series? This action cannot be undone.'
+                                            : 'Are you sure you want to delete this session? This action cannot be undone.',
+                                        confirmLabel: 'Yes, Delete',
+                                        type: 'danger'
+                                    });
+
+                                    if (confirmed) {
+                                        await confirmDelete();
+                                    }
+                                }}
                                 style={{
                                     flex: 1,
                                     height: '54px',
@@ -251,7 +212,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                     gap: '10px'
                                 }}
                             >
-                                NEXT
+                                DELETE
                             </button>
                         </div>
                     </div>

@@ -6,6 +6,7 @@ import { BookingModal } from './BookingModal';
 import { db } from '../firebase';
 import { doc, updateDoc, writeBatch, collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
+import { useConfirm } from '../ConfirmContext';
 import { SITE_ID } from '../constants';
 
 interface ClientProfileProps {
@@ -20,6 +21,7 @@ interface ClientProfileProps {
 }
 
 export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
+    const confirm = useConfirm();
     const { data: sessions } = useFirestore<any>('sessions');
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
     const [selectedSession, setSelectedSession] = useState<any>(null);
@@ -89,7 +91,14 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     };
 
     const handleDeleteClient = async () => {
-        if (window.confirm(`Are you sure you want to delete ${client.name}? This will also cancel all ${upcomingSessions.length} future bookings.`)) {
+        const confirmed = await confirm({
+            title: 'Delete Client',
+            message: `Are you sure you want to delete ${client.name}? This will also cancel all ${upcomingSessions.length} future bookings.`,
+            confirmLabel: 'Delete Client',
+            type: 'danger'
+        });
+
+        if (confirmed) {
             try {
                 const batch = writeBatch(db);
 

@@ -6,6 +6,7 @@ import { OffDayModal } from './OffDayModal';
 import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
+import { useConfirm } from '../ConfirmContext';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
@@ -39,6 +40,7 @@ export const CalendarView = () => {
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const { profile, user } = useAuth();
+    const confirm = useConfirm();
     const isAdmin = profile?.role === 'admin';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
@@ -62,7 +64,8 @@ export const CalendarView = () => {
 
     // Fetch live sessions, trainers, and off-days
     // Clients only fetch their own sessions to avoid permission errors
-    const { data: sessions } = useFirestore<any>('sessions', isClient && user ? [where('clientId', '==', user.uid)] : []);
+    const clientIds = isClient ? [user?.uid, profile?.clientId].filter(Boolean) : [];
+    const { data: sessions } = useFirestore<any>('sessions', isClient ? (clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []) : []);
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
 
@@ -174,7 +177,14 @@ export const CalendarView = () => {
         const existingOffDay = offDays.find((od: any) => od.trainerId === selectedTrainerId && od.date === dateStr);
 
         if (existingOffDay) {
-            if (window.confirm('Remove off-day status for this date?')) {
+            const confirmed = await confirm({
+                title: 'Remove Off-Day',
+                message: 'Remove off-day status for this date?',
+                confirmLabel: 'Remove Off-Day',
+                type: 'warning'
+            });
+
+            if (confirmed) {
                 try {
                     await deleteDoc(doc(db, 'off_days', existingOffDay.id));
                 } catch (err) {

@@ -2,6 +2,7 @@ import { X, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, deleteDoc, collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
+import { useConfirm } from '../ConfirmContext';
 import { SITE_ID } from '../constants';
 
 interface OffDayModalProps {
@@ -15,12 +16,20 @@ interface OffDayModalProps {
 }
 
 export const OffDayModal = ({ isOpen, onClose, trainer, date, sessions, onReschedule, onRefresh }: OffDayModalProps) => {
+    const confirm = useConfirm();
     const { profile } = useAuth();
 
     if (!isOpen || !trainer) return null;
 
     const handleCancelSession = async (session: any) => {
-        if (!window.confirm(`Are you sure you want to cancel the session for ${session.clientName} at ${session.time}?`)) return;
+        const confirmed = await confirm({
+            title: 'Cancel Session?',
+            message: `Are you sure you want to cancel the session for ${session.clientName} at ${session.time}? This action cannot be undone.`,
+            confirmLabel: 'Yes, Cancel',
+            type: 'danger'
+        });
+
+        if (!confirmed) return;
 
         try {
             await deleteDoc(doc(db, 'sessions', session.id));

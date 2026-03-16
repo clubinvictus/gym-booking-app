@@ -29,6 +29,7 @@ export const LoginPage = () => {
                     email: user.email,
                     role: 'admin',
                     name: user.displayName || fullName || 'Admin',
+                    phone: adminQuerySnapshot.docs[0].data().phone || '',
                     siteId: adminQuerySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
                 navigate('/dashboard');
@@ -46,6 +47,7 @@ export const LoginPage = () => {
                     role: 'manager',
                     managerId: managerQuerySnapshot.docs[0].id,
                     name: user.displayName || fullName || managerQuerySnapshot.docs[0].data().name,
+                    phone: managerQuerySnapshot.docs[0].data().phone || '',
                     siteId: managerQuerySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
                 navigate('/dashboard');
@@ -63,6 +65,7 @@ export const LoginPage = () => {
                     role: 'trainer',
                     trainerId: querySnapshot.docs[0].id,
                     name: user.displayName || fullName || querySnapshot.docs[0].data().name,
+                    phone: querySnapshot.docs[0].data().phone || '',
                     siteId: querySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
                 navigate('/dashboard'); // Will be filtered by role later
@@ -104,6 +107,7 @@ export const LoginPage = () => {
                     role: 'client',
                     name: clientName,
                     clientId: clientId,
+                    phone: clientQuerySnapshot.empty ? '' : (clientQuerySnapshot.docs[0].data().phone || ''),
                     siteId: SITE_ID
                 });
             }
