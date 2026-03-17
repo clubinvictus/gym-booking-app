@@ -160,11 +160,10 @@ export const CalendarView = () => {
 
             // Also check busySlots (for clients)
             const slotDateStr = slotDate.toISOString().split('T')[0];
-            const isBusy = busySlots.some((bs: any) => 
-                bs.trainerId === selectedTrainerId && 
-                bs.date === slotDateStr && 
-                bs.time === time
-            );
+            const isBusy = busySlots.some((bs: any) => {
+                const bsDate = bs.date ? bs.date.split('T')[0] : '';
+                return bs.trainerId === selectedTrainerId && bsDate === slotDateStr && bs.time === time;
+            });
             if (isBusy) available = false;
         }
 
@@ -426,12 +425,13 @@ export const CalendarView = () => {
 
                                 // Find if this slot is busy for the selected trainer (for clients)
                                 const slotDateStr = slotDate.toISOString().split('T')[0];
-                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && busySlots.some((bs: any) => 
-                                    bs.trainerId === selectedTrainerId && 
-                                    bs.date === slotDateStr && 
-                                    bs.time === time &&
-                                    !sessions.some((s: any) => s.id === bs.id) // Ensure it's not the client's own session
-                                );
+                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && busySlots.some((bs: any) => {
+                                    // Normalize the busy slot date to just YYYY-MM-DD in case it's a full ISO string
+                                    const bsDate = bs.date ? bs.date.split('T')[0] : '';
+                                    if (bs.trainerId !== selectedTrainerId || bsDate !== slotDateStr || bs.time !== time) return false;
+                                    // Exclude the client's own session (same doc ID)
+                                    return !sessions.some((s: any) => s.id === bs.id);
+                                });
 
                                 const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
