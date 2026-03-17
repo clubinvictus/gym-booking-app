@@ -216,14 +216,16 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         if (!editingSession && selectedTrainer) {
             const trainer = trainers.find((t: any) => t.name === selectedTrainer);
             if (trainer) {
-                // Fetch all existing sessions for this trainer
+                // Admins/managers query sessions directly (always accurate, no stale data).
+                // Clients use trainer_busy_slots (no permission to read all sessions).
+                const conflictCollection = isClient ? 'trainer_busy_slots' : 'sessions';
+                const conflictField = isClient ? 'trainerId' : 'trainerId';
                 const existingSnap = await getDocs(
-                    query(collection(db, 'trainer_busy_slots'), where('trainerId', '==', trainer.id))
+                    query(collection(db, conflictCollection), where(conflictField, '==', trainer.id))
                 );
                 const existingTimes = new Map<string, boolean>();
                 existingSnap.forEach(d => {
                     const s = d.data();
-                    // Key = date string (YYYY-MM-DD) + time
                     const dateKey = new Date(s.date).toDateString();
                     existingTimes.set(`${dateKey}|${s.time}`, true);
                 });
