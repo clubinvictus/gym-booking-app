@@ -26,6 +26,7 @@ import { SITE_ID } from '../constants';
 import { useAuth } from '../AuthContext';
 import { signOut } from 'firebase/auth';
 import { useConfirm } from '../ConfirmContext';
+import { TermsModal } from './TermsModal';
 
 interface DashboardProps {
     view?: 'dashboard' | 'calendar' | 'team' | 'services' | 'clients' | 'activity' | 'settings';
@@ -47,6 +48,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { profile } = useAuth();
     const navigate = useNavigate();
     const confirm = useConfirm();
+
+    // Check if client needs to accept terms
+    const showTerms = profile?.role === 'client' && !profile?.termsAccepted;
 
     useEffect(() => {
         const handleResize = () => {
@@ -520,6 +524,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     }}
                 />
             )}
+
+            <TermsModal 
+                isOpen={showTerms} 
+                onAccepted={() => {
+                    console.log('Terms accepted');
+                }} 
+            />
         </div>
     );
 };
