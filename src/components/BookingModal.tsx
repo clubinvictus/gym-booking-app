@@ -55,6 +55,19 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const [editMode, setEditMode] = useState<'single' | 'future'>('single');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Conflict modal state
+    const [conflictModal, setConflictModal] = useState<{
+        conflicts: string[];
+        conflictKeys: Set<string>;
+        resolve: (skip: boolean) => void;
+    } | null>(null);
+
+    const showConflictModal = (conflicts: string[], conflictKeys: Set<string>): Promise<boolean> => {
+        return new Promise((resolve) => {
+            setConflictModal({ conflicts, conflictKeys, resolve });
+        });
+    };
+
     // Calculate the maximum client booking date (14 days from now)
     const getClientMaxDate = () => {
         const d = new Date();
@@ -256,11 +269,37 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 }
 
                 if (conflicts.length > 0) {
-                    const conflictList = conflicts.slice(0, 5).join('\n  • ');
-                    const more = conflicts.length > 5 ? `\n  ...and ${conflicts.length - 5} more.` : '';
-                    alert(`⚠️ Double-booking detected!\n\n${selectedTrainer} already has a session booked on:\n  • ${conflictList}${more}\n\nPlease choose a different trainer or time.`);
-                    setIsSubmitting(false);
-                    return;
+                    // Build a set of conflict keys for filtering during write
+                    const conflictKeySet = new Set<string>();
+                    existingSnap.forEach(d => {
+                        const s = d.data();
+                        conflictKeySet.add(`${new Date(s.date).toDateString()}|${s.time}`);
+                    });
+
+                    if (!isRepeating) {
+                        // For single bookings, just block entirely
+                        setConflictModal({
+                            conflicts,
+                            conflictKeys: conflictKeySet,
+                            resolve: () => {
+                                setConflictModal(null);
+                                setIsSubmitting(false);
+                            }
+                        });
+                        return;
+                    }
+
+                    // For recurring: ask whether to skip clashes and continue
+                    const shouldSkip = await showConflictModal(conflicts, conflictKeySet);
+                    setConflictModal(null);
+                    if (!shouldSkip) {
+                        setIsSubmitting(false);
+                        return;
+                    }
+                    // Store conflict keys so we can skip them during write
+                    (window as any).__conflictKeys = conflictKeySet;
+                } else {
+                    (window as any).__conflictKeys = null;
                 }
             }
         }
@@ -448,9 +487,13 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         }
 
                         while (currentDate <= endDate) {
-                            sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), dayIdx));
-                            opCount++;
-                            await commitIfFull();
+                            const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
+                            const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
+                            if (!skipKeys || !skipKeys.has(skipKey)) {
+                                sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), dayIdx));
+                                opCount++;
+                                await commitIfFull();
+                            }
                             currentDate.setDate(currentDate.getDate() + 7);
                         }
                     }
@@ -485,6 +528,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     };
 
     return (
+        <>
         <div style={{
             position: 'fixed',
             top: 0,
@@ -874,5 +918,95 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 </div>
             </div>
         </div>
+
+        {conflictModal && (
+            <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.85)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                zIndex: 2000, backdropFilter: 'blur(4px)'
+            }}>
+                <div className="card" style={{
+                    width: '95%', maxWidth: '480px', padding: '32px',
+                    background: '#fff', border: '4px solid #000'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                        <div style={{
+                            width: '40px', height: '40px', background: '#fff3cd',
+                            border: '2px solid #f0ad4e', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            fontSize: '1.2rem'
+                        }}>⚠️</div>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>Double-Booking Detected</h2>
+                    </div>
+                    <p style={{ color: '#555', marginBottom: '16px', fontSize: '0.95rem' }}>
+                        <strong>{selectedTrainer}</strong> is already booked on the following date{conflictModal.conflicts.length > 1 ? 's' : ''}:
+                    </p>
+                    <div style={{
+                        background: '#f9f9f9', border: '1px solid #e0e0e0',
+                        borderRadius: '4px', padding: '12px 16px', marginBottom: '24px',
+                        maxHeight: '200px', overflowY: 'auto'
+                    }}>
+                        {conflictModal.conflicts.slice(0, 10).map((c, i) => (
+                            <div key={i} style={{
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                padding: '6px 0',
+                                borderBottom: i < Math.min(conflictModal.conflicts.length, 10) - 1 ? '1px solid #eee' : 'none',
+                                fontSize: '0.9rem', fontWeight: 600
+                            }}>
+                                <span style={{ color: '#999', fontSize: '0.8rem' }}>•</span>
+                                {c}
+                            </div>
+                        ))}
+                        {conflictModal.conflicts.length > 10 && (
+                            <div style={{ color: '#999', fontSize: '0.8rem', paddingTop: '8px' }}>
+                                ...and {conflictModal.conflicts.length - 10} more
+                            </div>
+                        )}
+                    </div>
+                    {isRepeating ? (
+                        <>
+                            <p style={{ color: '#555', marginBottom: '24px', fontSize: '0.9rem' }}>
+                                Would you like to <strong>skip these clashing dates</strong> and continue booking the remaining sessions?
+                            </p>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button
+                                    className="button-secondary"
+                                    style={{ flex: 1, height: '54px' }}
+                                    onClick={() => conflictModal.resolve(false)}
+                                >
+                                    CANCEL
+                                </button>
+                                <button
+                                    style={{
+                                        flex: 1, height: '54px', background: '#000', color: '#fff',
+                                        border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '0.9rem'
+                                    }}
+                                    onClick={() => conflictModal.resolve(true)}
+                                >
+                                    SKIP & CONTINUE
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p style={{ color: '#555', marginBottom: '24px', fontSize: '0.9rem' }}>
+                                Please choose a different trainer or time.
+                            </p>
+                            <button
+                                style={{
+                                    width: '100%', height: '54px', background: '#000', color: '#fff',
+                                    border: 'none', fontWeight: 800, cursor: 'pointer'
+                                }}
+                                onClick={() => conflictModal.resolve(false)}
+                            >
+                                OK
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        )}
+        </>
     );
 };
