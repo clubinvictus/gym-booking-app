@@ -501,8 +501,11 @@ export const CalendarView = () => {
                                                     color: '#fff',
                                                     display: 'flex',
                                                     flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
                                                     cursor: 'not-allowed',
-                                                    flexShrink: 0
+                                                    flexShrink: 0,
+                                                    margin: 'auto 0'
                                                 }}
                                             >
                                                 <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>Booked</div>
