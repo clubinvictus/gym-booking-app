@@ -66,6 +66,43 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
         return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
     };
 
+    // Calculate Week Range (Monday - Sunday)
+    const getWeekRange = () => {
+        const curr = new Date();
+        const first = curr.getDate() - curr.getDay() + (curr.getDay() === 0 ? -6 : 1); // Monday
+        const last = first + 6; // Sunday
+
+        const monday = new Date(curr.setDate(first));
+        monday.setHours(0, 0, 0, 0);
+        const sunday = new Date(curr.setDate(last));
+        sunday.setHours(23, 59, 59, 999);
+
+        return { monday, sunday };
+    };
+
+    // Calculate Month Range
+    const getMonthRange = () => {
+        const curr = new Date();
+        const start = new Date(curr.getFullYear(), curr.getMonth(), 1);
+        const end = new Date(curr.getFullYear(), curr.getMonth() + 1, 0);
+        end.setHours(23, 59, 59, 999);
+
+        return { start, end };
+    };
+
+    const { monday, sunday } = getWeekRange();
+    const { start: monthStart, end: monthEnd } = getMonthRange();
+
+    const sessionsThisWeek = clientSessions.filter(s => {
+        const d = new Date(s.date);
+        return d >= monday && d <= sunday;
+    });
+
+    const sessionsThisMonth = clientSessions.filter(s => {
+        const d = new Date(s.date);
+        return d >= monthStart && d <= monthEnd;
+    });
+
     const handleSaveEdit = async () => {
         // E.164 basic validation
         const fullPhone = `${countryCode}${editPhone.replace(/\D/g, '')}`;
@@ -312,16 +349,16 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                 marginBottom: '32px'
             }}>
                 <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
-                    <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: '8px' }}>UPCOMING</p>
-                    <p style={{ fontSize: '1.8rem', fontWeight: 800 }}>{upcomingSessions.length}</p>
+                    <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: '8px' }}>THIS WEEK</p>
+                    <p style={{ fontSize: '1.8rem', fontWeight: 800 }}>{sessionsThisWeek.length}</p>
+                </div>
+                <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
+                    <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: '8px' }}>THIS MONTH</p>
+                    <p style={{ fontSize: '1.8rem', fontWeight: 800 }}>{sessionsThisMonth.length}</p>
                 </div>
                 <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
                     <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: '8px' }}>PAST SESSIONS</p>
                     <p style={{ fontSize: '1.8rem', fontWeight: 800 }}>{pastSessions.length}</p>
-                </div>
-                <div className="card" style={{ padding: '20px', textAlign: 'center' }}>
-                    <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 800, marginBottom: '8px' }}>TOTAL</p>
-                    <p style={{ fontSize: '1.8rem', fontWeight: 800 }}>{clientSessions.length}</p>
                 </div>
             </div>
 
