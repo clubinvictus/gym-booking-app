@@ -38,8 +38,8 @@ export const CalendarView = () => {
     const [offDayModalOpen, setOffDayModalOpen] = useState(false);
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
-    const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const { profile, user } = useAuth();
+    const [selectedTrainerId, setSelectedTrainerId] = useState<string>(profile?.role === 'client' ? 'my' : 'all');
     const confirm = useConfirm();
     const isAdmin = profile?.role === 'admin';
     const isTrainer = profile?.role === 'trainer';
@@ -55,7 +55,7 @@ export const CalendarView = () => {
         return nextWeekStart > limitDate;
     })();
 
-    // Auto-filter for trainers
+    // Auto-filter for trainers (moved after user state initialization)
     React.useEffect(() => {
         if (isTrainer && profile?.trainerId) {
             setSelectedTrainerId(profile.trainerId);
@@ -69,13 +69,6 @@ export const CalendarView = () => {
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
-
-    // Auto-filter for trainers
-    React.useEffect(() => {
-        if (isTrainer && profile?.trainerId) {
-            setSelectedTrainerId(profile.trainerId);
-        }
-    }, [isTrainer, profile]);
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const timeSlots = [
@@ -103,7 +96,7 @@ export const CalendarView = () => {
         const dayName = daysMap[dayIndex];
         const slotTime = convertTo24h(time);
 
-        const activeTrainers = selectedTrainerId === 'all'
+        const activeTrainers = (selectedTrainerId === 'all' || selectedTrainerId === 'my')
             ? trainers
             : trainers.filter(t => t.id === selectedTrainerId);
 
@@ -145,7 +138,7 @@ export const CalendarView = () => {
     };
 
     const handleSlotClick = (dayIndex: number, time: string) => {
-        const effectiveTrainerId = isTrainer ? profile?.trainerId : (selectedTrainerId === 'all' ? null : selectedTrainerId);
+        const effectiveTrainerId = isTrainer ? profile?.trainerId : ((selectedTrainerId === 'all' || selectedTrainerId === 'my') ? null : selectedTrainerId);
 
         const slotDate = new Date(currentWeekStart);
         slotDate.setDate(slotDate.getDate() + dayIndex);
@@ -154,7 +147,7 @@ export const CalendarView = () => {
         let available = isTrainerAvailable(dayIndex, time) && !isPastLimit;
 
         // Block double booking the same trainer if viewing individually
-        if (selectedTrainerId !== 'all') {
+        if (selectedTrainerId !== 'all' && selectedTrainerId !== 'my') {
             const isBooked = sessions.some((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
             if (isBooked) available = false;
 
@@ -176,7 +169,7 @@ export const CalendarView = () => {
     const [confirmOffDayOpen, setConfirmOffDayOpen] = useState(false);
 
     const handleDayHeaderClick = async (dayIndex: number) => {
-        if (!isAdmin || selectedTrainerId === 'all') return;
+        if (!isAdmin || selectedTrainerId === 'all' || selectedTrainerId === 'my') return;
 
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + dayIndex);
@@ -214,7 +207,7 @@ export const CalendarView = () => {
         setSelectedSlot({
             day: dayIndex,
             time: '09:00 AM',
-            trainerId: selectedTrainerId === 'all' ? null : selectedTrainerId,
+            trainerId: (selectedTrainerId === 'all' || selectedTrainerId === 'my') ? null : selectedTrainerId,
             date: today
         });
     };
@@ -303,7 +296,11 @@ export const CalendarView = () => {
                                     background: '#fff'
                                 }}
                             >
-                                <option value="all">All Trainers</option>
+                                {isClient ? (
+                                    <option value="my">My Calendar</option>
+                                ) : (
+                                    <option value="all">All Trainers</option>
+                                )}
                                 {trainers.map((t: any) => (
                                     <option key={t.id} value={t.id}>{t.name}</option>
                                 ))}
@@ -419,13 +416,13 @@ export const CalendarView = () => {
                                         if (sessionMs < weekStartMs || sessionMs >= weekEndMs) return false;
                                     }
 
-                                    if (selectedTrainerId === 'all') return true;
+                                    if (selectedTrainerId === 'all' || selectedTrainerId === 'my') return true;
                                     return s.trainerId === selectedTrainerId;
                                 });
 
                                 // Find if this slot is busy for the selected trainer (for clients)
                                 const slotDateStr = slotDate.toISOString().split('T')[0];
-                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && busySlots.some((bs: any) => {
+                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' && busySlots.some((bs: any) => {
                                     // Normalize the busy slot date to just YYYY-MM-DD in case it's a full ISO string
                                     const bsDate = bs.date ? bs.date.split('T')[0] : '';
                                     if (bs.trainerId !== selectedTrainerId || bsDate !== slotDateStr || bs.time !== time) return false;
@@ -436,7 +433,7 @@ export const CalendarView = () => {
                                 const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
 
                                 const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && slotSessions.length === 0 && !isBusyByOthers;
-                                const showAsAvailable = selectedTrainerId === 'all' || available;
+                                const showAsAvailable = selectedTrainerId === 'all' || selectedTrainerId === 'my' || available;
 
                                 let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
                                 if (isToday && showAsAvailable) {
