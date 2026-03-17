@@ -39,11 +39,18 @@ export const CalendarView = () => {
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const { profile, user } = useAuth();
-    const [selectedTrainerId, setSelectedTrainerId] = useState<string>(profile?.role === 'client' ? 'my' : 'all');
+    const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const confirm = useConfirm();
     const isAdmin = profile?.role === 'admin';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
+
+    // Set default filter once profile loads
+    React.useEffect(() => {
+        if (profile?.role === 'client' && selectedTrainerId === 'all') {
+            setSelectedTrainerId('my');
+        }
+    }, [profile, selectedTrainerId]);
 
     const limitDate = new Date();
     limitDate.setHours(23, 59, 59, 999);
@@ -64,8 +71,17 @@ export const CalendarView = () => {
 
     // Fetch live sessions, trainers, and off-days
     // Clients only fetch their own sessions to avoid permission errors
-    const clientIds = isClient ? [user?.uid, profile?.clientId].filter(Boolean) : [];
-    const { data: sessions } = useFirestore<any>('sessions', isClient ? (clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []) : []);
+    const clientIds = React.useMemo(() => 
+        isClient ? [user?.uid, profile?.clientId].filter(Boolean) : [],
+        [isClient, user?.uid, profile?.clientId]
+    );
+    
+    const sessionConstraints = React.useMemo(() => 
+        isClient ? (clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []) : [],
+        [isClient, clientIds]
+    );
+
+    const { data: sessions } = useFirestore<any>('sessions', sessionConstraints);
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
@@ -421,9 +437,10 @@ export const CalendarView = () => {
                                 });
 
                                 // Find if this slot is busy for the selected trainer (for clients)
-                                const slotDateStr = slotDate.toISOString().split('T')[0];
-                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' && busySlots.some((bs: any) => {
-                                    // Normalize the busy slot date to just YYYY-MM-DD in case it's a full ISO string
+                                // Use en-CA for YYYY-MM-DD format to match database dates without timezone shift
+                                const slotDateStr = slotDate.toLocaleDateString('en-CA');
+                                const isBusyByOthers = (isClient || isTrainer) && selectedTrainerId !== 'all' && busySlots.some((bs: any) => {
+                                    // Normalize the busy slot date to just YYYY-MM-DD
                                     const bsDate = bs.date ? bs.date.split('T')[0] : '';
                                     if (bs.trainerId !== selectedTrainerId || bsDate !== slotDateStr || bs.time !== time) return false;
                                     // Exclude the client's own session (same doc ID)
