@@ -378,33 +378,89 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
 
                 if (editMode === 'future' && editingSession.seriesId) {
-                    const batch = writeBatch(db);
-                    // Query for all future sessions in this series
-                    const querySnapshot = await getDocs(
+                    const endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+
+                    const effectiveDays = selectedDays.length > 0 ? selectedDays : [selectedDay];
+                    const sortedDays = [...effectiveDays].sort((a, b) => a - b);
+                    const dayNames = sortedDays.map(d => {
+                        const name = daysMap[d];
+                        return name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
+                    });
+                    const newRecurringDetails = `Weekly on ${dayNames.join(', ')}`;
+
+                    // Step 1: Delete all future sessions in this series
+                    const deleteSnap = await getDocs(
                         query(
                             collection(db, 'sessions'),
                             where('seriesId', '==', editingSession.seriesId),
                             where('date', '>=', editingSession.date)
                         )
                     );
-
-                    querySnapshot.forEach((docSnap) => {
-                        const sessData = docSnap.data();
-                        const sessDate = new Date(sessData.date);
-
-                        // Maintain the same time but update other fields if they changed
-                        // NOTE: If day changed, we'd need more complex logic to shift the whole series.
-                        // For now, let's update common fields.
-                        batch.update(doc(db, 'sessions', docSnap.id), {
-                            trainerName: selectedTrainer,
-                            serviceName: selectedService || editingSession?.serviceName,
-                            time: selectedTime,
-                            // Ensure day matches the date's day of week
-                            day: sessDate.getDay() === 0 ? 6 : sessDate.getDay() - 1
-                        });
+                    let deleteBatch = writeBatch(db);
+                    let delCount = 0;
+                    deleteSnap.forEach((docSnap) => {
+                        deleteBatch.delete(docSnap.ref);
+                        delCount++;
+                        if (delCount >= 450) {
+                            deleteBatch.commit();
+                            deleteBatch = writeBatch(db);
+                            delCount = 0;
+                        }
                     });
-                    await batch.commit();
-                    await logActivity('rescheduled', getBookingData(baseDate, selectedDay));
+                    if (delCount > 0) await deleteBatch.commit();
+
+                    // Step 2: Recreate from start date with new days
+                    const trainer = trainers.find((t: any) => t.name === selectedTrainer);
+                    const service = services.find((s: any) => s.name === (selectedService || editingSession?.serviceName));
+                    const newSeriesData = (date: Date, dayIdx: number) => ({
+                        clientName: editingSession.clientName,
+                        clientId: editingSession.clientId,
+                        trainerName: selectedTrainer,
+                        trainerId: trainer?.id || editingSession.trainerId,
+                        serviceName: selectedService || editingSession.serviceName,
+                        serviceId: service?.id || editingSession.serviceId,
+                        time: selectedTime,
+                        day: dayIdx,
+                        date: date.toISOString(),
+                        status: 'Scheduled',
+                        siteId: SITE_ID,
+                        seriesId: editingSession.seriesId,
+                        recurringDetails: newRecurringDetails,
+                        createdAt: new Date().toISOString(),
+                        createdBy: profile?.name || 'Unknown User'
+                    });
+
+                    let sessionBatch = writeBatch(db);
+                    let opCount = 0;
+                    const commitIfFull = async () => {
+                        if (opCount >= 450) {
+                            await sessionBatch.commit();
+                            sessionBatch = writeBatch(db);
+                            opCount = 0;
+                        }
+                    };
+
+                    for (const dayIdx of effectiveDays) {
+                        let currentDate = new Date(baseDate);
+                        const currentDay = currentDate.getDay();
+                        const targetDay = (dayIdx + 1) % 7;
+                        let diff = targetDay - currentDay;
+                        if (diff < 0) diff += 7;
+                        if (diff === 0 && currentDate < todayStart) diff = 7;
+                        currentDate.setDate(currentDate.getDate() + diff);
+                        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+
+                        while (currentDate <= endDate) {
+                            sessionBatch.set(doc(collection(db, 'sessions')), newSeriesData(new Date(currentDate), dayIdx));
+                            opCount++;
+                            await commitIfFull();
+                            currentDate.setDate(currentDate.getDate() + 7);
+                        }
+                    }
+                    if (opCount > 0) await sessionBatch.commit();
+                    await logActivity('rescheduled', getBookingData(baseDate, selectedDay), newRecurringDetails);
                 } else {
                     const updatedData = getBookingData(baseDate, selectedDay);
                     await updateDoc(doc(db, 'sessions', editingSession.id), updatedData);
@@ -895,6 +951,48 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             </div>
                         )}
 
+                        {/* Day selector when editing a future recurring series */}
+                        {editingSession?.seriesId && editMode === 'future' && (
+                            <div>
+                                <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>NEW REPEAT DAYS</label>
+                                <div style={{ padding: '16px', border: '2px solid #000', background: '#f5f5f5' }}>
+                                    <p style={{ margin: '0 0 12px', fontSize: '0.85rem', fontWeight: 600, color: '#555' }}>
+                                        Select which days this series should repeat on from <strong>{new Date(editingSession.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong> onwards.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                        {days.map((day, i) => (
+                                            <button
+                                                key={day}
+                                                type="button"
+                                                onClick={() => toggleDay(i)}
+                                                title={day}
+                                                style={{
+                                                    width: '36px',
+                                                    height: '36px',
+                                                    borderRadius: '50%',
+                                                    border: '2px solid #000',
+                                                    background: selectedDays.includes(i) ? '#000' : '#fff',
+                                                    color: selectedDays.includes(i) ? '#fff' : '#000',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 800,
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
+                                            >
+                                                {day.charAt(0)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {selectedDays.length === 0 && (
+                                        <p style={{ margin: '10px 0 0', fontSize: '0.8rem', color: '#f44336', fontWeight: 700 }}>
+                                            Please select at least one day.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div style={{
                             borderTop: '2px solid #eee',
                             paddingTop: '16px',
