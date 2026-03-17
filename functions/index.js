@@ -158,8 +158,7 @@ exports.onSessionWritten = functions.firestore
 
         // --- RECURRING SERIES LOGIC ---
         // Debounce via locking so we only send ONE message for the whole batch of 100+ recurring bookings.
-        // NOTE: We do not use this for deletions because the frontend currently only deletes sessions individually.
-        if (data.seriesId && !isDelete) {
+        if (data.seriesId) {
             const seriesAction = isDelete ? 'delete' : (isCreate ? 'create' : 'update');
             const lockRef = db.collection('whatsapp_locks').doc(`${data.seriesId}_${seriesAction}`);
 
@@ -206,7 +205,17 @@ exports.onSessionWritten = functions.firestore
                     }
                 }
             } else if (isDelete) {
-                console.log("Recurring series deleted - Need to ensure delete templates exist if required.");
+                // Client Cancel
+                if (clientPhone) await sendWhatsAppTemplate(clientPhone, "client_recurring_cancel", vars);
+
+                // Trainer Cancel
+                if (trainerPhone) await sendWhatsAppTemplate(trainerPhone, "trainer_recurring_cancel", vars);
+
+                // Manager Cancel
+                const managerPhones = await getManagerPhones();
+                for (const mPhone of managerPhones) {
+                    await sendWhatsAppTemplate(mPhone, "manager_recurring_cancel", vars);
+                }
             }
 
             return null;
