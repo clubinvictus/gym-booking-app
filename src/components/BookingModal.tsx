@@ -229,6 +229,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 });
 
                 const conflicts: string[] = [];
+                const conflictKeySet = new Set<string>(); // Only actual clashing dates
                 const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
 
                 if (isRepeating) {
@@ -252,6 +253,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             const key = `${currentDate.toDateString()}|${selectedTime}`;
                             if (existingTimes.has(key)) {
                                 conflicts.push(currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + selectedTime);
+                                conflictKeySet.add(key); // Only add the dates that actually clash
                             }
                             currentDate.setDate(currentDate.getDate() + 7);
                         }
@@ -265,17 +267,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     const key = `${baseDate.toDateString()}|${selectedTime}`;
                     if (existingTimes.has(key)) {
                         conflicts.push(baseDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + selectedTime);
+                        conflictKeySet.add(key);
                     }
                 }
 
                 if (conflicts.length > 0) {
-                    // Build a set of conflict keys for filtering during write
-                    const conflictKeySet = new Set<string>();
-                    existingSnap.forEach(d => {
-                        const s = d.data();
-                        conflictKeySet.add(`${new Date(s.date).toDateString()}|${s.time}`);
-                    });
-
                     if (!isRepeating) {
                         // For single bookings, just block entirely
                         setConflictModal({
