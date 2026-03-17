@@ -343,16 +343,18 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             };
         };
 
-        const logActivity = async (action: 'booked' | 'rescheduled', sessionDetails: any) => {
+        const logActivity = async (action: 'booked' | 'rescheduled', sessionDetails: any, recurringDetails?: string) => {
             try {
                 await addDoc(collection(db, 'activity_logs'), {
                     action,
+                    isRecurring: !!recurringDetails,
                     sessionDetails: {
                         clientName: sessionDetails.clientName,
                         trainerName: sessionDetails.trainerName,
                         serviceName: sessionDetails.serviceName,
                         date: sessionDetails.date,
-                        time: sessionDetails.time
+                        time: sessionDetails.time,
+                        recurringDetails: recurringDetails || null
                     },
                     performedBy: {
                         uid: profile?.uid || 'unknown',
@@ -503,7 +505,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     setIsSubmitting(false);
                     return;
                 }
-                await logActivity('booked', getBookingData(baseDate, selectedDay));
+                await logActivity('booked', getBookingData(baseDate, selectedDay), recurringDetails);
+
             } else {
                 // Single booking
                 const currentDay = baseDate.getDay();

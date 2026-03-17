@@ -36,16 +36,18 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const confirmDelete = async () => {
         setIsProcessing(true);
 
-        const logActivity = async () => {
+        const logActivity = async (isRecurring: boolean) => {
             try {
                 await addDoc(collection(db, 'activity_logs'), {
                     action: 'cancelled',
+                    isRecurring,
                     sessionDetails: {
                         clientName: session.clientName,
                         trainerName: session.trainerName,
                         serviceName: session.serviceName,
                         date: session.date,
-                        time: session.time
+                        time: session.time,
+                        recurringDetails: session.recurringDetails || null
                     },
                     performedBy: {
                         uid: profile?.uid || 'unknown',
@@ -73,7 +75,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                 await batch.commit();
 
                 // Success
-                await logActivity();
+                await logActivity(true);
                 onDelete(session.id);
                 onClose();
             } catch (err: any) {
@@ -89,7 +91,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             // Single delete
             try {
                 await deleteDoc(doc(db, 'sessions', session.id));
-                await logActivity();
+                await logActivity(false);
                 onDelete(session.id);
                 onClose();
             } catch (err: any) {

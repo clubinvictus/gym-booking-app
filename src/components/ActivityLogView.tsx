@@ -219,12 +219,25 @@ export const ActivityLogView = () => {
                             {getActionIcon(log.action)}
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ marginBottom: '8px', fontSize: '1.05rem' }}>
-                                <span style={{ fontWeight: 800 }}>{log.performedBy.name}</span>
-                                <span className="text-muted"> ({log.performedBy.role}) </span>
-                                <span style={{ fontWeight: 600 }}>{log.action}</span>
-                                <span> a session for </span>
-                                <span style={{ fontWeight: 800 }}>{log.sessionDetails.clientName}</span>
+                            <div style={{ marginBottom: '8px', fontSize: '1.05rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                <span>
+                                    <span style={{ fontWeight: 800 }}>{log.performedBy.name}</span>
+                                    <span className="text-muted"> ({log.performedBy.role}) </span>
+                                    <span style={{ fontWeight: 600 }}>{log.action}</span>
+                                    <span> {log.isRecurring ? 'a recurring series' : 'a session'} for </span>
+                                    <span style={{ fontWeight: 800 }}>{log.sessionDetails.clientName}</span>
+                                </span>
+                                {log.isRecurring && (
+                                    <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        background: '#e3f2fd', color: '#1565c0',
+                                        padding: '2px 8px', fontSize: '0.72rem', fontWeight: 800,
+                                        textTransform: 'uppercase', letterSpacing: '0.5px'
+                                    }}>
+                                        <RefreshCw size={11} />
+                                        Recurring
+                                    </span>
+                                )}
                             </div>
 
                             <div style={{
@@ -252,6 +265,12 @@ export const ActivityLogView = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: window.innerWidth <= 768 ? '0' : 'auto', color: '#666' }}>
                                     <span>{log.sessionDetails.serviceName}</span>
                                 </div>
+                                {log.isRecurring && log.sessionDetails.recurringDetails && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', color: '#1565c0' }}>
+                                        <RefreshCw size={14} />
+                                        <span>{log.sessionDetails.recurringDetails}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
