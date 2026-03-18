@@ -293,13 +293,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
         <div className="app-container">
             {/* Mobile Header */}
             <header className="mobile-header">
-                <img src="/logo white.png" alt="Invictus" style={{ height: '32px' }} />
                 <button
                     onClick={() => setSidebarOpen(true)}
-                    style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}
+                    style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}
                 >
                     <Menu size={24} />
                 </button>
+                <img src="/logo white.png" alt="Invictus" style={{ height: '32px' }} />
             </header>
 
             {/* Sidebar Overlay (Mobile Only) */}
