@@ -65,13 +65,25 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
         if (deleteScope === 'future' && session.seriesId) {
             try {
                 const batch = writeBatch(db);
-                const q = query(
-                    collection(db, 'sessions'),
-                    where('seriesId', '==', session.seriesId),
-                    where('date', '>=', session.date)
-                );
+                const baseQueries: any[] = [where('seriesId', '==', session.seriesId)];
+                
+                // If it's a client, they MUST include their clientId in the query or Firestore rules will reject it
+                if (profile?.role === 'client') {
+                    baseQueries.push(where('clientId', '==', session.clientId));
+                }
+
+                // We omit the date >= filter from the query to avoid needing a new composite index (clientId + seriesId + date).
+                // Instead, we filter the dates in memory below.
+                const q = query(collection(db, 'sessions'), ...baseQueries);
+                
                 const snapshot = await getDocs(q);
-                snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => batch.delete(docSnap.ref));
+                snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => {
+                    const docData = docSnap.data();
+                    // In-memory date filter
+                    if (docData.date >= session.date) {
+                        batch.delete(docSnap.ref);
+                    }
+                });
                 await batch.commit();
 
                 // Success
