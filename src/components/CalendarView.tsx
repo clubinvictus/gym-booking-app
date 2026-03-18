@@ -81,7 +81,8 @@ export const CalendarView = () => {
         [isClient, clientIds]
     );
 
-    const { data: sessions } = useFirestore<any>('sessions', sessionConstraints);
+    const shouldSkipSessions = isClient && clientIds.length === 0;
+    const { data: sessions } = useFirestore<any>('sessions', sessionConstraints, shouldSkipSessions);
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
@@ -436,13 +437,19 @@ export const CalendarView = () => {
                                     return s.trainerId === selectedTrainerId;
                                 });
 
-                                // Find if this slot is busy for the selected trainer (for clients)
-                                // Use en-CA for YYYY-MM-DD format to match database dates without timezone shift
-                                const slotDateStr = slotDate.toLocaleDateString('en-CA');
-                                const isBusyByOthers = (isClient || isTrainer) && selectedTrainerId !== 'all' && busySlots.some((bs: any) => {
-                                    // Normalize the busy slot date to just YYYY-MM-DD
-                                    const bsDate = bs.date ? bs.date.split('T')[0] : '';
-                                    if (bs.trainerId !== selectedTrainerId || bsDate !== slotDateStr || bs.time !== time) return false;
+                                // Find if this slot is busy for the selected trainer
+                                const isBusyByOthers = (isClient || isTrainer) && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' && busySlots.some((bs: any) => {
+                                    if (bs.trainerId !== selectedTrainerId || bs.time !== time) return false;
+                                    
+                                    // Compare dates timezone-safely by checking if they fall on the same local date
+                                    if (!bs.date) return false;
+                                    const bsDateObj = new Date(bs.date);
+                                    if (
+                                        bsDateObj.getFullYear() !== slotDate.getFullYear() ||
+                                        bsDateObj.getMonth() !== slotDate.getMonth() ||
+                                        bsDateObj.getDate() !== slotDate.getDate()
+                                    ) return false;
+
                                     // Exclude the client's own session (same doc ID)
                                     return !sessions.some((s: any) => s.id === bs.id);
                                 });

@@ -3,12 +3,17 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, QueryConstraint } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
-export function useFirestore<T>(collectionName: string, constraints: QueryConstraint[] = []) {
+export function useFirestore<T>(collectionName: string, constraints: QueryConstraint[] = [], skip: boolean = false) {
     const [data, setData] = useState<T[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
+        if (skip) {
+            setLoading(false);
+            return;
+        }
+
         const q = query(
             collection(db, collectionName),
             where('siteId', '==', SITE_ID),
@@ -22,14 +27,16 @@ export function useFirestore<T>(collectionName: string, constraints: QueryConstr
             });
             setData(items);
             setLoading(false);
+            setError(null);
         }, (err) => {
-            console.error(err);
+            console.error('useFirestore error for', collectionName, err);
             setError(err);
             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [collectionName, JSON.stringify(constraints)]);
+    }, [collectionName, constraints, skip]);
 
     return { data, loading, error };
 }
+
