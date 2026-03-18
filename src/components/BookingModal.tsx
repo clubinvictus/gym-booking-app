@@ -140,16 +140,22 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         return `${hours}:${minutes}`;
     };
 
-    const getTargetDateForDayIndex = (dayIdx: number) => {
-        const baseDate = editingSession?.date
-            ? new Date(editingSession.date)
-            : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
+    const getTargetDate = () => {
+        // Always prioritize the explicit date passed from the Calendar grid
+        if (selectedSlot?.date) return selectedSlot.date;
+        if (editingSession?.date) return editingSession.date;
 
+        // Fallback for standalone modal opens (rare/legacy)
+        const baseDate = new Date();
         const currentDay = baseDate.getDay();
-        const targetDay = (dayIdx + 1) % 7;
+        const targetDay = (selectedDay + 1) % 7;
         const diff = targetDay - currentDay;
         baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
-        return baseDate;
+        
+        // Return date string in exact local time to prevent UTC drifting (e.g. late evening dates rolling into tomorrow)
+        const offset = baseDate.getTimezoneOffset();
+        const localDate = new Date(baseDate.getTime() - (offset * 60 * 1000));
+        return localDate.toISOString().split('T')[0];
     };
 
     const isAvailable = (trainer: any) => {
@@ -157,10 +163,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         const daySchedule = trainer.availability?.[dayName];
         if (!daySchedule || !daySchedule.active) return false;
 
-        // Check for persistent off-day
-        const targetDate = getTargetDateForDayIndex(selectedDay);
-        const dateStr = targetDate.toISOString().split('T')[0];
-        const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
+        // Check for persistent off-day using exact local string comparison
+        const targetDateStr = getTargetDate();
+        const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === targetDateStr);
         if (isOff) return false;
 
         const slotTime = convertTo24h(selectedTime);
@@ -796,8 +801,14 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         }}
                                     >
                                         {days.map((day, i) => {
-                                            const targetDate = getTargetDateForDayIndex(i);
-                                            const dateStr = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                            // Render logic: find what Date this day index represents relative to selected week
+                                            const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                                            const currentDay = baseDate.getDay();
+                                            const targetDay = (i + 1) % 7;
+                                            const diff = targetDay - currentDay;
+                                            baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+                                            
+                                            const dateStr = baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                                             return (
                                                 <option key={day} value={i}>{day} ({dateStr})</option>
                                             );
@@ -825,8 +836,13 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         }}
                                     >
                                         {timeSlots.map(t => {
-                                            const slotDate = getTargetDateForDayIndex(selectedDay);
-                                            const isToday = slotDate.toDateString() === new Date().toDateString();
+                                            const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                                            const currentDay = baseDate.getDay();
+                                            const targetDay = (selectedDay + 1) % 7;
+                                            const diff = targetDay - currentDay;
+                                            baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+                                            const isToday = baseDate.toDateString() === new Date().toDateString();
+                                            
                                             let isPast = false;
                                             if (isToday) {
                                                 const [timePart, mod] = t.split(' ');
