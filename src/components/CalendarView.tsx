@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -71,12 +71,12 @@ export const CalendarView = () => {
 
     // Fetch live sessions, trainers, and off-days
     // Clients only fetch their own sessions to avoid permission errors
-    const clientIds = React.useMemo(() => 
+    const clientIds = useMemo(() => 
         isClient ? [user?.uid, profile?.clientId].filter(Boolean) : [],
         [isClient, user?.uid, profile?.clientId]
     );
     
-    const sessionConstraints = React.useMemo(() => 
+    const sessionConstraints = useMemo(() => 
         isClient ? (clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []) : [],
         [isClient, clientIds]
     );

@@ -29,7 +29,7 @@ export function useFirestore<T>(collectionName: string, constraints: QueryConstr
         });
 
         return () => unsubscribe();
-    }, [collectionName, ...constraints]);
+    }, [collectionName, JSON.stringify(constraints)]);
 
     return { data, loading, error };
 }

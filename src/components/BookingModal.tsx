@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '../firebase';
 import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where } from 'firebase/firestore';
@@ -35,7 +35,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const isClient = profile?.role === 'client';
 
     // The firestore rule for clients requires the email to match the auth token if not a manager.
-    const clientConstraints = isClient && profile?.email ? [where('email', '==', profile.email)] : [];
+    // Ensure we always have a filter value to avoid "list all" permission errors.
+    const clientConstraints = useMemo(() => 
+        isClient ? [where('email', '==', profile?.email || 'pending')] : [],
+        [isClient, profile?.email]
+    );
 
     const { data: clients } = useFirestore<any>('clients', clientConstraints);
     const { data: trainers } = useFirestore<any>('trainers');
@@ -76,10 +80,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     };
 
     useEffect(() => {
-        setIsSubmitting(false);
-    }, [isOpen]);
+        if (!isOpen) {
+            setIsSubmitting(false);
+            return;
+        }
 
-    useEffect(() => {
         if (editingSession) {
             setSelectedClient(editingSession.clientName);
             setSelectedTrainer(editingSession.trainerName);
@@ -88,6 +93,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             setSelectedDay(editingSession.day);
             setSelectedDays([editingSession.day]);
         } else if (selectedSlot) {
+            // Only reset if this is a DIFFERENT slot than what was previously being initialized
+            // We use a internal key to track this to avoid over-triggering
             setSelectedTime(selectedSlot.time);
             setSelectedDay(selectedSlot.day);
             setSelectedDays([selectedSlot.day]);
@@ -99,6 +106,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 setSelectedClient(profile.name);
             }
 
+            // We don't reset service/trainer IF they were already set manually and the trainers array updated
+            // But we DO reset them when a fresh slot is clicked
             setSelectedService('');
             setIsRepeating(false);
             setRepeatFrequency('weekly');
@@ -108,7 +117,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 : '';
             setSelectedTrainer(initialTrainer);
         }
-    }, [editingSession, selectedSlot, trainers, isClient, profile]);
+    }, [isOpen, editingSession?.id, selectedSlot?.day, selectedSlot?.time, selectedSlot?.date, selectedSlot?.trainerId]);
 
 
     const toggleDay = (dayIdx: number) => {
