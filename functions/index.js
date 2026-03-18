@@ -151,10 +151,84 @@ exports.onSessionWritten = functions.firestore
         // A client booking is when createdBy matches the clientName
         const isClientBooking = (data.createdBy === data.clientName) && data.clientName;
 
-        // A manager/admin shouldn't get notifications for things they did themselves in production,
-        // but for testing parameter discovery, we allow it if it's not a client booking.
         const isSelfInflicted = (data.createdBy === "Unknown User") || (data.createdBy !== data.clientName);
         const shouldAlertManagers = isClientBooking || (isSelfInflicted && data.createdBy !== "System");
+
+        // --- RATE LIMIT ENFORCEMENT ---
+        // We enforce a strict 1-session-per-day limit for clients to prevent API abuse/bots from spamming bookings.
+        if (isClientBooking && (!data.seriesId || isDelete)) {
+            try {
+                if (isCreate) {
+                    const targetDatePrefix = data.date.split('T')[0];
+                    const limitRef = db.collection('rate_limits').doc(`${data.clientId}_${targetDatePrefix}`);
+                    
+                    const allowed = await db.runTransaction(async (t) => {
+                        const doc = await t.get(limitRef);
+                        if (!doc.exists) {
+                            t.set(limitRef, { count: 1 });
+                            return true;
+                        } else if (doc.data().count >= 1) {
+                            return false; // Limit exceeded
+                        } else {
+                            t.update(limitRef, { count: doc.data().count + 1 });
+                            return true;
+                        }
+                    });
+                    
+                    if (!allowed) {
+                        console.warn(`Rate Limit Exceeded: Client ${data.clientId} booked >1 session for ${targetDatePrefix}. Deleting session ${sessionId}.`);
+                        await db.collection('sessions').doc(sessionId).delete();
+                        await db.collection('activity_logs').add({
+                            action: 'rate_limit_blocked',
+                            isRecurring: false,
+                            sessionDetails: { clientName: data.clientName, date: data.date, time: data.time },
+                            performedBy: { uid: 'system', role: 'system', name: 'Security Enforcer' },
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            siteId: data.siteId || 'default'
+                        });
+                        return null; // Stop processing Webhooks
+                    }
+                } else if (isDelete) {
+                    const targetDatePrefix = data.date.split('T')[0];
+                    const limitRef = db.collection('rate_limits').doc(`${data.clientId}_${targetDatePrefix}`);
+                    await db.runTransaction(async (t) => {
+                        const doc = await t.get(limitRef);
+                        if (doc.exists && doc.data().count > 0) {
+                            t.update(limitRef, { count: doc.data().count - 1 });
+                        }
+                    });
+                } else if (isUpdate) {
+                    const oldDatePrefix = beforeData.date.split('T')[0];
+                    const newDatePrefix = afterData.date.split('T')[0];
+                    
+                    if (oldDatePrefix !== newDatePrefix) {
+                        const limitRefNew = db.collection('rate_limits').doc(`${data.clientId}_${newDatePrefix}`);
+                        const limitRefOld = db.collection('rate_limits').doc(`${data.clientId}_${oldDatePrefix}`);
+                        
+                        const allowed = await db.runTransaction(async (t) => {
+                            const docNew = await t.get(limitRefNew);
+                            if (docNew.exists && docNew.data().count >= 1) return false;
+                            
+                            if (!docNew.exists) t.set(limitRefNew, { count: 1 });
+                            else t.update(limitRefNew, { count: docNew.data().count + 1 });
+                            
+                            const docOld = await t.get(limitRefOld);
+                            if (docOld.exists && docOld.data().count > 0) t.update(limitRefOld, { count: docOld.data().count - 1 });
+                            
+                            return true;
+                        });
+                        
+                        if (!allowed) {
+                            console.warn(`Rate Limit Exceeded on Reschedule: Reverting ${sessionId}.`);
+                            await db.collection('sessions').doc(sessionId).set(beforeData);
+                            return null;
+                        }
+                    }
+                }
+            } catch (err) {
+                 console.error("Rate limit transaction failed", err);
+            }
+        }
 
         // --- RECURRING SERIES LOGIC ---
         // Debounce via locking so we only send ONE message for the whole batch of 100+ recurring bookings.
