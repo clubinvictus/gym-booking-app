@@ -221,19 +221,20 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             return;
         }
 
-        // --- Trainer double-booking check ---
-        if (!editingSession && selectedTrainer) {
-            const trainer = trainers.find((t: any) => t.name === selectedTrainer);
-            if (trainer) {
-                // Admins/managers query sessions directly (always accurate, no stale data).
-                // Clients use trainer_busy_slots (no permission to read all sessions).
-                const conflictCollection = isClient ? 'trainer_busy_slots' : 'sessions';
-                const conflictField = isClient ? 'trainerId' : 'trainerId';
-                const existingSnap = await getDocs(
-                    query(collection(db, conflictCollection), where(conflictField, '==', trainer.id))
-                );
-                const existingTimes = new Map<string, boolean>();
-                existingSnap.forEach(d => {
+        try {
+            // --- Trainer double-booking check ---
+            if (!editingSession && selectedTrainer) {
+                const trainer = trainers.find((t: any) => t.name === selectedTrainer);
+                if (trainer) {
+                    // Admins/managers query sessions directly (always accurate, no stale data).
+                    // Non-admins (clients, trainers) use trainer_busy_slots (no permission to read all sessions).
+                    const conflictCollection = (!isAdmin) ? 'trainer_busy_slots' : 'sessions';
+                    const conflictField = 'trainerId';
+                    const existingSnap = await getDocs(
+                        query(collection(db, conflictCollection), where(conflictField, '==', trainer.id))
+                    );
+                    const existingTimes = new Map<string, boolean>();
+                    existingSnap.forEach(d => {
                     const s = d.data();
                     const dateKey = new Date(s.date).toDateString();
                     existingTimes.set(`${dateKey}|${s.time}`, true);
@@ -378,8 +379,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             }
         };
 
-        try {
-            if (editingSession) {
+        if (editingSession) {
                 // Adjust baseDate to match possibly changed selectedDay
                 const currentDay = baseDate.getDay();
                 const targetDay = (selectedDay + 1) % 7;
@@ -586,9 +586,10 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             setIsSubmitting(false);
             onBook({});
             onClose();
-        } catch (error) {
-            console.error('Error saving session:', error);
-            alert('Failed to save session.');
+
+        } catch (error: any) {
+            console.error('Error in BookingModal submission:', error);
+            alert(`Failed to confirm booking: ${error.message || 'Unknown error'}`);
             setIsSubmitting(false);
         }
     };
