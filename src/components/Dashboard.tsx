@@ -411,7 +411,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         borderRadius: 0,
                         width: '24px',
                         height: '24px',
-                        display: 'flex',
+                        display: window.innerWidth <= 768 ? 'none' : 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         cursor: 'pointer',
