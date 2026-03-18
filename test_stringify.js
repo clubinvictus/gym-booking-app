@@ -1,2 +1,2 @@
-const { where } = require('firebase/firestore');
+import { where } from 'firebase/firestore';
 console.log(JSON.stringify(where('a', '==', 'b')));

@@ -8,6 +8,8 @@ export function useFirestore<T>(collectionName: string, constraints: QueryConstr
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
+    const constraintsString = JSON.stringify(constraints);
+
     useEffect(() => {
         if (skip) {
             setLoading(false);
@@ -35,7 +37,8 @@ export function useFirestore<T>(collectionName: string, constraints: QueryConstr
         });
 
         return () => unsubscribe();
-    }, [collectionName, constraints, skip]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [collectionName, constraintsString, skip]);
 
     return { data, loading, error };
 }
