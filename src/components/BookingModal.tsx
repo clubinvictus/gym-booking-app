@@ -881,14 +881,14 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         fontSize: '0.9rem',
                                         fontWeight: 600,
                                         appearance: 'none',
-                                        backgroundColor: availableTrainers.length === 0 ? '#fff5f5' : '#fff'
+                                        backgroundColor: (selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff'
                                     }}
                                 >
                                     <option value="">Select trainer</option>
                                     {availableTrainers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                 </select>
                             </div>
-                            {availableTrainers.length === 0 && (
+                            {selectedService && availableTrainers.length === 0 && (
                                 <div style={{
                                     padding: '16px',
                                     background: '#fff5f5',
