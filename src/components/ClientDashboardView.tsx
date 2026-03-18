@@ -78,12 +78,12 @@ export const ClientDashboardView = () => {
                         onClick={() => setSelectedSession(session)}
                         className="card"
                         style={{
-                            padding: '24px',
+                            padding: window.innerWidth <= 768 ? '16px' : '24px',
                             display: 'flex',
-                            flexDirection: 'row',
-                            alignItems: 'center',
+                            flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                            alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
                             justifyContent: 'space-between',
-                            gap: '24px',
+                            gap: window.innerWidth <= 768 ? '16px' : '24px',
                             cursor: 'pointer',
                             transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                             border: '3px solid #000',
@@ -98,25 +98,25 @@ export const ClientDashboardView = () => {
                             e.currentTarget.style.boxShadow = 'none';
                         }}
                     >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-                            <div style={{ padding: '8px 16px', background: '#000', color: '#fff', fontWeight: 800, fontSize: '0.85rem', width: 'fit-content' }}>
+                        <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '12px' : '24px', flexWrap: 'wrap', flexDirection: window.innerWidth <= 768 ? 'column-reverse' : 'row' }}>
+                            <div style={{ padding: '6px 12px', background: '#000', color: '#fff', fontWeight: 800, fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.85rem', width: 'fit-content' }}>
                                 {session.serviceName.toUpperCase()}
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <Calendar size={20} className="text-muted" />
-                                <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>{formatSessionDate(session.date)}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Calendar size={window.innerWidth <= 768 ? 16 : 20} className="text-muted" />
+                                <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.2rem' }}>{formatSessionDate(session.date)}</span>
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '32px', color: '#444', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '8px' : '32px', color: '#444', flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Clock size={18} className="text-muted" />
-                                <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>{session.time}</span>
+                                <Clock size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
+                                <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{session.time}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Briefcase size={18} className="text-muted" />
-                                <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>{session.trainerName}</span>
+                                <Briefcase size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
+                                <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{session.trainerName}</span>
                             </div>
                         </div>
                     </div>
