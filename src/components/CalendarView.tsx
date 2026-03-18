@@ -242,10 +242,10 @@ export const CalendarView = () => {
                 background: '#fff'
             }}>
                 {/* Left: Branding/Title */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'space-between' }}>
-                    <h1 style={{ fontSize: '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
+                <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'center' : 'center', gap: window.innerWidth <= 768 ? '4px' : '16px', justifyContent: window.innerWidth <= 768 ? 'center' : 'space-between' }}>
+                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0, textAlign: 'center' }}>SCHEDULE</h1>
                     {window.innerWidth <= 768 && (
-                        <span style={{ fontWeight: 800, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
                             {formatWeekRange(currentWeekStart)}
                         </span>
                     )}
@@ -294,10 +294,10 @@ export const CalendarView = () => {
                 </div>
 
                 {/* Right: Controls & Primary Action */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
+                <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'stretch' : 'center', gap: '16px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
                     {(isAdmin || isClient) && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
-                            <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>
+                        <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'stretch' : 'center', gap: window.innerWidth <= 768 ? '6px' : '12px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
+                            <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em', textAlign: window.innerWidth <= 768 ? 'center' : 'left' }}>FILTER:</span>
                             <select
                                 value={selectedTrainerId}
                                 onChange={(e) => setSelectedTrainerId(e.target.value)}
