@@ -141,16 +141,21 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     };
 
     const getTargetDate = () => {
-        // Always prioritize the explicit date passed from the Calendar grid
-        if (selectedSlot?.date) return selectedSlot.date;
-        if (editingSession?.date) return editingSession.date;
+        let baseDate: Date;
 
-        // Fallback for standalone modal opens (rare/legacy)
-        const baseDate = new Date();
-        const currentDay = baseDate.getDay();
-        const targetDay = (selectedDay + 1) % 7;
-        const diff = targetDay - currentDay;
-        baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+        // Always prioritize the explicit date passed from the parent component
+        if (selectedSlot?.date) {
+            baseDate = new Date(selectedSlot.date);
+        } else if (editingSession?.date) {
+            baseDate = new Date(editingSession.date);
+        } else {
+            // Fallback for standalone modal opens (rare/legacy)
+            baseDate = new Date();
+            const currentDay = baseDate.getDay();
+            const targetDay = (selectedDay + 1) % 7;
+            const diff = targetDay - currentDay;
+            baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+        }
         
         // Return date string in exact local time to prevent UTC drifting (e.g. late evening dates rolling into tomorrow)
         const offset = baseDate.getTimezoneOffset();

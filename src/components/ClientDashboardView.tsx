@@ -52,9 +52,14 @@ export const ClientDashboardView = () => {
                         nextHour.setHours(nextHour.getHours() + 1);
                         nextHour.setMinutes(0);
                         
+                        const dayName = nextHour.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+                        const daysMap = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                        const dayIndex = daysMap.indexOf(dayName);
+                        
                         setSelectedSlot({
                             time: nextHour.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                            day: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+                            day: dayIndex !== -1 ? dayIndex : 0,
+                            date: nextHour,
                             trainerId: 'all'
                         });
                     }}
