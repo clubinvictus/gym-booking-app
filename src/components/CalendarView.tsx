@@ -253,6 +253,7 @@ export const CalendarView = () => {
 
                 {/* Center: Navigation & Date */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: window.innerWidth <= 768 ? '12px' : '32px', justifyContent: 'center' }}>
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <button onClick={handlePrevWeek} className="button-secondary" style={{ padding: '6px 10px', height: '36px' }}><ChevronLeft size={18} /></button>
                         <button
