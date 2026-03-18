@@ -228,7 +228,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 });
 
                 return (
-                    <div style={{ padding: window.innerWidth <= 768 ? '24px 16px' : '40px' }}>
+                    <div style={{ width: '100%' }}>
                         <header style={{
                             marginBottom: '40px',
                             display: 'flex',
