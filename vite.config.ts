@@ -9,9 +9,13 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        // Force the new service worker to activate immediately, overriding cache
+        // Force the new service worker to activate immediately
         skipWaiting: true,
-        clientsClaim: true
+        clientsClaim: true,
+        // CRITICAL: Do NOT intercept Firebase Auth reserved paths.
+        // Without this, the SW serves index.html for /__/auth/handler,
+        // causing a blank screen during Google sign-in.
+        navigateFallbackDenylist: [/^\/__\/auth\//, /^\/__\/firebase\//]
       },
       includeAssets: ['flavicon.png', 'logo.png', 'logo white.png', 'logo black.png', 'pwa-192x192.png', 'pwa-512x512.png', 'maskable-icon.png'],
       manifest: {
