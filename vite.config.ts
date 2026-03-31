@@ -8,6 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // Force the new service worker to activate immediately, overriding cache
+        skipWaiting: true,
+        clientsClaim: true
+      },
       includeAssets: ['flavicon.png', 'logo.png', 'logo white.png', 'logo black.png', 'pwa-192x192.png', 'pwa-512x512.png', 'maskable-icon.png'],
       manifest: {
         name: 'Invictus Calendar',

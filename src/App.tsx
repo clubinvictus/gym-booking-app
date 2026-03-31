@@ -30,26 +30,26 @@ function App() {
       <ConfirmProvider>
         <AuthProvider>
           <Router>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
 
-            {/* Admin/Trainer/Client Routes */}
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard view="dashboard" /></ProtectedRoute>} />
-            <Route path="/team" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="team" /></ProtectedRoute>} />
-            <Route path="/services" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="services" /></ProtectedRoute>} />
-            <Route path="/clients" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="clients" /></ProtectedRoute>} />
-            <Route path="/activity" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="activity" /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="settings" /></ProtectedRoute>} />
+              {/* Admin/Trainer/Client Routes */}
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard view="dashboard" /></ProtectedRoute>} />
+              <Route path="/team" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="team" /></ProtectedRoute>} />
+              <Route path="/services" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="services" /></ProtectedRoute>} />
+              <Route path="/clients" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="clients" /></ProtectedRoute>} />
+              <Route path="/activity" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="activity" /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="settings" /></ProtectedRoute>} />
 
-            {/* Client/General Routes */}
-            <Route path="/calendar" element={<ProtectedRoute><Dashboard view="calendar" /></ProtectedRoute>} />
+              {/* Client/General Routes */}
+              <Route path="/calendar" element={<ProtectedRoute><Dashboard view="calendar" /></ProtectedRoute>} />
 
-            <Route path="/" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </Router>
-      </AuthProvider>
-    </ConfirmProvider>
-  </ErrorBoundary>
+              <Route path="/" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </ConfirmProvider>
+    </ErrorBoundary>
   );
 }
 
