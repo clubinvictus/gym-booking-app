@@ -1,10 +1,9 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, googleProvider, db } from '../firebase';
 import { 
-    signInWithRedirect, 
-    getRedirectResult, 
+    signInWithPopup,
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
     updateProfile, 
@@ -25,30 +24,7 @@ export const LoginPage = () => {
     const [error, setError] = useState<string | null>(null);
     const [resetSent, setResetSent] = useState(false);
     const navigate = useNavigate();
-    const [redirectProcessed, setRedirectProcessed] = useState(false);
 
-    // Handle redirect result on mount
-    useEffect(() => {
-        const handleRedirect = async () => {
-            if (redirectProcessed) return;
-            try {
-                const result = await getRedirectResult(auth);
-                if (result?.user) {
-                    setLoading(true);
-                    setRedirectProcessed(true);
-                    await determineRoleAndRedirect(result.user);
-                }
-            } catch (err: any) {
-                console.error("Redirect auth error:", err);
-                if (err.code !== 'auth/web-storage-unsupported') {
-                    setError(err.message);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-        handleRedirect();
-    }, [redirectProcessed]);
     const determineRoleAndRedirect = async (user: any) => {
         try {
             const normalizedEmail = user.email?.toLowerCase();
@@ -168,11 +144,20 @@ export const LoginPage = () => {
         setError(null);
         try {
             await setPersistence(auth, browserLocalPersistence);
-            // Always use redirect for better mobile compatibility/robustness
-            await signInWithRedirect(auth, googleProvider);
+            const result = await signInWithPopup(auth, googleProvider);
+            if (result?.user) {
+                await determineRoleAndRedirect(result.user);
+            }
         } catch (err: any) {
-            console.error("Auth initialization error:", err);
-            setError(err.message);
+            console.error('Google login error:', err);
+            if (err.code === 'auth/popup-blocked') {
+                setError('Popup was blocked by your browser. Please allow popups for this site, or use the Email & Password option below.');
+            } else if (err.code === 'auth/popup-closed-by-user') {
+                setError('Sign-in was cancelled.');
+            } else {
+                setError(err.message);
+            }
+        } finally {
             setLoading(false);
         }
     };
