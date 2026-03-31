@@ -76,12 +76,17 @@ export const CalendarView = () => {
         [isClient, user?.uid, profile?.clientId]
     );
     
-    const sessionConstraints = useMemo(() => 
-        isClient ? (clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []) : [],
-        [isClient, clientIds]
-    );
+    const sessionConstraints = useMemo(() => {
+        if (isClient) {
+            return clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : [];
+        }
+        if (isTrainer && profile?.trainerId) {
+            return [where('trainerId', '==', profile.trainerId)];
+        }
+        return [];
+    }, [isClient, isTrainer, clientIds, profile?.trainerId]);
 
-    const shouldSkipSessions = isClient && clientIds.length === 0;
+    const shouldSkipSessions = (isClient && clientIds.length === 0) || (isTrainer && !profile?.trainerId);
     const { data: sessions } = useFirestore<any>('sessions', sessionConstraints, shouldSkipSessions);
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
@@ -178,6 +183,7 @@ export const CalendarView = () => {
         }
 
         // Prevent trainers from booking sessions
+        // Allow clients/admins/managers if a trainer is available and not in the past
         if (available && !isTrainer) {
             setSelectedSlot({ day: dayIndex, time, trainerId: effectiveTrainerId, date: slotDate });
         }
@@ -469,6 +475,7 @@ export const CalendarView = () => {
                                     <div
                                         key={`${dayIndex}-${time}`}
                                         onClick={() => handleSlotClick(dayIndex, time)}
+                                        className={`calendar-slot ${showAsAvailable ? 'available' : ''}`}
                                         style={{
                                             borderBottom: '1px solid #eee',
                                             borderLeft: isToday ? '2px solid #000' : '1px solid #eee',
@@ -479,7 +486,7 @@ export const CalendarView = () => {
                                             display: 'flex',
                                             flexDirection: 'column',
                                             gap: '4px',
-                                            cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
+                                            cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable && !isTrainer ? 'pointer' : 'not-allowed'),
                                             backgroundColor: baseBackgroundColor,
                                             backgroundImage: displaySessions.length === 0 && !showAsAvailable && !isBusyByOthers
                                                 ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'

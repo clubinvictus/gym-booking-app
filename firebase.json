@@ -15,6 +15,10 @@
         ],
         "rewrites": [
             {
+                "source": "/__/auth/**",
+                "destination": "/__/auth/**"
+            },
+            {
                 "source": "**",
                 "destination": "/index.html"
             }

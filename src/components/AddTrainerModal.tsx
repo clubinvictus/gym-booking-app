@@ -47,7 +47,7 @@ export const AddTrainerModal = ({ isOpen, onClose, onAdd }: AddTrainerModalProps
 
         onAdd({
             name,
-            email,
+            email: email.toLowerCase().trim(),
             phone: fullPhone,
             specialties: selectedSpecialties
         });

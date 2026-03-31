@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from './CalendarView';
@@ -21,7 +21,7 @@ import { AddServiceModal } from './AddServiceModal';
 import { EditTrainerModal } from './EditTrainerModal';
 import { seedInitialData } from '../seed';
 import { db, auth } from '../firebase';
-import { doc, deleteDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, deleteDoc, addDoc, collection, where } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 import { useAuth } from '../AuthContext';
 import { signOut } from 'firebase/auth';
@@ -72,7 +72,17 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     // Use Firestore for stats
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: clients } = useFirestore<any>('clients');
-    const { data: sessions } = useFirestore<any>('sessions');
+    
+    // Conditionally fetch sessions based on role to satisfy Firestore rules
+    const sessionConstraints = useMemo(() => {
+        if (isTrainer && profile?.trainerId) {
+            return [where('trainerId', '==', profile.trainerId)];
+        }
+        return [];
+    }, [isTrainer, profile?.trainerId]);
+
+    const shouldSkipSessions = isTrainer && !profile?.trainerId;
+    const { data: sessions } = useFirestore<any>('sessions', sessionConstraints, shouldSkipSessions);
 
     const handleSeedData = async () => {
         setIsSeeding(true);
@@ -190,41 +200,41 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
                 const now = new Date();
                 const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const todayDay = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
                 // Filter sessions according to role
-                const userSessions = isTrainer
-                    ? sessions.filter((s: any) => s.trainerId === profile.trainerId)
-                    : sessions;
+                const userSessions = (isTrainer && profile?.trainerId)
+                    ? (sessions || []).filter((s: any) => s && s.trainerId === profile.trainerId)
+                    : (sessions || []);
 
-                // Today's upcoming sessions: exactly today AND time has not passed
-                const todaySessions = userSessions.filter((s: any) => {
-                    const sessionDate = new Date(s.date);
-                    const isToday = sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
-
-                    if (!isToday) return false;
-
-                    // Parse the time string (e.g., "09:00 AM")
-                    const match = s.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-                    if (match) {
-                        let hours = parseInt(match[1]);
-                        const minutes = parseInt(match[2]);
-                        const modifier = match[3].toUpperCase();
-
-                        if (modifier === 'PM' && hours < 12) hours += 12;
-                        if (modifier === 'AM' && hours === 12) hours = 0;
-
-                        const sessionTime = new Date(now);
-                        sessionTime.setHours(hours, minutes, 0, 0);
-
-                        return sessionTime.getTime() >= now.getTime();
+                // Today's sessions: match by date OR day-of-week (for recurring)
+                const todaySessions = (userSessions || []).filter((s: any) => {
+                    if (!s) return false;
+                    
+                    // 1. If date exists, check if it's strictly today (timezone-safe comparison)
+                    if (s.date) {
+                        try {
+                            const sessionDate = new Date(s.date);
+                            if (isNaN(sessionDate.getTime())) return false;
+                            return sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
+                        } catch (e) {
+                            return false;
+                        }
                     }
 
-                    return true; // if time parsing fails, keep it
+                    // 2. Otherwise match by day-of-the-week for recurring sessions
+                    return s.day === todayDay;
                 }).sort((a: any, b: any) => {
-                    // Sort remaining sessions chronologically by time
-                    const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
-                    const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
-                    return timeA - timeB;
+                    // Sort sessions chronologically by time
+                    if (!a?.time || !b?.time) return 0;
+                    try {
+                        const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
+                        const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
+                        if (isNaN(timeA) || isNaN(timeB)) return 0;
+                        return timeA - timeB;
+                    } catch (e) {
+                        return 0;
+                    }
                 });
 
                 return (

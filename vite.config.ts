@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['flavicon.png', 'logo.png', 'logo white.png', 'logo black.png'],
+      includeAssets: ['flavicon.png', 'logo.png', 'logo white.png', 'logo black.png', 'pwa-192x192.png', 'pwa-512x512.png', 'maskable-icon.png'],
       manifest: {
         name: 'Invictus Calendar',
         short_name: 'Invictus',
@@ -16,22 +16,28 @@ export default defineConfig({
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
+        id: '/',
+        start_url: '/',
+        scope: '/',
+        orientation: 'portrait',
         icons: [
           {
-            src: '/flavicon.png',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: '/flavicon.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: '/flavicon.png',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: '/maskable-icon.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       }

@@ -212,13 +212,22 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
         // Block past bookings
         if (!editingSession) {
-            const slotDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+            // Use the localized date string to ensure we don't have UTC drift (today becoming yesterday)
+            const targetDateStr = getTargetDate();
+            const [y, m, d] = targetDateStr.split('-').map(Number);
+            const slotDate = new Date(y, m - 1, d); // Created in local time
+
             const [timePart, modifier] = selectedTime.split(' ');
             let [hours, minutes] = timePart.split(':').map(Number);
             if (modifier === 'PM' && hours !== 12) hours += 12;
             if (modifier === 'AM' && hours === 12) hours = 0;
             slotDate.setHours(hours, minutes, 0, 0);
-            if (slotDate < new Date()) {
+
+            // Use a 1-minute buffer to avoid "same minute" failures (e.g. booking for 11:00:00 when it's 11:00:05)
+            const now = new Date();
+            const bufferTime = new Date(now.getTime() - (60 * 1000));
+
+            if (slotDate < bufferTime) {
                 alert('You cannot book a session in the past. Please select a future date and time.');
                 setIsSubmitting(false);
                 return;

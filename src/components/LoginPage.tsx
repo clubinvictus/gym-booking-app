@@ -1,8 +1,17 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, googleProvider, db } from '../firebase';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { 
+    signInWithRedirect, 
+    getRedirectResult, 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    updateProfile, 
+    sendPasswordResetEmail,
+    setPersistence,
+    browserLocalPersistence
+} from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { LogIn, UserPlus } from 'lucide-react';
 import { SITE_ID } from '../constants';
@@ -16,17 +25,50 @@ export const LoginPage = () => {
     const [error, setError] = useState<string | null>(null);
     const [resetSent, setResetSent] = useState(false);
     const navigate = useNavigate();
+    const [redirectProcessed, setRedirectProcessed] = useState(false);
 
+    // Handle redirect result on mount
+    useEffect(() => {
+        const handleRedirect = async () => {
+            if (redirectProcessed) return;
+            try {
+                const result = await getRedirectResult(auth);
+                if (result?.user) {
+                    setLoading(true);
+                    setRedirectProcessed(true);
+                    await determineRoleAndRedirect(result.user);
+                }
+            } catch (err: any) {
+                console.error("Redirect auth error:", err);
+                if (err.code !== 'auth/web-storage-unsupported') {
+                    setError(err.message);
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+        handleRedirect();
+    }, [redirectProcessed]);
     const determineRoleAndRedirect = async (user: any) => {
         try {
+            const normalizedEmail = user.email?.toLowerCase();
+            console.log('Detecting role for:', normalizedEmail, 'UID:', user.uid);
+
+            if (!normalizedEmail) {
+                console.error('No email found for user during role detection');
+                navigate('/dashboard');
+                return;
+            }
+
             // 1. Check if Admin (via Firestore 'admins' collection)
             const adminsRef = collection(db, 'admins');
-            const adminQ = query(adminsRef, where('email', '==', user.email));
+            const adminQ = query(adminsRef, where('email', '==', normalizedEmail));
             const adminQuerySnapshot = await getDocs(adminQ);
 
             if (!adminQuerySnapshot.empty) {
+                console.log('Role identified: Admin');
                 await setDoc(doc(db, 'users', user.uid), {
-                    email: user.email,
+                    email: normalizedEmail,
                     role: 'admin',
                     name: user.displayName || fullName || 'Admin',
                     phone: adminQuerySnapshot.docs[0].data().phone || '',
@@ -38,12 +80,13 @@ export const LoginPage = () => {
 
             // 2. Check if Manager
             const managersRef = collection(db, 'managers');
-            const managerQ = query(managersRef, where('email', '==', user.email));
+            const managerQ = query(managersRef, where('email', '==', normalizedEmail));
             const managerQuerySnapshot = await getDocs(managerQ);
 
             if (!managerQuerySnapshot.empty) {
+                console.log('Role identified: Manager');
                 await setDoc(doc(db, 'users', user.uid), {
-                    email: user.email,
+                    email: normalizedEmail,
                     role: 'manager',
                     managerId: managerQuerySnapshot.docs[0].id,
                     name: user.displayName || fullName || managerQuerySnapshot.docs[0].data().name,
@@ -56,22 +99,24 @@ export const LoginPage = () => {
 
             // 3. Check if Trainer
             const trainersRef = collection(db, 'trainers');
-            const q = query(trainersRef, where('email', '==', user.email));
+            const q = query(trainersRef, where('email', '==', normalizedEmail));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
+                console.log('Role identified: Trainer');
                 await setDoc(doc(db, 'users', user.uid), {
-                    email: user.email,
+                    email: normalizedEmail,
                     role: 'trainer',
                     trainerId: querySnapshot.docs[0].id,
                     name: user.displayName || fullName || querySnapshot.docs[0].data().name,
                     phone: querySnapshot.docs[0].data().phone || '',
                     siteId: querySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
-                navigate('/dashboard'); // Will be filtered by role later
+                navigate('/dashboard');
                 return;
             }
 
+            console.log('Role identified: Client (Default)');
             // 4. Default to Client
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (!userDoc.exists()) {
@@ -80,19 +125,19 @@ export const LoginPage = () => {
 
                 // Check if admin already created a client record for this email
                 const clientsRef = collection(db, 'clients');
-                const clientQ = query(clientsRef, where('email', '==', user.email));
+                const clientQ = query(clientsRef, where('email', '==', normalizedEmail));
                 const clientQuerySnapshot = await getDocs(clientQ);
 
                 if (!clientQuerySnapshot.empty) {
-                    // Link to existing client record
+                    console.log('Linking to existing client record');
                     clientId = clientQuerySnapshot.docs[0].id;
                 } else {
-                    // Create new client record
+                    console.log('Creating new client record');
                     const { addDoc } = await import('firebase/firestore');
                     const newClientRef = await addDoc(collection(db, 'clients'), {
                         name: clientName,
-                        email: user.email,
-                        phone: '', // Can be filled later by client/admin
+                        email: normalizedEmail,
+                        phone: '', 
                         joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                         status: 'Active',
                         siteId: SITE_ID,
@@ -103,7 +148,7 @@ export const LoginPage = () => {
 
                 // Create the user profile with the linked clientId
                 await setDoc(doc(db, 'users', user.uid), {
-                    email: user.email,
+                    email: normalizedEmail,
                     role: 'client',
                     name: clientName,
                     clientId: clientId,
@@ -122,11 +167,12 @@ export const LoginPage = () => {
         setLoading(true);
         setError(null);
         try {
-            const result = await signInWithPopup(auth, googleProvider);
-            await determineRoleAndRedirect(result.user);
+            await setPersistence(auth, browserLocalPersistence);
+            // Always use redirect for better mobile compatibility/robustness
+            await signInWithRedirect(auth, googleProvider);
         } catch (err: any) {
+            console.error("Auth initialization error:", err);
             setError(err.message);
-        } finally {
             setLoading(false);
         }
     };
@@ -137,6 +183,8 @@ export const LoginPage = () => {
         setError(null);
 
         try {
+            await setPersistence(auth, browserLocalPersistence);
+            
             if (isSignIn) {
                 const result = await signInWithEmailAndPassword(auth, email, password);
                 await determineRoleAndRedirect(result.user);

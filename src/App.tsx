@@ -3,6 +3,7 @@ import { LoginPage } from './components/LoginPage';
 import { Dashboard } from './components/Dashboard';
 import { AuthProvider, useAuth } from './AuthContext';
 import { ConfirmProvider } from './ConfirmContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, profile, loading } = useAuth();
@@ -25,9 +26,10 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
 
 function App() {
   return (
-    <ConfirmProvider>
-      <AuthProvider>
-        <Router>
+    <ErrorBoundary>
+      <ConfirmProvider>
+        <AuthProvider>
+          <Router>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
@@ -47,6 +49,7 @@ function App() {
         </Router>
       </AuthProvider>
     </ConfirmProvider>
+  </ErrorBoundary>
   );
 }
 

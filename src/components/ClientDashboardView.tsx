@@ -15,14 +15,31 @@ export const ClientDashboardView = () => {
     const [visibleCount, setVisibleCount] = useState(10);
 
     // Filter to only the client's own sessions using UID
-    const mySessions = [...sessions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const mySessions = [...(sessions || [])]
+        .filter(s => s && s.date)
+        .sort((a, b) => {
+            try {
+                const timeA = new Date(a.date).getTime();
+                const timeB = new Date(b.date).getTime();
+                if (isNaN(timeA) || isNaN(timeB)) return 0;
+                return timeA - timeB;
+            } catch (e) {
+                return 0;
+            }
+        });
 
     // Filter to only upcoming sessions
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const upcomingSessions = mySessions.filter(s => {
-        return new Date(s.date) >= today;
+        try {
+            const sessionDate = new Date(s.date);
+            if (isNaN(sessionDate.getTime())) return false;
+            return sessionDate >= today;
+        } catch (e) {
+            return false;
+        }
     });
 
     const displayedSessions = upcomingSessions.slice(0, visibleCount);
