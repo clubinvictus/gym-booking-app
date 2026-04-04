@@ -65,16 +65,27 @@ export const ClientDashboardView = () => {
                 </div>
                 <button
                     onClick={() => {
+                        // Calculate the next clean hour for a suggested slot
                         const nextHour = new Date();
                         nextHour.setHours(nextHour.getHours() + 1);
                         nextHour.setMinutes(0);
+                        nextHour.setSeconds(0);
+                        nextHour.setMilliseconds(0);
                         
+                        // Map the Date object to our 0-6 (Mon-Sun) day index
                         const dayName = nextHour.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
                         const daysMap = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
                         const dayIndex = daysMap.indexOf(dayName);
                         
+                        // Force clean "09:00 AM" format for the modal
+                        const timeStr = nextHour.toLocaleTimeString('en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            hour12: true 
+                        });
+
                         setSelectedSlot({
-                            time: nextHour.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                            time: timeStr,
                             day: dayIndex !== -1 ? dayIndex : 0,
                             date: nextHour,
                             trainerId: 'all'

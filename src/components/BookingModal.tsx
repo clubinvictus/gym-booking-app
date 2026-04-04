@@ -143,19 +143,23 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const getTargetDate = () => {
         let baseDate: Date;
 
-        // Always prioritize the explicit date passed from the parent component
+        // Use the explicit date passed from the parent component or default to today
         if (selectedSlot?.date) {
             baseDate = new Date(selectedSlot.date);
         } else if (editingSession?.date) {
             baseDate = new Date(editingSession.date);
         } else {
-            // Fallback for standalone modal opens (rare/legacy)
             baseDate = new Date();
-            const currentDay = baseDate.getDay();
-            const targetDay = (selectedDay + 1) % 7;
-            const diff = targetDay - currentDay;
-            baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
         }
+
+        // CRITICAL: Always adjust the baseDate to match the selectedDay index (0-6 starting Mon)
+        // This ensures that if the user changes the day in the dropdown, the date is recalculated
+        const currentDay = baseDate.getDay(); // 0-6 starting Sun
+        const targetDay = (selectedDay + 1) % 7; // Map 0-6 (Mon-Sun) to 0-6 (Sun-Sat)
+        const diff = targetDay - currentDay;
+        
+        // Use a clean calculation that always moves forward to the specified day
+        baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
         
         // Return date string in exact local time to prevent UTC drifting (e.g. late evening dates rolling into tomorrow)
         const offset = baseDate.getTimezoneOffset();
