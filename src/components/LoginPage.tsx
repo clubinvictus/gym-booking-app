@@ -7,9 +7,7 @@ import {
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
     updateProfile, 
-    sendPasswordResetEmail,
-    setPersistence,
-    browserLocalPersistence
+    sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { LogIn, UserPlus } from 'lucide-react';
@@ -143,7 +141,6 @@ export const LoginPage = () => {
         setLoading(true);
         setError(null);
         try {
-            await setPersistence(auth, browserLocalPersistence);
             const result = await signInWithPopup(auth, googleProvider);
             if (result?.user) {
                 await determineRoleAndRedirect(result.user);
@@ -168,8 +165,6 @@ export const LoginPage = () => {
         setError(null);
 
         try {
-            await setPersistence(auth, browserLocalPersistence);
-            
             if (isSignIn) {
                 const result = await signInWithEmailAndPassword(auth, email, password);
                 await determineRoleAndRedirect(result.user);

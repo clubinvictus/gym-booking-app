@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -18,3 +18,8 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+// Set LOCAL persistence globally so users stay signed in across browser closes/PWA restarts.
+// This must be done here (at module init), not inside login handlers, because Firebase
+// has already read the persisted token before any login handler fires on a returning visit.
+setPersistence(auth, browserLocalPersistence).catch(console.error);
