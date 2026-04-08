@@ -4,43 +4,46 @@ import { useAuth } from '../AuthContext';
 import { Calendar, Clock, Briefcase } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
-import { where } from 'firebase/firestore';
+import { where, orderBy } from 'firebase/firestore';
 
 export const ClientDashboardView = () => {
-    const { profile, user } = useAuth();
+    const { profile, user, loading: authLoading } = useAuth();
+    
+    // We need both the profile and user to be loaded to have the correct client IDs
     const clientIds = [user?.uid, profile?.clientId].filter(Boolean);
-    const { data: sessions } = useFirestore<any>('sessions', clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : []);
+    
+    // Calculate today's date at midnight for filtering
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayISO = today.toISOString();
+
+    const { data: sessions, loading: sessionsLoading } = useFirestore<any>(
+        'sessions', 
+        clientIds.length > 0 ? [
+            where('clientId', 'in', clientIds),
+            where('date', '>=', todayISO),
+            orderBy('date', 'asc')
+        ] : [],
+        clientIds.length === 0 || authLoading
+    );
+
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
     const [visibleCount, setVisibleCount] = useState(10);
+    const isLoading = authLoading || sessionsLoading;
 
-    // Filter to only the client's own sessions using UID
-    const mySessions = [...(sessions || [])]
+    // Filter to only the client's own sessions using UID (backup sort for safety)
+    const upcomingSessions = [...(sessions || [])]
         .filter(s => s && s.date)
         .sort((a, b) => {
             try {
                 const timeA = new Date(a.date).getTime();
                 const timeB = new Date(b.date).getTime();
-                if (isNaN(timeA) || isNaN(timeB)) return 0;
                 return timeA - timeB;
             } catch (e) {
                 return 0;
             }
         });
-
-    // Filter to only upcoming sessions
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    const upcomingSessions = mySessions.filter(s => {
-        try {
-            const sessionDate = new Date(s.date);
-            if (isNaN(sessionDate.getTime())) return false;
-            return sessionDate >= today;
-        } catch (e) {
-            return false;
-        }
-    });
 
     const displayedSessions = upcomingSessions.slice(0, visibleCount);
 
@@ -48,6 +51,36 @@ export const ClientDashboardView = () => {
         const d = new Date(dateString);
         return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
     };
+
+    if (isLoading) {
+        return (
+            <div style={{ 
+                padding: '100px 40px', 
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '16px'
+            }}>
+                <div style={{
+                    width: '40px',
+                    height: '40px',
+                    border: '4px solid #f3f3f3',
+                    borderTop: '4px solid #000',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                }} />
+                <style>{`
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `}</style>
+                <p style={{ fontWeight: 800, color: '#000', fontSize: '1.2rem', letterSpacing: '-0.02em' }}>LOADING YOUR SCHEDULE...</p>
+            </div>
+        );
+    }
 
     return (
         <div style={{ padding: '40px' }}>
