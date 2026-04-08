@@ -256,7 +256,7 @@ export const CalendarView = () => {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true
-        });
+        }).replace(/\u202F/g, ' ');
 
         setSelectedSlot({
             day: dayIndex,

@@ -795,7 +795,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         fontSize: '1rem',
                                         fontWeight: 600,
                                         appearance: 'none',
-                                        backgroundColor: '#fff'
+                                        backgroundColor: '#fff',
+                                        color: '#000'
                                     }}
                                 >
                                     <option value="">Select service</option>
@@ -827,7 +828,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             fontSize: '0.9rem',
                                             fontWeight: 600,
                                             appearance: 'none',
-                                            backgroundColor: '#fff'
+                                            backgroundColor: '#fff',
+                                            color: '#000'
                                         }}
                                     >
                                         {days.map((day, i) => {
@@ -862,7 +864,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             fontSize: '0.9rem',
                                             fontWeight: 600,
                                             appearance: 'none',
-                                            backgroundColor: '#fff'
+                                            backgroundColor: '#fff',
+                                            color: '#000'
                                         }}
                                     >
                                         {timeSlots.map(t => {
@@ -911,7 +914,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         fontSize: '0.9rem',
                                         fontWeight: 600,
                                         appearance: 'none',
-                                        backgroundColor: (selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff'
+                                        backgroundColor: (selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff',
+                                        color: '#000'
                                     }}
                                 >
                                     <option value="">Select trainer</option>

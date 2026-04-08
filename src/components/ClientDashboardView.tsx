@@ -110,12 +110,12 @@ export const ClientDashboardView = () => {
                         const daysMap = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
                         const dayIndex = daysMap.indexOf(dayName);
                         
-                        // Force clean "09:00 AM" format for the modal
+                        // Force clean "09:00 AM" format for the modal (fix narrow non-breaking spaces on iOS/Safari)
                         const timeStr = nextHour.toLocaleTimeString('en-US', { 
                             hour: '2-digit', 
                             minute: '2-digit',
                             hour12: true 
-                        });
+                        }).replace(/\u202F/g, ' ');
 
                         setSelectedSlot({
                             time: timeStr,
