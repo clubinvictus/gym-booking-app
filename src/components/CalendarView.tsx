@@ -224,14 +224,25 @@ export const CalendarView = () => {
     };
 
     const handleBookButtonClick = () => {
-        // Open with default or today's slot
-        const today = new Date();
-        const dayIndex = Math.max(0, today.getDay() - 1); // Mon=0, Sun=6
+        // Use next clean hour so the booking is always in the future
+        const nextHour = new Date();
+        nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
+
+        // Map JS getDay() (0 = Sun) to our Mon=0..Sun=6 system
+        const jsDow = nextHour.getDay(); // 0=Sun,1=Mon,...,6=Sat
+        const dayIndex = jsDow === 0 ? 6 : jsDow - 1; // Sun→6, Mon→0, ..., Sat→5
+
+        const timeStr = nextHour.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
         setSelectedSlot({
             day: dayIndex,
-            time: '09:00 AM',
+            time: timeStr,
             trainerId: (selectedTrainerId === 'all' || selectedTrainerId === 'my') ? null : selectedTrainerId,
-            date: today
+            date: nextHour
         });
     };
 
@@ -576,10 +587,13 @@ export const CalendarView = () => {
                     setSelectedSession(null);
                 }}
                 onReschedule={(session) => {
+                    // Pass the session date so getTargetDate doesn't default to today,
+                    // which would fail the past-booking check for old sessions.
                     setSelectedSlot({
                         day: session.day,
                         time: session.time,
-                        trainerId: session.trainerId
+                        trainerId: session.trainerId,
+                        date: session.date ? new Date(session.date) : new Date()
                     });
                     // selectedSession stays set so BookingModal knows we are editing
                 }}

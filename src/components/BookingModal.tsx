@@ -141,9 +141,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     };
 
     const getTargetDate = () => {
+        // Determine a base reference date (the week/day to anchor from)
         let baseDate: Date;
-
-        // Use the explicit date passed from the parent component or default to today
         if (selectedSlot?.date) {
             baseDate = new Date(selectedSlot.date);
         } else if (editingSession?.date) {
@@ -152,19 +151,21 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             baseDate = new Date();
         }
 
-        // CRITICAL: Always adjust the baseDate to match the selectedDay index (0-6 starting Mon)
-        // This ensures that if the user changes the day in the dropdown, the date is recalculated
-        const currentDay = baseDate.getDay(); // 0-6 starting Sun
-        const targetDay = (selectedDay + 1) % 7; // Map 0-6 (Mon-Sun) to 0-6 (Sun-Sat)
-        const diff = targetDay - currentDay;
-        
-        // Use a clean calculation that always moves forward to the specified day
-        baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
-        
-        // Return date string in exact local time to prevent UTC drifting (e.g. late evening dates rolling into tomorrow)
-        const offset = baseDate.getTimezoneOffset();
-        const localDate = new Date(baseDate.getTime() - (offset * 60 * 1000));
-        return localDate.toISOString().split('T')[0];
+        // Map our Mon=0..Sun=6 selectedDay index to JS Sun=0..Sat=6
+        const targetJsDay = (selectedDay + 1) % 7; // Mon→1, Tue→2, ..., Sun→0
+        const baseJsDay = baseDate.getDay();        // 0=Sun,1=Mon,...,6=Sat
+        let diff = targetJsDay - baseJsDay;
+        if (diff < 0) diff += 7; // always move forward, never backward
+
+        // Clone baseDate and shift to target day (preserves any time component)
+        const result = new Date(baseDate);
+        result.setDate(result.getDate() + diff);
+
+        // Return as a local YYYY-MM-DD string (timezone-safe)
+        const y = result.getFullYear();
+        const m = String(result.getMonth() + 1).padStart(2, '0');
+        const d = String(result.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     };
 
     const isAvailable = (trainer: any) => {

@@ -228,10 +228,13 @@ export const ClientDashboardView = () => {
                     setSelectedSession(null);
                 }}
                 onReschedule={(session) => {
+                    // Pass the session date so getTargetDate doesn't default to today,
+                    // which would block the reschedule with a false "past booking" error.
                     setSelectedSlot({
                         day: session.day,
                         time: session.time,
-                        trainerId: session.trainerId
+                        trainerId: session.trainerId,
+                        date: session.date ? new Date(session.date) : new Date()
                     });
                 }}
             />
