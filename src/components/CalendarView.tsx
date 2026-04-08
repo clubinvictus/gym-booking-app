@@ -38,6 +38,26 @@ export const CalendarView = () => {
     const [offDayModalOpen, setOffDayModalOpen] = useState(false);
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
+
+    // Auto-refresh the week reference if the app is left open overnight
+    React.useEffect(() => {
+        const refreshDate = () => {
+            const freshStart = getStartOfWeek(new Date());
+            // Only update if the week start date has actually changed
+            if (freshStart.getTime() !== currentWeekStart.getTime()) {
+                console.log('Week rollover detected, refreshing calendar...');
+                setCurrentWeekStart(freshStart);
+            }
+        };
+
+        window.addEventListener('focus', refreshDate);
+        const interval = setInterval(refreshDate, 60000); // Check every minute as well
+
+        return () => {
+            window.removeEventListener('focus', refreshDate);
+            clearInterval(interval);
+        };
+    }, [currentWeekStart]);
     const { profile, user } = useAuth();
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const confirm = useConfirm();

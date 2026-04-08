@@ -155,11 +155,22 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         const targetJsDay = (selectedDay + 1) % 7; // Mon→1, Tue→2, ..., Sun→0
         const baseJsDay = baseDate.getDay();        // 0=Sun,1=Mon,...,6=Sat
         let diff = targetJsDay - baseJsDay;
-        if (diff < 0) diff += 7; // always move forward, never backward
+        if (diff < 0) diff += 7; // always move forward, never backward (to the closest coming occurrence)
 
         // Clone baseDate and shift to target day (preserves any time component)
         const result = new Date(baseDate);
         result.setDate(result.getDate() + diff);
+
+        // EXTRA SAFETY for non-edits: 
+        // If the resulting date is in the past (e.g. because baseDate was from a stale calendar state from last week),
+        // roll it forward by 7 days until it's at least 'Today'.
+        if (!editingSession) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            while (result < today) {
+                result.setDate(result.getDate() + 7);
+            }
+        }
 
         // Return as a local YYYY-MM-DD string (timezone-safe)
         const y = result.getFullYear();
