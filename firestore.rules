@@ -81,7 +81,7 @@ service cloud.firestore {
     // Rules for 'services'
     match /services/{serviceId} {
       allow read: if isSignedIn();
-      allow write: if isManager() && belongsToSite(request.resource.data);
+      allow write: if isAdmin();
     }
 
     // Rules for 'clients'
@@ -91,27 +91,40 @@ service cloud.firestore {
       allow update, delete: if isManager() && belongsToSite(request.resource.data);
     }
 
+    function getService(serviceId) {
+      return get(/databases/$(database)/documents/services/$(serviceId)).data;
+    }
+
     // Rules for 'sessions'
     match /sessions/{sessionId} {
       allow read: if isSignedIn() && (
         isManager() || 
         (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId) ||
-        (getRole() == 'client' && (resource.data.clientId == request.auth.uid || resource.data.clientId == getUserData().clientId))
+        (getRole() == 'client' && (
+          resource.data.clientId == request.auth.uid || 
+          resource.data.clientId == getUserData().clientId ||
+          (resource.data.clients != null && resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId))
+        ))
       );
       
       allow create: if isSignedIn() && (
         isManager() ||
         (getRole() == 'trainer' && request.resource.data.trainerId == getUserData().trainerId) ||
-        (getRole() == 'client' && (request.resource.data.clientId == request.auth.uid || request.resource.data.clientId == getUserData().clientId) && isValidClientSession(request.resource.data))
+        (getRole() == 'client' && 
+          (request.resource.data.clients != null && request.resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId)) && 
+          isValidClientSession(request.resource.data) &&
+          request.resource.data.clients.size() <= getService(request.resource.data.serviceId).max_capacity
+        )
       );
 
       allow update: if isSignedIn() && (
         isManager() ||
         (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId && request.resource.data.trainerId == getUserData().trainerId) ||
         (getRole() == 'client' && 
-          (resource.data.clientId == request.auth.uid || resource.data.clientId == getUserData().clientId) && 
-          (request.resource.data.clientId == request.auth.uid || request.resource.data.clientId == getUserData().clientId) &&
-          isValidClientSession(request.resource.data)
+          (resource.data.clients != null && resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId)) && 
+          (request.resource.data.clients != null && request.resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId)) &&
+          isValidClientSession(request.resource.data) &&
+          request.resource.data.clients.size() <= getService(request.resource.data.serviceId).max_capacity
         )
       );
 

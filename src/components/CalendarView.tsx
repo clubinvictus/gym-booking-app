@@ -111,6 +111,7 @@ export const CalendarView = () => {
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
+    const { data: services } = useFirestore<any>('services');
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const timeSlots = [
@@ -161,6 +162,13 @@ export const CalendarView = () => {
                 return slotTime >= startTime && slotTime < endTime;
             });
         });
+    };
+
+    const getSessionClientNames = (session: any) => {
+        if (session.clients && Array.isArray(session.clients)) {
+            return session.clients.map((c: any) => c.name).join(', ');
+        }
+        return session.clientName || 'Unknown Client';
     };
 
     const handlePrevWeek = () => {
@@ -492,9 +500,19 @@ export const CalendarView = () => {
                                     return !sessions.some((s: any) => s.id === bs.id);
                                 });
 
-                                const displaySessions = slotSessions.filter((s: any) => !isClient || s.clientName === profile?.name);
+                                 const displaySessions = slotSessions.filter((s: any) => {
+                                    if (!isClient) return true;
+                                    // If user is client, only show if they are in the clients array
+                                    if (s.clients) return s.clients.some((c: any) => c.id === user?.uid || c.id === profile?.clientId);
+                                    return s.clientName === profile?.name;
+                                });
 
-                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && slotSessions.length === 0 && !isBusyByOthers;
+                                // Find service max capacity to check for group room
+                                const firstSession = slotSessions[0];
+                                const activeService = firstSession ? services.find((sv: any) => sv.name === firstSession.serviceName) : null;
+                                const hasRoom = firstSession && activeService && (firstSession.clients?.length || 1) < (activeService.max_capacity || 1);
+
+                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && (slotSessions.length === 0 || hasRoom) && !isBusyByOthers;
                                 const showAsAvailable = selectedTrainerId === 'all' || selectedTrainerId === 'my' || available;
 
                                 let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
@@ -525,32 +543,45 @@ export const CalendarView = () => {
                                             transition: 'all 0.2s ease'
                                         }}
                                     >
-                                        {displaySessions.map((displaySession: any, idx: number) => (
-                                            <div
-                                                key={idx}
-                                                className="session-card"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedSession(displaySession);
-                                                }}
-                                                style={{
-                                                    backgroundColor: '#000',
-                                                    borderRadius: '4px',
-                                                    padding: '8px',
-                                                    color: '#fff',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    cursor: 'pointer',
-                                                    flexShrink: 0
-                                                }}
-                                            >
+                                        {displaySessions.map((displaySession: any, idx: number) => {
+                                            const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
+                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                            
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className="session-card"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedSession(displaySession);
+                                                    }}
+                                                    style={{
+                                                        backgroundColor: '#000',
+                                                        borderRadius: '4px',
+                                                        padding: '8px',
+                                                        color: '#fff',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        cursor: 'pointer',
+                                                        flexShrink: 0,
+                                                        borderLeft: `6px solid ${serviceColor}`
+                                                    }}
+                                                >
                                                 <div>
-                                                    <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>{displaySession.clientName}</div>
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
+                                                        {getSessionClientNames(displaySession)}
+                                                        {displaySession.clients && displaySession.clients.length > 1 && (
+                                                            <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
+                                                                ({displaySession.clients.length})
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{displaySession.serviceName}</div>
                                                 </div>
                                                 <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
                                             </div>
-                                        ))}
+                                        );
+                                        })}
 
                                         {isBusyByOthers && (
                                             <div

@@ -1,4 +1,4 @@
-import { Plus, Clock, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Clock, Edit2, Trash2, User } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { db } from '../firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
@@ -60,13 +60,43 @@ export const ServiceManagement = ({ onAddClick, onEditClick }: ServiceManagement
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '24px' }}>
                 {services.map(service => (
                     <div key={service.id} className="card" style={{ padding: '24px' }}>
-                        <h3 style={{ fontSize: '1.4rem', marginBottom: '16px' }}>{service.name}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                            <div title={service.color || '#000000'} style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                backgroundColor: service.color || '#000000',
+                                border: '2px solid #000',
+                                flexShrink: 0
+                            }} />
+                            <h3 style={{ fontSize: '1.4rem', margin: 0 }}>{service.name}</h3>
+                        </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Clock size={16} className="text-muted" />
                                 <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{service.duration} minutes</span>
                             </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <User size={16} className="text-muted" />
+                                <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Max Capacity: {service.max_capacity || 1}</span>
+                            </div>
+                            {service.allowed_tiers && service.allowed_tiers.length > 0 && (
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                    {service.allowed_tiers.map((tier: string) => (
+                                        <span key={tier} style={{
+                                            background: tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                            color: '#000',
+                                            padding: '4px 8px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 800,
+                                            textTransform: 'uppercase'
+                                        }}>
+                                            {tier.replace('_', ' ')}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div style={{

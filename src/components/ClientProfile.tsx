@@ -17,6 +17,7 @@ interface ClientProfileProps {
         email: string;
         phone: string;
         joined: string;
+        membership_tier?: string;
     };
 }
 
@@ -45,6 +46,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const [countryCode, setCountryCode] = useState(initialPhone.code);
     const [editPhone, setEditPhone] = useState(initialPhone.number);
     const [phoneError, setPhoneError] = useState('');
+    const [editTier, setEditTier] = useState(client.membership_tier || 'limitless');
     const { profile } = useAuth();
 
     const now = new Date();
@@ -116,7 +118,8 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
             await updateDoc(doc(db, 'clients', client.id), {
                 name: editName,
                 email: editEmail,
-                phone: editPhone ? fullPhone : ''
+                phone: editPhone ? fullPhone : '',
+                membership_tier: editTier
             });
             setIsEditing(false);
             setPhoneError('');
@@ -278,6 +281,21 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                                     )}
                                 </div>
                             </div>
+                            <select
+                                value={editTier}
+                                onChange={(e) => setEditTier(e.target.value)}
+                                disabled={profile?.role !== 'admin' && profile?.role !== 'manager'}
+                                style={{
+                                    padding: '8px 12px',
+                                    border: '2px solid #000',
+                                    fontSize: '0.9rem',
+                                    backgroundColor: (profile?.role !== 'admin' && profile?.role !== 'manager') ? '#f5f5f5' : '#fff',
+                                    cursor: (profile?.role !== 'admin' && profile?.role !== 'manager') ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                <option value="limitless">Limitless (1-on-1)</option>
+                                <option value="limitless_open">Limitless Open (Shared)</option>
+                            </select>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button className="button-primary" onClick={handleSaveEdit} style={{ padding: '8px 20px' }}>
                                     Save
@@ -291,6 +309,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                                     setCountryCode(resetPhone.code);
                                     setEditPhone(resetPhone.number);
                                     setPhoneError('');
+                                    setEditTier(client.membership_tier || 'limitless');
                                 }} style={{ padding: '8px 20px' }}>
                                     Cancel
                                 </button>
@@ -298,7 +317,18 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                         </div>
                     ) : (
                         <div>
-                            <h2 style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{client.name}</h2>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                                <h2 style={{ fontSize: '1.8rem', margin: 0 }}>{client.name}</h2>
+                                <span style={{
+                                    background: client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                    color: '#000',
+                                    padding: '4px 10px',
+                                    borderRadius: 0,
+                                    fontSize: '0.75rem',
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase'
+                                }}>{client.membership_tier?.replace('_', ' ') || 'LIMITLESS'}</span>
+                            </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
                                     <Mail size={16} className="text-muted" />

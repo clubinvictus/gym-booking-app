@@ -20,11 +20,27 @@ interface AddServiceModalProps {
     editingService?: any;
 }
 
+const PREDEFINED_COLORS = [
+    '#000000', // Black
+    '#FF3B30', // Red
+    '#FF9500', // Orange
+    '#FFCC00', // Yellow
+    '#34C759', // Green
+    '#5AC8FA', // Light Blue
+    '#007AFF', // Blue
+    '#5856D6', // Purple
+    '#FF2D55', // Pink
+    '#8E8E93'  // Gray
+];
+
 export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddServiceModalProps) => {
     const [name, setName] = useState('');
     const [duration, setDuration] = useState('60');
+    const [color, setColor] = useState('#000000');
     const [assignedTrainerIds, setAssignedTrainerIds] = useState<string[]>([]);
     const [trainers, setTrainers] = useState<any[]>([]);
+    const [maxCapacity, setMaxCapacity] = useState(1);
+    const [allowedTiers, setAllowedTiers] = useState<string[]>(['limitless', 'limitless_open']);
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -39,12 +55,18 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
         if (editingService) {
             setName(editingService.name || '');
             setDuration(editingService.duration?.toString() || '60');
+            setColor(editingService.color || '#000000');
+            setMaxCapacity(editingService.max_capacity || 1);
+            setAllowedTiers(editingService.allowed_tiers || ['limitless', 'limitless_open']);
             // Assuming we store assigned trainers on the service or check trainers' qualified services
             // Let's assume for now we'll handle assignment on the service document
             setAssignedTrainerIds(editingService.assignedTrainerIds || []);
         } else {
             setName('');
             setDuration('60');
+            setColor('#000000');
+            setMaxCapacity(1);
+            setAllowedTiers(['limitless', 'limitless_open']);
             setAssignedTrainerIds([]);
         }
     }, [editingService, isOpen]);
@@ -53,9 +75,18 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
     const handleSubmit = async () => {
         setIsSaving(true);
         try {
+            if (allowedTiers.length === 0) {
+                alert('Please select at least one allowed membership tier.');
+                setIsSaving(false);
+                return;
+            }
+
             const serviceData = {
                 name,
                 duration: parseInt(duration),
+                color,
+                max_capacity: maxCapacity,
+                allowed_tiers: allowedTiers,
                 assignedTrainerIds,
                 siteId: SITE_ID
             };
@@ -94,12 +125,6 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
         } finally {
             setIsSaving(false);
         }
-    };
-
-    const toggleTrainer = (id: string) => {
-        setAssignedTrainerIds(prev =>
-            prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id]
-        );
     };
 
     return (
@@ -156,7 +181,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                         <div>
                             <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>DURATION (MIN)</label>
                             <div style={{ position: 'relative' }}>
@@ -176,32 +201,101 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                 />
                             </div>
                         </div>
+                        
+                        <div style={{ gridColumn: '1 / -1' }}>
+                            <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.9rem' }}>BRAND COLOR</label>
+                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                {PREDEFINED_COLORS.map(c => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        onClick={() => setColor(c)}
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            borderRadius: '50%',
+                                            backgroundColor: c,
+                                            border: color === c ? '3px solid #000' : '2px solid transparent',
+                                            boxShadow: color === c ? '0 0 0 2px #fff inset' : 'none',
+                                            cursor: 'pointer',
+                                            transition: 'transform 0.1s ease',
+                                            transform: color === c ? 'scale(1.1)' : 'scale(1)'
+                                        }}
+                                        title={c}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>MAX CAPACITY</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={maxCapacity}
+                                onChange={(e) => setMaxCapacity(parseInt(e.target.value) || 1)}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    borderRadius: 0,
+                                    border: '2px solid #000',
+                                    fontSize: '1rem',
+                                    fontWeight: 600
+                                }}
+                            />
+                        </div>
                     </div>
 
                     <div>
-                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>ASSIGN TRAINERS</label>
-                        <div style={{
-                            border: '2px solid #000',
-                            borderRadius: '8px',
-                            padding: '12px',
-                            maxHeight: '150px',
-                            overflowY: 'auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                        }}>
+                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>ASSIGNED TRAINERS</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto', border: '2px solid #000', padding: '12px' }}>
                             {trainers.map(t => (
-                                <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                                <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                     <input
                                         type="checkbox"
                                         checked={assignedTrainerIds.includes(t.id)}
-                                        onChange={() => toggleTrainer(t.id)}
-                                        style={{ width: '18px', height: '18px' }}
+                                        onChange={(e) => {
+                                            if (e.target.checked) setAssignedTrainerIds(prev => [...prev, t.id]);
+                                            else setAssignedTrainerIds(prev => prev.filter(id => id !== t.id));
+                                        }}
+                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                                     />
-                                    {t.name}
+                                    <span>{t.name}</span>
                                 </label>
                             ))}
+                            {trainers.length === 0 && <span className="text-muted" style={{ fontSize: '0.9rem' }}>No trainers available.</span>}
                         </div>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>ALLOWED MEMBERSHIP TIERS</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', border: '2px solid #000', padding: '12px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={allowedTiers.includes('limitless')}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setAllowedTiers(prev => [...prev, 'limitless']);
+                                        else setAllowedTiers(prev => prev.filter(t => t !== 'limitless'));
+                                    }}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: 700 }}>Limitless</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={allowedTiers.includes('limitless_open')}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setAllowedTiers(prev => [...prev, 'limitless_open']);
+                                        else setAllowedTiers(prev => prev.filter(t => t !== 'limitless_open'));
+                                    }}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: 700 }}>Limitless Open</span>
+                            </label>
+                        </div>
+                        <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}> Clients can only book this service if their membership tier matches one of the selections above.</p>
                     </div>
 
                     <button

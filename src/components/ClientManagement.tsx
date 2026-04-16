@@ -105,13 +105,23 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                                     <span className="text-muted" style={{ fontSize: '0.8rem' }}>Joined {client.joined}</span>
-                                    <span style={{
-                                        background: '#000',
-                                        color: '#fff',
-                                        padding: '4px 10px',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 700
-                                    }}>Active</span>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span style={{
+                                            background: client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                            color: '#000',
+                                            padding: '4px 10px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 800,
+                                            textTransform: 'uppercase'
+                                        }}>{client.membership_tier?.replace('_', ' ') || 'LIMITLESS'}</span>
+                                        <span style={{
+                                            background: '#000',
+                                            color: '#fff',
+                                            padding: '4px 10px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700
+                                        }}>Active</span>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -122,6 +132,7 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                             <tr style={{ backgroundColor: '#f9f9f9' }}>
                                 <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Client Name</th>
                                 <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Contact</th>
+                                <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Tier</th>
                                 <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Joined Date</th>
                                 <th style={{ padding: '16px 24px', fontWeight: 800, fontSize: '0.8rem', color: '#666', textTransform: 'uppercase' }}>Status</th>
                             </tr>
@@ -144,6 +155,17 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                                     <td style={{ padding: '16px 24px', fontSize: '0.9rem' }}>
                                         <div className="text-muted">{client.email}</div>
                                         <div style={{ fontSize: '0.8rem' }}>{client.phone}</div>
+                                    </td>
+                                    <td style={{ padding: '16px 24px' }}>
+                                        <span style={{
+                                            background: client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                            color: '#000',
+                                            padding: '4px 10px',
+                                            borderRadius: 0,
+                                            fontSize: '0.75rem',
+                                            fontWeight: 800,
+                                            textTransform: 'uppercase'
+                                        }}>{client.membership_tier?.replace('_', ' ') || 'LIMITLESS'}</span>
                                     </td>
                                     <td style={{ padding: '16px 24px', fontSize: '0.9rem' }}>{client.joined}</td>
                                     <td style={{ padding: '16px 24px' }}>

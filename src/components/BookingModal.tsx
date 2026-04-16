@@ -213,6 +213,24 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         (excludedTrainerId ? t.id !== excludedTrainerId : true)
     );
 
+    const currentClientName = isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName);
+    const matchingClient = clients?.find((c: any) => c.name === currentClientName);
+    const clientTier = matchingClient?.membership_tier || (isClient ? profile?.membership_tier : 'limitless') || 'limitless';
+
+    const filteredServices = useMemo(() => {
+        if (!isClient) return services;
+        return services.filter(s => {
+            const allowed = s.allowed_tiers || ['limitless', 'limitless_open'];
+            return allowed.includes(clientTier);
+        });
+    }, [services, isClient, clientTier]);
+
+    const currentServiceName = selectedService || editingSession?.serviceName;
+    const matchingService = services?.find((s: any) => s.name === currentServiceName);
+    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open'];
+
+    const isTierRestricted = !!(currentServiceName && currentClientName && !allowedTiersForService.includes(clientTier));
+
     useEffect(() => {
         if (selectedTrainer && !availableTrainers.find(t => t.name === selectedTrainer)) {
             setSelectedTrainer('');
@@ -256,6 +274,12 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             return;
         }
 
+        if (isTierRestricted) {
+            alert('Unauthorized Service Tier');
+            setIsSubmitting(false);
+            return;
+        }
+
         try {
             // --- Trainer double-booking check ---
             if (!editingSession && selectedTrainer) {
@@ -265,19 +289,28 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     // Non-admins (clients, trainers) use trainer_busy_slots (no permission to read all sessions).
                     const conflictCollection = (!isAdmin) ? 'trainer_busy_slots' : 'sessions';
                     const conflictField = 'trainerId';
-                    const existingSnap = await getDocs(
-                        query(collection(db, conflictCollection), where(conflictField, '==', trainer.id))
-                    );
-                    const existingTimes = new Map<string, boolean>();
-                    existingSnap.forEach(d => {
-                    const s = d.data();
-                    const dateKey = new Date(s.date).toDateString();
-                    existingTimes.set(`${dateKey}|${s.time}`, true);
-                });
+                    const existingSessions = new Map<string, { serviceName: string, count: number, max: number, clients: any[] }>();
+                    
+                    const existingSnap = await getDocs(query(collection(db, conflictCollection), where(conflictField, '==', trainer.id)));
+                    
+                    existingSnap.forEach((d: any) => {
+                        const s = d.data();
+                        const dateKey = new Date(s.date).toDateString();
+                        const service = services.find(sv => sv.name === s.serviceName);
+                        existingSessions.set(`${dateKey}|${s.time}`, {
+                            serviceName: s.serviceName,
+                            count: s.clients?.length || 1,
+                            max: service?.max_capacity || 1,
+                            clients: s.clients || []
+                        });
+                    });
 
-                const conflicts: string[] = [];
-                const conflictKeySet = new Set<string>(); // Only actual clashing dates
-                const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                    const conflicts: string[] = [];
+                    const conflictKeySet = new Set<string>(); // Only actual clashing dates
+                    const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                    const currentClient = clients.find(c => c.name === selectedClient);
+                    const currentClientId = isClient ? (profile?.clientId || user?.uid) : (currentClient?.id || null);
+                    const currentServiceName = selectedService || editingSession?.serviceName;
 
                 if (isRepeating) {
                     // Generate all dates in the series and check each
@@ -298,9 +331,19 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                         while (currentDate <= endDate) {
                             const key = `${currentDate.toDateString()}|${selectedTime}`;
-                            if (existingTimes.has(key)) {
+                            const sessionInfo = existingSessions.get(key);
+                            
+                            let hasConflict = false;
+                            if (sessionInfo) {
+                                // Conflict if different service OR capacity reached OR client already in session
+                                if (sessionInfo.serviceName !== currentServiceName) hasConflict = true;
+                                else if (sessionInfo.count >= sessionInfo.max) hasConflict = true;
+                                else if (sessionInfo.clients.some(c => c.id === currentClientId)) hasConflict = true;
+                            }
+
+                            if (hasConflict) {
                                 conflicts.push(currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + selectedTime);
-                                conflictKeySet.add(key); // Only add the dates that actually clash
+                                conflictKeySet.add(key);
                             }
                             currentDate.setDate(currentDate.getDate() + 7);
                         }
@@ -312,7 +355,16 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     const diff = targetDay - currentDay;
                     baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
                     const key = `${baseDate.toDateString()}|${selectedTime}`;
-                    if (existingTimes.has(key)) {
+                    const sessionInfo = existingSessions.get(key);
+
+                    let hasConflict = false;
+                    if (sessionInfo) {
+                        if (sessionInfo.serviceName !== currentServiceName) hasConflict = true;
+                        else if (sessionInfo.count >= sessionInfo.max) hasConflict = true;
+                        else if (sessionInfo.clients.some(c => c.id === currentClientId)) hasConflict = true;
+                    }
+
+                    if (hasConflict) {
                         conflicts.push(baseDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + selectedTime);
                         conflictKeySet.add(key);
                     }
@@ -371,9 +423,18 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             const trainer = trainers.find(t => t.name === selectedTrainer);
             const service = services.find(s => s.name === (selectedService || editingSession?.serviceName));
 
+            const clientObj = {
+                id: isClient ? (profile?.clientId || user?.uid) : (client?.id || null),
+                name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
+                email: isClient ? profile?.email : (client?.email || null)
+            };
+
+            const clientIds = [clientObj.id].filter(Boolean);
+
             return {
-                clientName: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
-                clientId: isClient ? (profile?.clientId || user?.uid) : (client?.id || null),
+                clients: [clientObj],
+                clientIds,
+                clientId: clientObj.id || null, // legacy support
                 trainerName: selectedTrainer,
                 trainerId: trainer?.id || null,
                 serviceName: selectedService || editingSession?.serviceName,
@@ -458,23 +519,29 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     // Step 2: Recreate from start date with new days
                     const trainer = trainers.find((t: any) => t.name === selectedTrainer);
                     const service = services.find((s: any) => s.name === (selectedService || editingSession?.serviceName));
-                    const newSeriesData = (date: Date, dayIdx: number) => ({
-                        clientName: editingSession.clientName,
-                        clientId: editingSession.clientId,
-                        trainerName: selectedTrainer,
-                        trainerId: trainer?.id || editingSession.trainerId,
-                        serviceName: selectedService || editingSession.serviceName,
-                        serviceId: service?.id || editingSession.serviceId,
-                        time: selectedTime,
-                        day: dayIdx,
-                        date: date.toISOString(),
-                        status: 'Scheduled',
-                        siteId: SITE_ID,
-                        seriesId: editingSession.seriesId,
-                        recurringDetails: newRecurringDetails,
-                        createdAt: new Date().toISOString(),
-                        createdBy: profile?.name || 'Unknown User'
-                    });
+                    const newSeriesData = (date: Date, dayIdx: number) => {
+                        const currentClientIds = [editingSession.clientId].filter(Boolean);
+                        
+                        return {
+                            clientName: editingSession.clientName,
+                            clientId: editingSession.clientId,
+                            clientIds: currentClientIds,
+                            clients: editingSession.clients || [{ id: editingSession.clientId, name: editingSession.clientName }],
+                            trainerName: selectedTrainer,
+                            trainerId: trainer?.id || editingSession.trainerId,
+                            serviceName: selectedService || editingSession.serviceName,
+                            serviceId: service?.id || editingSession.serviceId,
+                            time: selectedTime,
+                            day: dayIdx,
+                            date: date.toISOString(),
+                            status: 'Scheduled',
+                            siteId: SITE_ID,
+                            seriesId: editingSession.seriesId,
+                            recurringDetails: newRecurringDetails,
+                            createdAt: new Date().toISOString(),
+                            createdBy: profile?.name || 'Unknown User'
+                        };
+                    };
 
                     let sessionBatch = writeBatch(db);
                     let opCount = 0;
@@ -527,6 +594,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                 // Admin/managers: always weekly, 2 years out
                 // Clients: max 14 days
+                // Admin/managers: always weekly, 2 years out
+                // Clients: max 14 days
                 const endDate = isClient
                     ? getClientMaxDate()
                     : new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
@@ -535,6 +604,27 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 const effectiveFrequency = isAdmin ? 'weekly' : repeatFrequency;
 
                 console.log(`[BOOKING] Recurring: freq=${effectiveFrequency}, endDate=${endDate.toISOString()}, selectedDays=${JSON.stringify(selectedDays)}`);
+
+                const trainer = trainers.find((t: any) => t.name === selectedTrainer);
+                const currentServiceName = selectedService || editingSession?.serviceName;
+                const activeService = services.find((sv: any) => sv.name === currentServiceName);
+                const currentClient = clients.find(c => c.name === selectedClient);
+                const clientObj = {
+                    id: isClient ? (profile?.clientId || user?.uid) : (currentClient?.id || null),
+                    name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
+                    email: isClient ? profile?.email : (currentClient?.email || null)
+                };
+
+                // Fetch ALL existing sessions for this trainer to handle group appends
+                const existingSnap = await getDocs(
+                    query(collection(db, 'sessions'), where('trainerId', '==', trainer?.id))
+                );
+                const existingMap = new Map<string, { id: string, clients: any[], serviceName: string }>();
+                existingSnap.forEach(d => {
+                    const data = d.data();
+                    const key = `${new Date(data.date).toDateString()}|${data.time}`;
+                    existingMap.set(key, { id: d.id, clients: data.clients || [], serviceName: data.serviceName });
+                });
 
                 const getSeriesData = (date: Date, dayIdx: number) => ({
                     ...getBookingData(date, dayIdx),
@@ -553,20 +643,44 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     }
                 };
 
+                const processDate = async (currentDate: Date, dayIdx: number) => {
+                    const key = `${currentDate.toDateString()}|${selectedTime}`;
+                    const existing = existingMap.get(key);
+
+                    if (existing) {
+                        // If same service and has room, append
+                        if (existing.serviceName === currentServiceName && existing.clients.length < (activeService?.max_capacity || 1)) {
+                            // Only append if not already there
+                            if (!existing.clients.some((c: any) => c.id === clientObj.id)) {
+                                sessionBatch.update(doc(db, 'sessions', existing.id), {
+                                    clients: [...existing.clients, clientObj]
+                                });
+                                opCount++;
+                            }
+                        }
+                        // Otherwise skip (clash logic already handled or we just don't overwrite)
+                    } else {
+                        // Create new
+                        sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), dayIdx));
+                        opCount++;
+                    }
+                    await commitIfFull();
+                };
+
                 if (effectiveFrequency === 'daily') {
                     let currentDate = new Date(baseDate);
-
                     const todayStart = new Date();
                     todayStart.setHours(0, 0, 0, 0);
-                    if (currentDate < todayStart) {
-                        currentDate = new Date(todayStart);
-                    }
+                    if (currentDate < todayStart) currentDate = new Date(todayStart);
 
                     while (currentDate <= endDate) {
                         const sessDay = (currentDate.getDay() + 6) % 7;
-                        sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), sessDay));
-                        opCount++;
-                        await commitIfFull();
+                        const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
+                        const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
+                        
+                        if (!skipKeys || !skipKeys.has(skipKey)) {
+                            await processDate(new Date(currentDate), sessDay);
+                        }
                         currentDate.setDate(currentDate.getDate() + 1);
                     }
                 } else {
@@ -581,41 +695,74 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         if (diff < 0) diff += 7;
                         currentDate.setDate(currentDate.getDate() + diff);
 
-                        // Ensure recurring series starts on or after today
-                        if (currentDate < todayStart) {
-                            currentDate.setDate(currentDate.getDate() + 7);
-                        }
+                        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
 
                         while (currentDate <= endDate) {
                             const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
                             const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
                             if (!skipKeys || !skipKeys.has(skipKey)) {
-                                sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), dayIdx));
-                                opCount++;
-                                await commitIfFull();
+                                await processDate(new Date(currentDate), dayIdx);
                             }
                             currentDate.setDate(currentDate.getDate() + 7);
                         }
                     }
                 }
                 if (opCount > 0) await sessionBatch.commit();
-                console.log(`[BOOKING] Created ${opCount} recurring sessions`);
-                if (opCount === 0) {
-                    alert(`No sessions were created. Please check your selected days and end date.`);
-                    setIsSubmitting(false);
-                    return;
-                }
                 await logActivity('booked', getBookingData(baseDate, selectedDay), recurringDetails);
-
             } else {
                 // Single booking
                 const currentDay = baseDate.getDay();
                 const targetDay = (selectedDay + 1) % 7;
                 const diff = targetDay - currentDay;
                 baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+                const dateIso = baseDate.toISOString();
+                const trainer = trainers.find(t => t.name === selectedTrainer);
+                
+                // --- Group Booking / Capacity Logic ---
+                const q = query(
+                    collection(db, 'sessions'),
+                    where('trainerId', '==', trainer?.id),
+                    where('date', '==', dateIso),
+                    where('time', '==', selectedTime)
+                );
+                const existingSnap = await getDocs(q);
                 const bookingData = getBookingData(baseDate, selectedDay);
-                await addDoc(collection(db, 'sessions'), bookingData);
-                await logActivity('booked', bookingData);
+                const clientObj = bookingData.clients[0];
+
+                if (!existingSnap.empty) {
+                    const sessionDoc = existingSnap.docs[0];
+                    const sessionData = sessionDoc.data();
+                    const service = services.find(s => s.id === sessionData.serviceId);
+                    
+                    if (sessionData.clients && sessionData.clients.length >= (service?.max_capacity || 1)) {
+                        alert('This trainer is at maximum capacity for this slot.');
+                        setIsSubmitting(false);
+                        return;
+                    }
+
+                    // Check if client is already in the session
+                    const isAlreadyBooked = sessionData.clients && sessionData.clients.some((c: any) => c.id === clientObj.id);
+                    if (isAlreadyBooked) {
+                        alert('This client is already booked for this session.');
+                        setIsSubmitting(false);
+                        return;
+                    }
+
+                    // Append client to existing session
+                    const newClients = [...(sessionData.clients || []), clientObj];
+                    const newClientIds = Array.from(new Set(newClients.map(c => c.id))).filter(Boolean);
+
+                    await updateDoc(sessionDoc.ref, {
+                        clients: newClients,
+                        clientIds: newClientIds,
+                        clientId: newClientIds[0] // maintain first client as legacy root field
+                    });
+                    await logActivity('booked', bookingData);
+                } else {
+                    // Create new single session
+                    await addDoc(collection(db, 'sessions'), bookingData);
+                    await logActivity('booked', bookingData);
+                }
             }
             
             setIsSubmitting(false);
@@ -628,6 +775,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             setIsSubmitting(false);
         }
     };
+
+    const isSubmitDisabled = (availableTrainers.length === 0 && !editingSession) || isSubmitting || isTierRestricted;
 
     return (
         <>
@@ -800,7 +949,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                     }}
                                 >
                                     <option value="">Select service</option>
-                                    {services.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                    {filteredServices.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -1059,15 +1208,23 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             paddingBottom: '4px',
                             marginTop: '12px',
                         }}>
+                            {isTierRestricted && (
+                                <div style={{ background: '#fff5f5', padding: '12px', border: '1px solid #ffcccc', marginBottom: '16px' }}>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#cc0000' }}>
+                                        The selected service is restricted to <strong>{allowedTiersForService.map((t: string) => t.replace('_', ' ')).join(' or ')}</strong> tiers. 
+                                        This client is on the <strong>{clientTier.replace('_', ' ')}</strong> tier.
+                                    </p>
+                                </div>
+                            )}
                             <button
                                 type="submit"
                                 className="button-primary"
-                                disabled={(availableTrainers.length === 0 && !editingSession) || isSubmitting}
+                                disabled={isSubmitDisabled}
                                 style={{
                                     width: '100%',
                                     padding: '16px',
-                                    opacity: ((availableTrainers.length === 0 && !editingSession) || isSubmitting) ? 0.5 : 1,
-                                    cursor: isSubmitting ? 'wait' : 'pointer'
+                                    opacity: isSubmitDisabled ? 0.5 : 1,
+                                    cursor: isSubmitDisabled ? (isSubmitting ? 'wait' : 'not-allowed') : 'pointer'
                                 }}
                             >
                                 {isSubmitting ? 'Processing...' : `Confirm ${editingSession ? 'Changes' : 'Booking'}`}

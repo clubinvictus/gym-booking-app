@@ -12,7 +12,7 @@ export const ClientDashboardView = () => {
     // We need both the profile and user to be loaded to have the correct client IDs
     const clientIds = [user?.uid, profile?.clientId].filter(Boolean);
     
-    // Calculate today's date at midnight for filtering
+    // Calculate today's local midnight and convert to ISO for consistent backend filtering
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayISO = today.toISOString();
@@ -20,7 +20,7 @@ export const ClientDashboardView = () => {
     const { data: sessions, loading: sessionsLoading } = useFirestore<any>(
         'sessions', 
         clientIds.length > 0 ? [
-            where('clientId', 'in', clientIds),
+            where('clientIds', 'array-contains-any', clientIds),
             where('date', '>=', todayISO),
             orderBy('date', 'asc')
         ] : [],

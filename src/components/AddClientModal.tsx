@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, User, Mail, Phone } from 'lucide-react';
+import { useAuth } from '../AuthContext';
 
 interface AddClientModalProps {
     isOpen: boolean;
@@ -13,6 +14,8 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) 
     const [countryCode, setCountryCode] = useState('+91');
     const [phone, setPhone] = useState('');
     const [phoneError, setPhoneError] = useState('');
+    const [membershipTier, setMembershipTier] = useState('limitless');
+    const { profile } = useAuth();
 
     if (!isOpen) return null;
 
@@ -31,6 +34,7 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) 
             name,
             email,
             phone: fullPhone,
+            membership_tier: membershipTier,
             joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         });
 
@@ -40,6 +44,7 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) 
         setPhone('');
         setCountryCode('+91');
         setPhoneError('');
+        setMembershipTier('limitless');
     };
 
     return (
@@ -170,6 +175,31 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) 
                                 )}
                             </div>
                         </div>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>MEMBERSHIP TIER</label>
+                        <select
+                            value={membershipTier}
+                            onChange={(e) => setMembershipTier(e.target.value)}
+                            disabled={profile?.role !== 'admin' && profile?.role !== 'manager'}
+                            style={{
+                                width: '100%',
+                                padding: '12px',
+                                borderRadius: 0,
+                                border: '2px solid #000',
+                                fontSize: '1rem',
+                                fontWeight: 600,
+                                backgroundColor: (profile?.role !== 'admin' && profile?.role !== 'manager') ? '#f5f5f5' : '#fff',
+                                cursor: (profile?.role !== 'admin' && profile?.role !== 'manager') ? 'not-allowed' : 'pointer'
+                            }}
+                        >
+                            <option value="limitless">Limitless (1-on-1)</option>
+                            <option value="limitless_open">Limitless Open (Shared)</option>
+                        </select>
+                        <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>
+                            {membershipTier === 'limitless' ? 'Standard premium membership.' : 'Open tier membership with extended access.'}
+                        </p>
                     </div>
 
                     <button

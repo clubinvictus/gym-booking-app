@@ -112,6 +112,7 @@ export const LoginPage = () => {
                         name: clientName,
                         email: normalizedEmail,
                         phone: '', 
+                        membership_tier: 'limitless',
                         joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                         status: 'Active',
                         siteId: SITE_ID,
@@ -127,6 +128,7 @@ export const LoginPage = () => {
                     name: clientName,
                     clientId: clientId,
                     phone: clientQuerySnapshot.empty ? '' : (clientQuerySnapshot.docs[0].data().phone || ''),
+                    membership_tier: 'limitless',
                     siteId: SITE_ID
                 });
             }

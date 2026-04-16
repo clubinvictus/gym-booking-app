@@ -40,11 +40,13 @@ function App() {
               <Route path="/clients" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="clients" /></ProtectedRoute>} />
               <Route path="/activity" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="activity" /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="settings" /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'manager']}><Dashboard view="dashboard" /></ProtectedRoute>} />
 
               {/* Client/General Routes */}
               <Route path="/calendar" element={<ProtectedRoute><Dashboard view="calendar" /></ProtectedRoute>} />
 
               <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </Router>
         </AuthProvider>

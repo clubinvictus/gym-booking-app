@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, RefreshCw } from 'lucide-react';
 import { db } from '../firebase';
-import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc } from 'firebase/firestore';
+import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
 import { SITE_ID } from '../constants';
@@ -21,6 +21,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const [deleteScope, setDeleteScope] = useState<'single' | 'future'>('single');
     const { profile } = useAuth();
     const isTrainer = profile?.role === 'trainer';
+    const [targetClientId, setTargetClientId] = useState<string | undefined>(undefined);
 
     // Reset state when modal opens/closes or session changes
     useEffect(() => {
@@ -33,16 +34,17 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
 
     if (!isOpen || !session) return null;
 
-    const confirmDelete = async () => {
+    const confirmDelete = async (clientId?: string) => {
         setIsProcessing(true);
 
-        const logActivity = async (isRecurring: boolean) => {
+        const logActivity = async (isRecurring: boolean, removedClientId?: string) => {
             try {
+                const removedClient = session.clients?.find((c: any) => c.id === removedClientId);
                 await addDoc(collection(db, 'activity_logs'), {
                     action: 'cancelled',
                     isRecurring,
                     sessionDetails: {
-                        clientName: session.clientName,
+                        clientName: removedClientId ? (removedClient?.name || 'Unknown') : (session.clients?.[0]?.name || session.clientName),
                         trainerName: session.trainerName,
                         serviceName: session.serviceName,
                         date: session.date,
@@ -65,45 +67,59 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
         if (deleteScope === 'future' && session.seriesId) {
             try {
                 const batch = writeBatch(db);
+                // For recurring, we'll keep the logic simple for now: delete the documents
+                // In a multi-client world, this might need refinement (e.g. only remove THIS client from the documents)
                 const baseQueries: any[] = [where('seriesId', '==', session.seriesId)];
                 
-                // If it's a client, they MUST include their clientId in the query or Firestore rules will reject it
-                if (profile?.role === 'client') {
-                    baseQueries.push(where('clientId', '==', session.clientId));
-                }
-
-                // We omit the date >= filter from the query to avoid needing a new composite index (clientId + seriesId + date).
-                // Instead, we filter the dates in memory below.
                 const q = query(collection(db, 'sessions'), ...baseQueries);
                 
                 const snapshot = await getDocs(q);
                 snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => {
                     const docData = docSnap.data();
-                    // In-memory date filter
                     if (docData.date >= session.date) {
-                        batch.delete(docSnap.ref);
+                        // If multi-client, just remove THIS client from all future docs
+                        if (clientId) {
+                            const updatedClients = (docData.clients || []).filter((c: any) => c.id !== clientId);
+                            if (updatedClients.length === 0) {
+                                batch.delete(docSnap.ref);
+                            } else {
+                                const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean);
+                                batch.update(docSnap.ref, { 
+                                    clients: updatedClients,
+                                    clientIds: newClientIds,
+                                    clientId: newClientIds[0] || null
+                                });
+                            }
+                        } else {
+                            batch.delete(docSnap.ref);
+                        }
                     }
                 });
                 await batch.commit();
 
-                // Success
-                await logActivity(true);
+                await logActivity(true, clientId);
                 onDelete(session.id);
                 onClose();
             } catch (err: any) {
                 console.error('Error deleting series:', err);
-                if (err.message && err.message.includes('requires an index')) {
-                    alert('System Error: Missing database index. The admin needs to create a composite index in Firebase Console.');
-                } else {
-                    alert('Failed to delete series. Please try again.');
-                }
+                alert('Failed to delete series. Please try again.');
                 setIsProcessing(false);
             }
         } else {
-            // Single delete
+            // Single delete/removal
             try {
-                await deleteDoc(doc(db, 'sessions', session.id));
-                await logActivity(false);
+                if (clientId && session.clients && session.clients.length > 1) {
+                    const updatedClients = session.clients.filter((c: any) => c.id !== clientId);
+                    const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean);
+                    await updateDoc(doc(db, 'sessions', session.id), { 
+                        clients: updatedClients,
+                        clientIds: newClientIds,
+                        clientId: newClientIds[0] || null
+                    });
+                } else {
+                    await deleteDoc(doc(db, 'sessions', session.id));
+                }
+                await logActivity(false, clientId);
                 onDelete(session.id);
                 onClose();
             } catch (err: any) {
@@ -209,7 +225,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                     });
 
                                     if (confirmed) {
-                                        await confirmDelete();
+                                        await confirmDelete(targetClientId);
                                     }
                                 }}
                                 style={{
@@ -236,13 +252,33 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                         <p className="text-muted" style={{ marginBottom: '32px' }}>Review or modify this booking</p>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '40px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                                 <div style={{ width: '40px', height: '40px', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <User size={20} />
                                 </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#999', textTransform: 'uppercase' }}>Client</label>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{session.clientName}</div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#999', textTransform: 'uppercase', marginBottom: '8px' }}>Clients</label>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {Array.isArray(session.clients) ? session.clients.map((c: any) => (
+                                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f9f9f9', padding: '10px 14px', border: '1px solid #eee' }}>
+                                                <span style={{ fontSize: '1rem', fontWeight: 800 }}>{c.name}</span>
+                                                {!isTrainer && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setTargetClientId(c.id);
+                                                            setIsDeleting(true);
+                                                        }}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4444', padding: '4px' }}
+                                                        title="Remove client"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )) : (
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{session.clientName || 'Unknown Client'}</div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
