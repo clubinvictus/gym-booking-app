@@ -1,54 +1,30 @@
 import { useState } from 'react';
-import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
-import { Calendar, Clock, Briefcase } from 'lucide-react';
+import { useSessions } from '../hooks/useSessions';
+import { Calendar, Clock, Briefcase, Plus } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
-import { where, orderBy } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 
 export const ClientDashboardView = () => {
     const { profile, user, loading: authLoading } = useAuth();
     
-    // We need both the profile and user to be loaded to have the correct client IDs
-    const clientIds = [user?.uid, profile?.clientId].filter(Boolean);
-    
-    // Calculate today's local midnight and convert to ISO for consistent backend filtering
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayISO = today.toISOString();
-
-    const { data: sessions, loading: sessionsLoading } = useFirestore<any>(
-        'sessions', 
-        clientIds.length > 0 ? [
-            where('clientIds', 'array-contains-any', clientIds),
-            where('date', '>=', todayISO),
-            orderBy('date', 'asc')
-        ] : [],
-        clientIds.length === 0 || authLoading
-    );
+    const { sessions, loading: sessionsLoading, hasMore, loadMore } = useSessions({
+        role: profile?.role as any,
+        userId: user?.uid || '',
+        pageSize: 10
+    });
 
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
-    const [visibleCount, setVisibleCount] = useState(10);
+
     const isLoading = authLoading || sessionsLoading;
 
-    // Filter to only the client's own sessions using UID (backup sort for safety)
-    const upcomingSessions = [...(sessions || [])]
-        .filter(s => s && s.date)
-        .sort((a, b) => {
-            try {
-                const timeA = new Date(a.date).getTime();
-                const timeB = new Date(b.date).getTime();
-                return timeA - timeB;
-            } catch (e) {
-                return 0;
-            }
-        });
+    // Sessions are already filtered (endTime > now) and sorted (startTime ASC) by the hook
+    const displayedSessions = sessions;
 
-    const displayedSessions = upcomingSessions.slice(0, visibleCount);
-
-    const formatSessionDate = (dateString: string) => {
-        const d = new Date(dateString);
+    const formatSessionDate = (session: any) => {
+        const d = session.startTime?.toDate ? session.startTime.toDate() : new Date(session.date);
         return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
     };
 
@@ -171,7 +147,7 @@ export const ClientDashboardView = () => {
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Calendar size={window.innerWidth <= 768 ? 16 : 20} className="text-muted" />
-                                <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.2rem' }}>{formatSessionDate(session.date)}</span>
+                                <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.2rem' }}>{formatSessionDate(session)}</span>
                             </div>
                         </div>
 
@@ -193,13 +169,22 @@ export const ClientDashboardView = () => {
                     </div>
                 )}
 
-                {visibleCount < upcomingSessions.length && (
+                {hasMore && (
                     <button
-                        onClick={() => setVisibleCount(prev => prev + 10)}
+                        onClick={loadMore}
+                        disabled={sessionsLoading}
                         className="button-secondary"
-                        style={{ marginTop: '16px', width: '100%', padding: '16px', fontSize: '1rem', border: '3px solid #000' }}
+                        style={{ 
+                            marginTop: '16px', 
+                            width: '100%', 
+                            padding: '16px', 
+                            fontSize: '1rem', 
+                            border: '3px solid #000',
+                            opacity: sessionsLoading ? 0.5 : 1,
+                            cursor: sessionsLoading ? 'not-allowed' : 'pointer'
+                        }}
                     >
-                        LOAD MORE SESSIONS
+                        {sessionsLoading ? 'LOADING MORE...' : 'LOAD MORE SESSIONS'}
                     </button>
                 )}
             </div>

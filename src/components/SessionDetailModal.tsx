@@ -78,47 +78,49 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                     const docData = docSnap.data();
                     if (docData.date >= session.date) {
                         // If multi-client, just remove THIS client from all future docs
-                        if (clientId) {
-                            const updatedClients = (docData.clients || []).filter((c: any) => c.id !== clientId);
-                            if (updatedClients.length === 0) {
-                                batch.delete(docSnap.ref);
-                            } else {
-                                const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean);
-                                batch.update(docSnap.ref, { 
-                                    clients: updatedClients,
-                                    clientIds: newClientIds,
-                                    clientId: newClientIds[0] || null
-                                });
+                                if (clientId) {
+                                    const updatedClients = (docData.clients || []).filter((c: any) => c.id !== clientId);
+                                    if (updatedClients.length === 0) {
+                                        batch.delete(docSnap.ref);
+                                    } else {
+                                        const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
+                                        batch.update(docSnap.ref, { 
+                                            clients: updatedClients,
+                                            clientIds: newClientIds, // legacy
+                                            client_ids: newClientIds, // new standard
+                                            clientId: newClientIds[0] || null
+                                        });
+                                    }
+                                } else {
+                                    batch.delete(docSnap.ref);
+                                }
                             }
-                        } else {
-                            batch.delete(docSnap.ref);
-                        }
+                        });
+                        await batch.commit();
+        
+                        await logActivity(true, clientId);
+                        onDelete(session.id);
+                        onClose();
+                    } catch (err: any) {
+                        console.error('Error deleting series:', err);
+                        alert('Failed to delete series. Please try again.');
+                        setIsProcessing(false);
                     }
-                });
-                await batch.commit();
-
-                await logActivity(true, clientId);
-                onDelete(session.id);
-                onClose();
-            } catch (err: any) {
-                console.error('Error deleting series:', err);
-                alert('Failed to delete series. Please try again.');
-                setIsProcessing(false);
-            }
-        } else {
-            // Single delete/removal
-            try {
-                if (clientId && session.clients && session.clients.length > 1) {
-                    const updatedClients = session.clients.filter((c: any) => c.id !== clientId);
-                    const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean);
-                    await updateDoc(doc(db, 'sessions', session.id), { 
-                        clients: updatedClients,
-                        clientIds: newClientIds,
-                        clientId: newClientIds[0] || null
-                    });
                 } else {
-                    await deleteDoc(doc(db, 'sessions', session.id));
-                }
+                    // Single delete/removal
+                    try {
+                        if (clientId && session.clients && session.clients.length > 1) {
+                            const updatedClients = session.clients.filter((c: any) => c.id !== clientId);
+                            const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
+                            await updateDoc(doc(db, 'sessions', session.id), { 
+                                clients: updatedClients,
+                                clientIds: newClientIds, // legacy
+                                client_ids: newClientIds, // new standard
+                                clientId: newClientIds[0] || null
+                            });
+                        } else {
+                            await deleteDoc(doc(db, 'sessions', session.id));
+                        }
                 await logActivity(false, clientId);
                 onDelete(session.id);
                 onClose();
@@ -262,7 +264,14 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                         {Array.isArray(session.clients) ? session.clients.map((c: any) => (
                                             <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f9f9f9', padding: '10px 14px', border: '1px solid #eee' }}>
                                                 <span style={{ fontSize: '1rem', fontWeight: 800 }}>{c.name}</span>
-                                                {!isTrainer && (
+                                                {/* 
+                                                    Conditional Deletion Toggle:
+                                                    1. Hide for Clients (they use the main buttons)
+                                                    2. Hide for Admins/Managers if only 1 client exists (they use main DELETE)
+                                                    3. Show for Admins/Managers if 2+ clients exist (allows partial removal)
+                                                */}
+                                                {(profile?.role === 'admin' || profile?.role === 'manager') && 
+                                                 (Array.isArray(session.client_ids) ? session.client_ids.length > 1 : (session.clients?.length > 1)) && (
                                                     <button 
                                                         onClick={() => {
                                                             setTargetClientId(c.id);

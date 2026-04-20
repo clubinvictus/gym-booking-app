@@ -375,3 +375,184 @@ exports.onSessionWritten = functions.firestore
 
         return null;
     });
+
+/**
+ * processTrialBooking: Secure backend flow for lead-generation trials.
+ * 1. Creates Firebase Auth user.
+ * 2. Executes Firestore transaction for Client, Session, and Activity Log.
+ * 3. Triggers WhatsApp webhooks on success.
+ * 4. Rolls back Auth if the transaction fails.
+ */
+exports.processTrialBooking = functions.region('us-central1').https.onCall(async (data, context) => {
+    const { 
+        name, 
+        email, 
+        phone, 
+        password, 
+        slot, 
+        service, 
+        siteId 
+    } = data;
+
+    if (!email || !password || !name) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    let authUser = null;
+
+    try {
+        // 1. Auth Creation
+        try {
+            authUser = await admin.auth().createUser({
+                email: normalizedEmail,
+                password: password,
+                displayName: name
+            });
+        } catch (authErr) {
+            if (authErr.code === 'auth/email-already-in-use') {
+                throw new functions.https.HttpsError('already-exists', 'Looks like you already have an account! Please log in to book your session.');
+            }
+            throw authErr;
+        }
+
+        // 2. Database Transaction
+        const result = await db.runTransaction(async (transaction) => {
+            // --- DATA PARSING FOR DASHBOARD VISIBILITY ---
+            const [hours, minutes] = slot.time.split(':').map(Number);
+            const startDate = new Date(slot.date);
+            startDate.setHours(hours, minutes, 0, 0);
+            
+            const endDate = new Date(startDate);
+            endDate.setMinutes(endDate.getMinutes() + 60);
+
+            const startTime = admin.firestore.Timestamp.fromDate(startDate);
+            const endTime = admin.firestore.Timestamp.fromDate(endDate);
+
+            const userRef = db.collection('users').doc(authUser.uid);
+            const clientRef = db.collection('clients').doc();
+            const sessionRef = db.collection('sessions').doc();
+            const activityRef = db.collection('activity_logs').doc();
+
+            // a. User Profile (Private)
+            transaction.set(userRef, {
+                email: normalizedEmail,
+                role: 'client',
+                name: name,
+                clientId: clientRef.id,
+                phone: phone,
+                membership_tier: 'lead',
+                siteId: siteId || 'default',
+                createdAt: new Date().toISOString()
+            });
+
+            // b. Client Record (Public/Admin)
+            transaction.set(clientRef, {
+                uid: authUser.uid, // ADDED: Critical for Client Dashboard lookup
+                name: name,
+                email: normalizedEmail,
+                phone: phone,
+                membership_tier: 'lead',
+                joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                status: 'Active',
+                siteId: siteId || 'default',
+                createdAt: new Date().toISOString()
+            });
+
+            // c. Trial Session
+            transaction.set(sessionRef, {
+                clients: [{
+                    id: clientRef.id,
+                    name: name,
+                    email: normalizedEmail
+                }],
+                client_ids: [clientRef.id], // UPDATED: Changed from clientIds to client_ids
+                uids: [authUser.uid], // ADDED: Mirror UID for secure rules lookup
+                clientId: clientRef.id, // Legacy support
+                clientName: name, // Legacy support
+                trainerId: slot.trainerId,
+                trainerName: slot.trainerName,
+                serviceId: service.id,
+                serviceName: service.name,
+                startTime: startTime, // ADDED: Native Timestamp for Calendar views
+                endTime: endTime,     // ADDED: Native Timestamp for Calendar views
+                time: slot.time,      // Kept for backward compatibility/reference
+                day: slot.day,
+                date: slot.date,
+                status: 'pending',
+                type: 'Trial',
+                isTrial: true,
+                siteId: siteId || 'default',
+                createdAt: new Date().toISOString(),
+                createdBy: 'System (Trial Flow)'
+            });
+
+            // d. Activity Log
+            transaction.set(activityRef, {
+                action: 'booked',
+                sessionDetails: {
+                    clientName: name,
+                    trainerName: slot.trainerName,
+                    serviceName: service.name,
+                    date: slot.date,
+                    time: slot.time
+                },
+                performedBy: {
+                    uid: authUser.uid,
+                    name: name,
+                    role: 'client'
+                },
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                siteId: siteId || 'default',
+                notes: 'New Trial Booked & Account Created'
+            });
+
+            return { clientId: clientRef.id };
+        });
+
+        // 3. Webhook Trigger (WhatsApp)
+        // We do this AFTER the transaction succeeds to ensure data consistency.
+        const vars = {
+            clientName: name,
+            date: new Date(slot.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+            time: slot.time,
+            trainerName: slot.trainerName
+        };
+
+        // Welcome message to client
+        await sendWhatsAppTemplate(phone, "trial_welcome", vars);
+
+        // Alert to Managers
+        const managerPhones = await getManagerPhones();
+        for (const mPhone of managerPhones) {
+            await sendWhatsAppTemplate(mPhone, "manager_trial_alert", vars);
+        }
+
+        return { 
+            success: true, 
+            uid: authUser.uid, 
+            clientId: result.clientId 
+        };
+
+    } catch (error) {
+        console.error('CRITICAL: processTrialBooking execution failed.');
+        console.error('Error Stack:', error.stack);
+        console.error('Error Details:', JSON.stringify(error));
+
+        // 4. Rollback Auth if Firestore transaction failed
+        if (authUser) {
+            try {
+                await admin.auth().deleteUser(authUser.uid);
+                console.log('Successfully rolled back Auth user after failed transaction.');
+            } catch (deleteError) {
+                console.error('Failed to cleanup Auth user during rollback:', deleteError);
+            }
+        }
+
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        
+        throw new functions.https.HttpsError('internal', `Backend error: ${error.message || 'Unknown failure'}`);
+    }
+});

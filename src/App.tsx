@@ -4,6 +4,7 @@ import { Dashboard } from './components/Dashboard';
 import { AuthProvider, useAuth } from './AuthContext';
 import { ConfirmProvider } from './ConfirmContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { TrialBookingPage } from './TrialBookingPage';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, profile, loading } = useAuth();
@@ -32,6 +33,7 @@ function App() {
           <Router>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/book-trial" element={<TrialBookingPage />} />
 
               {/* Admin/Trainer/Client Routes */}
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard view="dashboard" /></ProtectedRoute>} />

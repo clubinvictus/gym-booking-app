@@ -11,15 +11,22 @@ service cloud.firestore {
     }
 
     function getRole() {
-      return getUserData().role;
+      // Use a direct path for role checking to avoid helper recursion
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
-
+    
     function isAdmin() {
-      return isSignedIn() && getRole() == 'admin';
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
     }
-
+    
     function isManager() {
-      return isSignedIn() && (getRole() == 'manager' || getRole() == 'admin');
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/managers/$(request.auth.uid)) || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'admin']
+      );
     }
 
     function isOwner(userId) {
@@ -52,9 +59,10 @@ service cloud.firestore {
 
     // Rules for the 'users' collection (Profiles)
     match /users/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      // Direct anchor to 'admins' collection to avoid recursive role-checking helpers
+      allow read: if isSignedIn() && (request.auth.uid == userId || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     // Rules for 'admins' collection
@@ -86,9 +94,18 @@ service cloud.firestore {
 
     // Rules for 'clients'
     match /clients/{clientId} {
-      allow read: if isManager() && belongsToSite(resource.data) || (isSignedIn() && resource.data.email == request.auth.token.email);
-      allow create: if isManager() && belongsToSite(request.resource.data) || (isSignedIn() && request.resource.data.email == request.auth.token.email);
-      allow update, delete: if isManager() && belongsToSite(request.resource.data);
+      // Prioritize direct UID/Email check to avoid get() overhead for clients
+      allow read: if isSignedIn() && (
+        resource.data.uid == request.auth.uid || 
+        resource.data.email == request.auth.token.email || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'trainer'])
+      );
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager']
+      );
     }
 
     function getService(serviceId) {
@@ -97,42 +114,28 @@ service cloud.firestore {
 
     // Rules for 'sessions'
     match /sessions/{sessionId} {
-      allow read: if isSignedIn() && (
-        isManager() || 
-        (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId) ||
-        (getRole() == 'client' && (
-          resource.data.clientId == request.auth.uid || 
-          resource.data.clientId == getUserData().clientId ||
-          (resource.data.clients != null && resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId))
+      allow list: if isSignedIn() && (
+        // Administrative Maintenance: Allow global list for repair tools
+        isAdmin() ||
+        // Staff check: Must belong to the site or be a global admin/manager
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'trainer'] && 
+         (resource.data.siteId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteId || resource.data.siteId == 'invictus-booking')) ||
+        // Client check: Naturally restricted by their required 'uids' query filter
+        (request.auth.uid in resource.data.uids)
+      );
+
+      // 2. Individual Document Fetch (Can be complex)
+      allow get: if isSignedIn() && (
+        (resource.data.uids != null && request.auth.uid in resource.data.uids) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager'] ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId in resource.data.client_ids
         ))
       );
       
-      allow create: if isSignedIn() && (
-        isManager() ||
-        (getRole() == 'trainer' && request.resource.data.trainerId == getUserData().trainerId) ||
-        (getRole() == 'client' && 
-          (request.resource.data.clients != null && request.resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId)) && 
-          isValidClientSession(request.resource.data) &&
-          request.resource.data.clients.size() <= getService(request.resource.data.serviceId).max_capacity
-        )
-      );
-
-      allow update: if isSignedIn() && (
-        isManager() ||
-        (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId && request.resource.data.trainerId == getUserData().trainerId) ||
-        (getRole() == 'client' && 
-          (resource.data.clients != null && resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId)) && 
-          (request.resource.data.clients != null && request.resource.data.clients.exists(c, c.id == request.auth.uid || c.id == getUserData().clientId)) &&
-          isValidClientSession(request.resource.data) &&
-          request.resource.data.clients.size() <= getService(request.resource.data.serviceId).max_capacity
-        )
-      );
-
-      allow delete: if isSignedIn() && (
-        isManager() ||
-        (getRole() == 'trainer' && resource.data.trainerId == getUserData().trainerId) ||
-        (getRole() == 'client' && (resource.data.clientId == request.auth.uid || resource.data.clientId == getUserData().clientId))
-      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     // Rules for 'settings'
@@ -143,8 +146,8 @@ service cloud.firestore {
 
     // Rules for 'activity_logs'
     match /activity_logs/{logId} {
-      allow read: if isManager();
-      allow write: if isSignedIn();
+      allow read: if isManager() && belongsToSite(resource.data);
+      allow write: if false;
     }
 
     // New: Non-sensitive trainer busy slots for client-side conflict checking

@@ -7,6 +7,7 @@ import { db } from '../firebase';
 import { doc, updateDoc, writeBatch, collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
+import { useSessions } from '../hooks/useSessions';
 import { SITE_ID } from '../constants';
 
 interface ClientProfileProps {
@@ -23,8 +24,28 @@ interface ClientProfileProps {
 
 export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const confirm = useConfirm();
-    const { data: sessions } = useFirestore<any>('sessions');
+    const { user, profile } = useAuth();
     const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
+
+    // Fetch upcoming sessions (onlyUpcoming: true by default)
+    const { sessions: upcomingSessions, loading: upcomingLoading } = useSessions({
+        role: profile?.role as any,
+        userId: user?.uid || '',
+        clientId: client.id,
+        pageSize: 50 // Enough for the profile view
+    });
+
+    // Fetch past sessions (includePast: true)
+    const { sessions: pastSessions, loading: pastLoading } = useSessions({
+        role: profile?.role as any,
+        userId: user?.uid || '',
+        clientId: client.id,
+        includePast: true,
+        pageSize: 50
+    });
+
+    // Helper to get all sessions for stats (union of both)
+    const allSessions = [...upcomingSessions, ...pastSessions];
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [editingSession, setEditingSession] = useState<any>(null);
     const getInitialPhone = (phone: string | undefined) => {
@@ -47,21 +68,9 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const [editPhone, setEditPhone] = useState(initialPhone.number);
     const [phoneError, setPhoneError] = useState('');
     const [editTier, setEditTier] = useState(client.membership_tier || 'limitless');
-    const { profile } = useAuth();
-
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    // Filter sessions for this client
-    const clientSessions = sessions.filter(s => s.clientName === client.name);
-    const upcomingSessions = clientSessions
-        .filter(s => new Date(s.date) >= today)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const pastSessions = clientSessions
-        .filter(s => new Date(s.date) < today)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const displaySessions = tab === 'upcoming' ? upcomingSessions : pastSessions;
+    const isLoading = tab === 'upcoming' ? upcomingLoading : pastLoading;
 
     const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
@@ -95,13 +104,13 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const { monday, sunday } = getWeekRange();
     const { start: monthStart, end: monthEnd } = getMonthRange();
 
-    const sessionsThisWeek = clientSessions.filter(s => {
-        const d = new Date(s.date);
+    const sessionsThisWeek = allSessions.filter(s => {
+        const d = s.startTime?.toDate ? s.startTime.toDate() : new Date(s.date);
         return d >= monday && d <= sunday;
     });
 
-    const sessionsThisMonth = clientSessions.filter(s => {
-        const d = new Date(s.date);
+    const sessionsThisMonth = allSessions.filter(s => {
+        const d = s.startTime?.toDate ? s.startTime.toDate() : new Date(s.date);
         return d >= monthStart && d <= monthEnd;
     });
 
@@ -295,6 +304,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                             >
                                 <option value="limitless">Limitless (1-on-1)</option>
                                 <option value="limitless_open">Limitless Open (Shared)</option>
+                                <option value="lead">Lead (Prospect)</option>
                             </select>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button className="button-primary" onClick={handleSaveEdit} style={{ padding: '8px 20px' }}>
@@ -320,13 +330,15 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
                                 <h2 style={{ fontSize: '1.8rem', margin: 0 }}>{client.name}</h2>
                                 <span style={{
-                                    background: client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
-                                    color: '#000',
+                                    background: client.membership_tier === 'lead' ? '#f5f5f5' : 
+                                               (client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0'),
+                                    color: client.membership_tier === 'lead' ? '#999' : '#000',
                                     padding: '4px 10px',
                                     borderRadius: 0,
                                     fontSize: '0.75rem',
                                     fontWeight: 800,
-                                    textTransform: 'uppercase'
+                                    textTransform: 'uppercase',
+                                    border: client.membership_tier === 'lead' ? '1px solid #ccc' : 'none'
                                 }}>{client.membership_tier?.replace('_', ' ') || 'LIMITLESS'}</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
@@ -435,7 +447,9 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
 
             {/* Session List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {displaySessions.length > 0 ? displaySessions.map((session) => (
+                {isLoading ? (
+                    <p className="text-muted" style={{ padding: '20px', textAlign: 'center' }}>Loading sessions...</p>
+                ) : displaySessions.length > 0 ? displaySessions.map((session: any) => (
                     <div
                         key={session.id}
                         className="card card-hover"
@@ -462,7 +476,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                             </div>
                             <div>
                                 <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '4px' }}>
-                                    {formatDate(session.date)}
+                                    {session.startTime?.toDate ? session.startTime.toDate().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : session.date}
                                 </div>
                                 <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

@@ -12,6 +12,7 @@ import { TrainerProfile } from './TrainerProfile';
 import { ClientProfile } from './ClientProfile';
 import { ClientDashboardView } from './ClientDashboardView';
 import { ActivityLogView } from './ActivityLogView';
+import { useSessions } from '../hooks/useSessions';
 import { SessionDetailModal } from './SessionDetailModal';
 import { TeamManagement } from './TeamManagement';
 import { AddTrainerModal } from './AddTrainerModal';
@@ -45,7 +46,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [settingsTab, setSettingsTab] = useState('general');
     const [isSeeding, setIsSeeding] = useState(false);
     const [selectedSession, setSelectedSession] = useState<any>(null);
-    const { profile } = useAuth();
+    const { user, profile } = useAuth();
     const navigate = useNavigate();
     const confirm = useConfirm();
 
@@ -73,16 +74,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: clients } = useFirestore<any>('clients');
     
-    // Conditionally fetch sessions based on role to satisfy Firestore rules
-    const sessionConstraints = useMemo(() => {
-        if (isTrainer && profile?.trainerId) {
-            return [where('trainerId', '==', profile.trainerId)];
-        }
-        return [];
-    }, [isTrainer, profile?.trainerId]);
-
-    const shouldSkipSessions = isTrainer && !profile?.trainerId;
-    const { data: sessions } = useFirestore<any>('sessions', sessionConstraints, shouldSkipSessions);
+    // Using the centralized useSessions hook for standardized fetching
+    const { sessions, loading: sessionsLoading } = useSessions({
+        role: profile?.role as any || 'admin',
+        userId: user?.uid || '',
+        trainerId: profile?.trainerId, // Critical: Ensure trainers only fetch their own sessions
+        pageSize: 100 // High limit for dashboard stats/lists
+    });
 
     const handleSeedData = async () => {
         setIsSeeding(true);
@@ -202,16 +200,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 const todayDay = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
-                // Filter sessions according to role
-                const userSessions = (isTrainer && profile?.trainerId)
-                    ? (sessions || []).filter((s: any) => s && s.trainerId === profile.trainerId)
-                    : (sessions || []);
+                // Sessions are already filtered by role and endTime > now by useSessions
+                const userSessions = sessions || [];
 
                 // Today's sessions: match by date OR day-of-week (for recurring)
                 const todaySessions = (userSessions || []).filter((s: any) => {
                     if (!s) return false;
                     
-                    // 1. If date exists, check if it's strictly today (timezone-safe comparison)
                     if (s.date) {
                         try {
                             const sessionDate = new Date(s.date);
@@ -221,21 +216,27 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             return false;
                         }
                     }
-
-                    // 2. Otherwise match by day-of-the-week for recurring sessions
                     return s.day === todayDay;
                 }).sort((a: any, b: any) => {
-                    // Sort sessions chronologically by time
                     if (!a?.time || !b?.time) return 0;
                     try {
                         const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
                         const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
-                        if (isNaN(timeA) || isNaN(timeB)) return 0;
                         return timeA - timeB;
                     } catch (e) {
                         return 0;
                     }
                 });
+
+                // Next Upcoming Sessions (even if not today, to avoid empty dashboard feel)
+                const nextSessions = (userSessions || [])
+                    .filter((s: any) => !todaySessions.find(ts => ts.id === s.id))
+                    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                    .slice(0, 3);
+
+                const myClients = isTrainer ? 
+                    clients.filter((c: any) => c.trainerId === profile?.trainerId).length : 
+                    clients.length;
 
                 return (
                     <div style={{ width: '100%' }}>
@@ -248,19 +249,15 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             gap: '24px'
                         }}>
                             <div>
-                                <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', marginBottom: '8px' }}>Dashboard</h1>
-                                <p className="text-muted">Welcome back, {profile?.name || 'User'}! Here's what's happening Today.</p>
+                                <h1 style={{ 
+                                    fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', 
+                                    marginBottom: '8px',
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '-0.02em'
+                                }}>DASHBOARD</h1>
+                                <p className="text-muted" style={{ fontWeight: 500 }}>WELCOME BACK, {(profile?.name || 'User').toUpperCase()}! HERE'S YOUR SCHEDULE.</p>
                             </div>
-                            {import.meta.env.DEV && isAdmin && !isManager && (
-                                <button
-                                    onClick={handleSeedData}
-                                    className="button-secondary"
-                                    disabled={isSeeding}
-                                    style={{ opacity: isSeeding ? 0.5 : 1, width: window.innerWidth <= 768 ? '100%' : 'auto' }}
-                                >
-                                    {isSeeding ? 'Seeding...' : 'Seed Initial Data'}
-                                </button>
-                            )}
                         </header>
 
                         <div style={{
@@ -269,30 +266,49 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             gap: '24px',
                             marginBottom: '40px'
                         }}>
-                            <StatCard title="Today's Sessions" value={todaySessions.length.toString()} icon={<Calendar size={24} />} />
+                            <StatCard title="TODAY'S SESSIONS" value={todaySessions.length.toString()} icon={<Calendar size={24} />} />
+                            {isTrainer && (
+                                <StatCard title="MY CLIENTS" value={myClients.toString()} icon={<Users size={24} />} />
+                            )}
                             {isAdmin && (
                                 <>
-                                    <StatCard title="Active Trainers" value={trainers.filter((t: any) => t.status === 'Active').length.toString()} icon={<Users size={24} />} />
-                                    <StatCard title="Total Clients" value={clients.length.toString()} icon={<Users size={24} />} />
+                                    <StatCard title="ACTIVE TRAINERS" value={trainers.filter((t: any) => t.status === 'Active').length.toString()} icon={<Users size={24} />} />
+                                    <StatCard title="TOTAL CLIENTS" value={clients.length.toString()} icon={<Users size={24} />} />
                                 </>
                             )}
                         </div>
 
-                        <div className="card" style={{ padding: '32px' }}>
-                            <h2 style={{ marginBottom: '24px' }}>Today's Sessions</h2>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {todaySessions.length > 0 ? todaySessions.map((session: any) => (
-                                    <SessionItem
-                                        key={session.id}
-                                        name={session.clientName}
-                                        type={session.serviceName}
-                                        time={session.time}
-                                        onClick={() => setSelectedSession(session)}
-                                    />
-                                )) : (
-                                    <p className="text-muted">No sessions scheduled for today.</p>
-                                )}
+                        <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 1024 ? '1fr' : '2fr 1fr', gap: '24px' }}>
+                            <div className="card" style={{ padding: '32px' }}>
+                                <h2 style={{ marginBottom: '24px', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase' }}>TODAY'S SESSIONS</h2>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                    {todaySessions.length > 0 ? todaySessions.map((session: any) => (
+                                        <SessionItem
+                                            key={session.id}
+                                            name={session.clientName}
+                                            type={session.serviceName}
+                                            time={session.time}
+                                            onClick={() => setSelectedSession(session)}
+                                        />
+                                    )) : (
+                                        <p className="text-muted" style={{ fontWeight: 500, fontSize: '0.9rem' }}>NO SESSIONS SCHEDULED FOR TODAY.</p>
+                                    )}
+                                </div>
                             </div>
+
+                            {nextSessions.length > 0 && (
+                                <div className="card" style={{ padding: '32px', backgroundColor: '#111' }}>
+                                    <h2 style={{ marginBottom: '24px', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', color: '#fff' }}>UPCOMING SESSIONS</h2>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        {nextSessions.map((session: any) => (
+                                            <div key={session.id} style={{ padding: '12px', borderLeft: '2px solid #fff', backgroundColor: '#000' }}>
+                                                <p style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>{session.clientName}</p>
+                                                <p style={{ fontSize: '0.75rem', color: '#888' }}>{new Date(session.date).toLocaleDateString()} @ {session.time}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -341,7 +357,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         setSelectedTrainerId(null);
                         setSelectedClient(null);
                     }}>
-                        <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={view === 'dashboard'} isOpen={isSidebarOpen} />
+                        <NavItem icon={<LayoutDashboard size={20} />} label="DASHBOARD" active={view === 'dashboard'} isOpen={isSidebarOpen} />
                     </div>
                     <div onClick={() => {
                         window.innerWidth <= 768 && setSidebarOpen(false);
@@ -349,7 +365,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         setSelectedTrainerId(null);
                         setSelectedClient(null);
                     }}>
-                        <NavItem icon={<Calendar size={20} />} label="Calendar" active={view === 'calendar'} isOpen={isSidebarOpen} />
+                        <NavItem icon={<Calendar size={20} />} label="CALENDAR" active={view === 'calendar'} isOpen={isSidebarOpen} />
                     </div>
                     {(isAdmin || isManager) && (
                         <>
@@ -359,7 +375,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 setSelectedTrainerId(null);
                                 setSelectedClient(null);
                             }}>
-                                <NavItem icon={<Users size={20} />} label="Team" active={view === 'team'} isOpen={isSidebarOpen} />
+                                <NavItem icon={<Users size={20} />} label="TEAM" active={view === 'team'} isOpen={isSidebarOpen} />
                             </div>
                             <div onClick={() => {
                                 window.innerWidth <= 768 && setSidebarOpen(false);
@@ -367,7 +383,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 setSelectedTrainerId(null);
                                 setSelectedClient(null);
                             }}>
-                                <NavItem icon={<Briefcase size={20} />} label="Services" active={view === 'services'} isOpen={isSidebarOpen} />
+                                <NavItem icon={<Briefcase size={20} />} label="SERVICES" active={view === 'services'} isOpen={isSidebarOpen} />
                             </div>
                             <div onClick={() => {
                                 window.innerWidth <= 768 && setSidebarOpen(false);
@@ -375,7 +391,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 setSelectedTrainerId(null);
                                 setSelectedClient(null);
                             }}>
-                                <NavItem icon={<Users size={20} />} label="Clients" active={view === 'clients'} isOpen={isSidebarOpen} />
+                                <NavItem icon={<Users size={20} />} label="CLIENTS" active={view === 'clients'} isOpen={isSidebarOpen} />
                             </div>
                             <div onClick={() => {
                                 window.innerWidth <= 768 && setSidebarOpen(false);
@@ -383,21 +399,23 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 setSelectedTrainerId(null);
                                 setSelectedClient(null);
                             }}>
-                                <NavItem icon={<Clock size={20} />} label="Activity Log" active={view === 'activity'} isOpen={isSidebarOpen} />
+                                <NavItem icon={<Clock size={20} />} label="ACTIVITY LOG" active={view === 'activity'} isOpen={isSidebarOpen} />
                             </div>
                         </>
                     )}
                 </nav>
 
                 <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div onClick={() => {
-                        window.innerWidth <= 768 && setSidebarOpen(false);
-                        navigate('/settings');
-                        setSelectedTrainerId(null);
-                        setSelectedClient(null);
-                    }}>
-                        <NavItem icon={<Settings size={20} />} label="Settings" active={view === 'settings'} isOpen={isSidebarOpen} />
-                    </div>
+                    {!isTrainer && (
+                        <div onClick={() => {
+                            window.innerWidth <= 768 && setSidebarOpen(false);
+                            navigate('/settings');
+                            setSelectedTrainerId(null);
+                            setSelectedClient(null);
+                        }}>
+                            <NavItem icon={<Settings size={20} />} label="SETTINGS" active={view === 'settings'} isOpen={isSidebarOpen} />
+                        </div>
+                    )}
                     <button
                         onClick={async () => {
                             await signOut(auth);
@@ -405,7 +423,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         }}
                         style={{ background: 'transparent', border: 'none', padding: 0, width: '100%', textAlign: 'left', color: 'inherit', cursor: 'pointer' }}
                     >
-                        <NavItem icon={<LogOut size={20} />} label="Logout" isOpen={isSidebarOpen} />
+                        <NavItem icon={<LogOut size={20} />} label="LOGOUT" isOpen={isSidebarOpen} />
                     </button>
                 </div>
 

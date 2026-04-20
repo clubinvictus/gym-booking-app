@@ -60,7 +60,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
             setAllowedTiers(editingService.allowed_tiers || ['limitless', 'limitless_open']);
             // Assuming we store assigned trainers on the service or check trainers' qualified services
             // Let's assume for now we'll handle assignment on the service document
-            setAssignedTrainerIds(editingService.assignedTrainerIds || []);
+            setAssignedTrainerIds(editingService.assigned_trainer_ids || []);
         } else {
             setName('');
             setDuration('60');
@@ -87,7 +87,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                 color,
                 max_capacity: maxCapacity,
                 allowed_tiers: allowedTiers,
-                assignedTrainerIds,
+                assigned_trainer_ids: assignedTrainerIds,
                 siteId: SITE_ID
             };
 
@@ -139,27 +139,44 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            backdropFilter: 'blur(4px)'
+            backdropFilter: 'blur(4px)',
+            padding: '20px'
         }}>
             <div className="card" style={{
                 width: '100%',
                 maxWidth: '500px',
-                padding: '32px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
                 position: 'relative',
                 background: '#fff',
-                border: '4px solid #000'
+                border: '4px solid #000',
+                padding: 0 // Remove padding here to allow header/footer to be full width
             }}>
-                <button
-                    onClick={onClose}
-                    style={{ position: 'absolute', right: '20px', top: '20px', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                >
-                    <X size={24} />
-                </button>
+                {/* Header - Fixed */}
+                <div style={{ padding: '32px 32px 16px 32px', borderBottom: '2px solid #eee' }}>
+                    <button
+                        onClick={onClose}
+                        style={{ position: 'absolute', right: '20px', top: '20px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    >
+                        <X size={24} />
+                    </button>
 
-                <h2 style={{ fontSize: '1.8rem', marginBottom: '8px' }}>{editingService ? 'Edit Service' : 'Create Service'}</h2>
-                <p className="text-muted" style={{ marginBottom: '24px' }}>{editingService ? 'Update your service details.' : "Add a new offering to your studio's catalog."}</p>
+                    <h2 style={{ fontSize: '1.8rem', marginBottom: '8px' }}>{editingService ? 'Edit Service' : 'Create Service'}</h2>
+                    <p className="text-muted" style={{ marginBottom: 0, fontSize: '0.9rem' }}>
+                        {editingService ? 'Update your service details.' : "Add a new offering to your studio's catalog."}
+                    </p>
+                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Body - Scrollable */}
+                <div style={{ 
+                    flex: 1, 
+                    overflowY: 'auto', 
+                    padding: '24px 32px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '24px'
+                }}>
                     <div>
                         <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>SERVICE NAME</label>
                         <div style={{ position: 'relative' }}>
@@ -181,7 +198,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
                         <div>
                             <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>DURATION (MIN)</label>
                             <div style={{ position: 'relative' }}>
@@ -199,31 +216,6 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                         fontWeight: 600
                                     }}
                                 />
-                            </div>
-                        </div>
-                        
-                        <div style={{ gridColumn: '1 / -1' }}>
-                            <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.9rem' }}>BRAND COLOR</label>
-                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                                {PREDEFINED_COLORS.map(c => (
-                                    <button
-                                        key={c}
-                                        type="button"
-                                        onClick={() => setColor(c)}
-                                        style={{
-                                            width: '36px',
-                                            height: '36px',
-                                            borderRadius: '50%',
-                                            backgroundColor: c,
-                                            border: color === c ? '3px solid #000' : '2px solid transparent',
-                                            boxShadow: color === c ? '0 0 0 2px #fff inset' : 'none',
-                                            cursor: 'pointer',
-                                            transition: 'transform 0.1s ease',
-                                            transform: color === c ? 'scale(1.1)' : 'scale(1)'
-                                        }}
-                                        title={c}
-                                    />
-                                ))}
                             </div>
                         </div>
 
@@ -245,10 +237,35 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                             />
                         </div>
                     </div>
+                    
+                    <div>
+                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.9rem' }}>BRAND COLOR</label>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            {PREDEFINED_COLORS.map(c => (
+                                <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => setColor(c)}
+                                    style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '50%',
+                                        backgroundColor: c,
+                                        border: color === c ? '3px solid #000' : '2px solid transparent',
+                                        boxShadow: color === c ? '0 0 0 2px #fff inset' : 'none',
+                                        cursor: 'pointer',
+                                        transition: 'transform 0.1s ease',
+                                        transform: color === c ? 'scale(1.1)' : 'scale(1)'
+                                    }}
+                                    title={c}
+                                />
+                            ))}
+                        </div>
+                    </div>
 
                     <div>
                         <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>ASSIGNED TRAINERS</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto', border: '2px solid #000', padding: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', border: '2px solid #000', padding: '12px', maxHeight: '160px', overflowY: 'auto' }}>
                             {trainers.map(t => (
                                 <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                     <input
@@ -260,17 +277,17 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                         }}
                                         style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                                     />
-                                    <span>{t.name}</span>
+                                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{t.name}</span>
                                 </label>
                             ))}
-                            {trainers.length === 0 && <span className="text-muted" style={{ fontSize: '0.9rem' }}>No trainers available.</span>}
+                            {trainers.length === 0 && <span className="text-muted" style={{ fontSize: '0.85rem' }}>No trainers available.</span>}
                         </div>
                     </div>
 
                     <div>
-                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>ALLOWED MEMBERSHIP TIERS</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', border: '2px solid #000', padding: '12px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>MEMBERSHIP ACCESS</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', border: '2px solid #000', padding: '12px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
                                 <input
                                     type="checkbox"
                                     checked={allowedTiers.includes('limitless')}
@@ -278,11 +295,11 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                         if (e.target.checked) setAllowedTiers(prev => [...prev, 'limitless']);
                                         else setAllowedTiers(prev => prev.filter(t => t !== 'limitless'));
                                     }}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                                 />
                                 <span style={{ fontWeight: 700 }}>Limitless</span>
                             </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
                                 <input
                                     type="checkbox"
                                     checked={allowedTiers.includes('limitless_open')}
@@ -290,21 +307,35 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                         if (e.target.checked) setAllowedTiers(prev => [...prev, 'limitless_open']);
                                         else setAllowedTiers(prev => prev.filter(t => t !== 'limitless_open'));
                                     }}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                                 />
                                 <span style={{ fontWeight: 700 }}>Limitless Open</span>
                             </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', background: '#f5f5f5', padding: '4px', margin: '-4px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={allowedTiers.includes('lead')}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setAllowedTiers(prev => [...prev, 'lead']);
+                                        else setAllowedTiers(prev => prev.filter(t => t !== 'lead'));
+                                    }}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: 700 }}>Lead (Trial Prospect)</span>
+                            </label>
                         </div>
-                        <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}> Clients can only book this service if their membership tier matches one of the selections above.</p>
                     </div>
+                </div>
 
+                {/* Footer - Fixed */}
+                <div style={{ padding: '24px 32px', borderTop: '2px solid #eee', background: '#fafafa' }}>
                     <button
                         className="button-primary"
-                        style={{ marginTop: '12px', width: '100%', padding: '16px' }}
+                        style={{ width: '100%', padding: '18px', fontWeight: 900, fontSize: '1rem', letterSpacing: '1px' }}
                         onClick={handleSubmit}
                         disabled={isSaving}
                     >
-                        {isSaving ? 'Saving...' : (editingService ? 'Save Changes' : 'Create Service')}
+                        {isSaving ? 'SAVING...' : (editingService ? 'UPDATE SERVICE' : 'CREATE SERVICE')}
                     </button>
                 </div>
             </div>

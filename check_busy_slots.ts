@@ -1,21 +1,35 @@
+import { 
+    collection, 
+    getDocs, 
+    query, 
+    where
+} from 'firebase/firestore';
 import { db } from './src/firebase';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
-import { SITE_ID } from './src/constants';
 
-async function checkBusySlots() {
-  const q = query(
-    collection(db, 'trainer_busy_slots'),
-    where('siteId', '==', SITE_ID),
-    limit(5)
-  );
-  
-  const snapshot = await getDocs(q);
-  console.log(`Found ${snapshot.size} busy slots for SITE_ID: ${SITE_ID}`);
-  
-  snapshot.forEach(doc => {
-    console.log('Doc ID:', doc.id);
-    console.log('Data:', JSON.stringify(doc.data(), null, 2));
-  });
+async function auditDates() {
+    console.log('--- Auditing Session Dates ---');
+    const sessionsSnap = await getDocs(collection(db, 'sessions'));
+    const dateCounts: Record<string, number> = {};
+    const siteCounts: Record<string, number> = {};
+    const trainerCounts: Record<string, number> = {};
+
+    sessionsSnap.forEach(doc => {
+        const data = doc.data();
+        // Extract Year-Month
+        const dateStr = data.date || '';
+        const month = dateStr.substring(0, 7); // "YYYY-MM"
+        dateCounts[month] = (dateCounts[month] || 0) + 1;
+
+        const site = data.siteId || 'MISSING';
+        siteCounts[site] = (siteCounts[site] || 0) + 1;
+
+        const trainer = data.trainerId || 'MISSING';
+        trainerCounts[trainer] = (trainerCounts[trainer] || 0) + 1;
+    });
+
+    console.log('Sessions per Month:', dateCounts);
+    console.log('Sessions per Site:', siteCounts);
+    console.log('Sessions per Trainer:', trainerCounts);
 }
 
-checkBusySlots().catch(console.error);
+auditDates();

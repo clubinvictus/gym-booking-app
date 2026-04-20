@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '../firebase';
-import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
 import { SITE_ID } from '../constants';
 import { useFirestore } from '../hooks/useFirestore';
@@ -426,19 +426,36 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             const clientObj = {
                 id: isClient ? (profile?.clientId || user?.uid) : (client?.id || null),
                 name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
-                email: isClient ? profile?.email : (client?.email || null)
+                email: isClient ? profile?.email : (client?.email || null),
+                uid: isClient ? user?.uid : (client?.uid || null)
             };
 
-            const clientIds = [clientObj.id].filter(Boolean);
+            const clientIdList = [clientObj.id].filter(Boolean) as string[];
+            const uidList = [clientObj.uid].filter(Boolean) as string[];
+
+            // --- STANDARDIZED TIMESTAMPS ---
+            const startDate = new Date(date);
+            const [timePart, modifier] = selectedTime.split(' ');
+            let [hours, minutes] = timePart.split(':').map(Number);
+            if (modifier === 'PM' && hours !== 12) hours += 12;
+            if (modifier === 'AM' && hours === 12) hours = 0;
+            startDate.setHours(hours, minutes, 0, 0);
+
+            const endDate = new Date(startDate);
+            endDate.setMinutes(endDate.getMinutes() + 60);
 
             return {
                 clients: [clientObj],
-                clientIds,
-                clientId: clientObj.id || null, // legacy support
+                clientIds: clientIdList, // legacy
+                client_ids: clientIdList, // new standard
+                uids: uidList, // ADDED: Mirror UID for secure rules lookup
+                clientId: clientObj.id || null, // legacy support root
                 trainerName: selectedTrainer,
                 trainerId: trainer?.id || null,
                 serviceName: selectedService || editingSession?.serviceName,
                 serviceId: service?.id || null,
+                startTime: Timestamp.fromDate(startDate), // NEW: Native Timestamp
+                endTime: Timestamp.fromDate(endDate),     // NEW: Native Timestamp
                 time: selectedTime,
                 day: dayIdx,
                 date: date.toISOString(),
@@ -520,17 +537,31 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     const trainer = trainers.find((t: any) => t.name === selectedTrainer);
                     const service = services.find((s: any) => s.name === (selectedService || editingSession?.serviceName));
                     const newSeriesData = (date: Date, dayIdx: number) => {
-                        const currentClientIds = [editingSession.clientId].filter(Boolean);
+                        const currentClientIds = [editingSession.clientId].filter(Boolean) as string[];
                         
+                        // --- STANDARDIZED TIMESTAMPS ---
+                        const startDate = new Date(date);
+                        const [timePart, modifier] = selectedTime.split(' ');
+                        let [hours, minutes] = timePart.split(':').map(Number);
+                        if (modifier === 'PM' && hours !== 12) hours += 12;
+                        if (modifier === 'AM' && hours === 12) hours = 0;
+                        startDate.setHours(hours, minutes, 0, 0);
+
+                        const endDate = new Date(startDate);
+                        endDate.setMinutes(endDate.getMinutes() + 60);
+
                         return {
                             clientName: editingSession.clientName,
                             clientId: editingSession.clientId,
-                            clientIds: currentClientIds,
+                            clientIds: currentClientIds, // legacy
+                            client_ids: currentClientIds, // new standard
                             clients: editingSession.clients || [{ id: editingSession.clientId, name: editingSession.clientName }],
                             trainerName: selectedTrainer,
                             trainerId: trainer?.id || editingSession.trainerId,
                             serviceName: selectedService || editingSession.serviceName,
                             serviceId: service?.id || editingSession.serviceId,
+                            startTime: Timestamp.fromDate(startDate), // NEW
+                            endTime: Timestamp.fromDate(endDate),     // NEW
                             time: selectedTime,
                             day: dayIdx,
                             date: date.toISOString(),
@@ -653,7 +684,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             // Only append if not already there
                             if (!existing.clients.some((c: any) => c.id === clientObj.id)) {
                                 sessionBatch.update(doc(db, 'sessions', existing.id), {
-                                    clients: [...existing.clients, clientObj]
+                                    clients: [...existing.clients, clientObj],
+                                    client_ids: Array.from(new Set([...existing.clients.map((c: any) => c.id), clientObj.id])).filter(Boolean)
                                 });
                                 opCount++;
                             }
@@ -754,7 +786,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                     await updateDoc(sessionDoc.ref, {
                         clients: newClients,
-                        clientIds: newClientIds,
+                        clientIds: newClientIds, // legacy
+                        client_ids: newClientIds, // new standard
                         clientId: newClientIds[0] // maintain first client as legacy root field
                     });
                     await logActivity('booked', bookingData);

@@ -3,6 +3,7 @@ import { ArrowLeft, User, Mail, Calendar, Star, Edit2, Trash2, AlertTriangle, Ph
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { useSessions } from '../hooks/useSessions';
 
 interface TrainerProfileProps {
     onBack: () => void;
@@ -18,8 +19,15 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
     const [editRole, setEditRole] = useState(trainer.role || 'trainer');
     const [editPhone, setEditPhone] = useState(trainer.phone || '');
     const [phoneError, setPhoneError] = useState('');
-    const { profile } = useAuth();
+    const { user, profile } = useAuth();
     const isManager = profile?.role === 'manager';
+
+    const { sessions, loading: sessionsLoading } = useSessions({
+        role: profile?.role as any,
+        userId: user?.uid || '',
+        trainerId: trainer.id,
+        pageSize: 10
+    });
 
     const handleSaveEdit = async () => {
         // E.164 basic validation
@@ -313,27 +321,35 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                     <div className="card" style={{ padding: '32px' }}>
                         <h3 style={{ fontSize: '1.5rem', marginBottom: '24px' }}>Upcoming Sessions</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '16px',
-                                background: '#f9f9f9',
-                                borderRadius: 0,
-                                border: '2px solid #f0f0f0'
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                    <Calendar size={20} />
-                                    <div>
-                                        <h4 style={{ fontWeight: 700 }}>Emma Watson</h4>
-                                        <p style={{ fontSize: '0.8rem' }} className="text-muted">Personal Training</p>
+                            {sessionsLoading ? (
+                                <p className="text-muted">Loading sessions...</p>
+                            ) : sessions.length > 0 ? sessions.map((session: any) => (
+                                <div key={session.id} style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '16px',
+                                    background: '#f9f9f9',
+                                    borderRadius: 0,
+                                    border: '2px solid #f0f0f0'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        <Calendar size={20} />
+                                        <div>
+                                            <h4 style={{ fontWeight: 700 }}>{session.clientName}</h4>
+                                            <p style={{ fontSize: '0.8rem' }} className="text-muted">{session.serviceName}</p>
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ background: '#000', color: '#fff', padding: '6px 12px', borderRadius: 0, fontSize: '0.75rem', fontWeight: 700 }}>
+                                            {session.startTime?.toDate ? session.startTime.toDate().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : session.date}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, marginTop: '4px' }}>{session.time}</div>
                                     </div>
                                 </div>
-                                <div style={{ background: '#000', color: '#fff', padding: '6px 12px', borderRadius: 0, fontSize: '0.8rem', fontWeight: 700 }}>
-                                    Today, 4:00 PM
-                                </div>
-                            </div>
-                            {/* More items... */}
+                            )) : (
+                                <p className="text-muted">No upcoming sessions scheduled.</p>
+                            )}
                         </div>
                     </div>
                 </div>

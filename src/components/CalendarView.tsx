@@ -6,6 +6,7 @@ import { OffDayModal } from './OffDayModal';
 import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
+import { useSessions } from '../hooks/useSessions';
 import { useConfirm } from '../ConfirmContext';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
@@ -62,6 +63,7 @@ export const CalendarView = () => {
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const confirm = useConfirm();
     const isAdmin = profile?.role === 'admin';
+    const isManager = profile?.role === 'manager';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
 
@@ -82,32 +84,31 @@ export const CalendarView = () => {
         return nextWeekStart > limitDate;
     })();
 
-    // Auto-filter for trainers (moved after user state initialization)
-    React.useEffect(() => {
-        if (isTrainer && profile?.trainerId) {
-            setSelectedTrainerId(profile.trainerId);
-        }
-    }, [isTrainer, profile]);
+    // Removed auto-filter that restricted trainers to only see their own sessions.
+    // Following user request for "one source of truth," staff should see all sessions by default.
 
-    // Fetch live sessions, trainers, and off-days
-    // Clients only fetch their own sessions to avoid permission errors
-    const clientIds = useMemo(() => 
-        isClient ? [user?.uid, profile?.clientId].filter(Boolean) : [],
-        [isClient, user?.uid, profile?.clientId]
-    );
-    
-    const sessionConstraints = useMemo(() => {
-        if (isClient) {
-            return clientIds.length > 0 ? [where('clientId', 'in', clientIds)] : [];
-        }
-        if (isTrainer && profile?.trainerId) {
-            return [where('trainerId', '==', profile.trainerId)];
-        }
-        return [];
-    }, [isClient, isTrainer, clientIds, profile?.trainerId]);
+    // Calculate start and end of visible week for optimized fetching
+    const { weekStartDate, weekEndDate } = useMemo(() => {
+        const start = new Date(currentWeekStart);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(currentWeekStart);
+        end.setDate(end.getDate() + 7);
+        end.setHours(23, 59, 59, 999);
+        return { weekStartDate: start, weekEndDate: end };
+    }, [currentWeekStart]);
 
-    const shouldSkipSessions = (isClient && clientIds.length === 0) || (isTrainer && !profile?.trainerId);
-    const { data: sessions } = useFirestore<any>('sessions', sessionConstraints, shouldSkipSessions);
+    // Use centralized session hook with range filtering
+    const { sessions, loading: sessionsLoading } = useSessions({
+        role: profile?.role as any || 'admin',
+        userId: user?.uid || '',
+        startDate: weekStartDate,
+        endDate: weekEndDate,
+        includePast: true,
+        pageSize: 200, // Enough to cover a busy week
+        // Pass trainerId if specifically filtering the view (except for 'all' which handles itself in-service)
+        trainerId: (isAdmin || isManager || isTrainer) && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
+                  (isTrainer && selectedTrainerId === 'my' ? profile?.trainerId : undefined)
+    });
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
@@ -470,21 +471,36 @@ export const CalendarView = () => {
                                 const weekEndMs = weekEndDate.setHours(0, 0, 0, 0);
 
                                 const slotSessions = sessions.filter((s: any) => {
-                                    // Primary match: day-of-week and time
-                                    if (s.day !== dayIndex || s.time !== time) return false;
+                                    // 1. Primary Match: Native Timestamp visibility
+                                    if (s.startTime) {
+                                        const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
+                                        // Compare local date strings to match day-of-month
+                                        if (start.toDateString() !== slotDate.toDateString()) return false;
+                                        
+                                        // Compare formatted time string (e.g. "09:00 AM")
+                                        const sessionTimeStr = start.toLocaleTimeString('en-US', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true
+                                        }).replace(/\u202F/g, ' ');
+                                        if (sessionTimeStr !== time) return false;
+                                    } else {
+                                        // 2. Legacy Match: dayIndex and time string
+                                        if (s.day !== dayIndex || s.time !== time) return false;
 
-                                    // Week guard: only show sessions that belong to this displayed week
-                                    if (s.date) {
-                                        const sessionMs = new Date(s.date).getTime();
-                                        if (sessionMs < weekStartMs || sessionMs >= weekEndMs) return false;
+                                        // Week guard: only show sessions that belong to this displayed week
+                                        if (s.date) {
+                                            const sessionMs = new Date(s.date).getTime();
+                                            if (sessionMs < weekStartMs || sessionMs >= weekEndMs) return false;
+                                        }
                                     }
 
                                     if (selectedTrainerId === 'all' || selectedTrainerId === 'my') return true;
                                     return s.trainerId === selectedTrainerId;
                                 });
 
-                                // Find if this slot is busy for the selected trainer
-                                const isBusyByOthers = (isClient || isTrainer) && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' && busySlots.some((bs: any) => {
+                                // Find if this slot is busy for the selected trainer (PRIVACY VIEW FOR CLIENTS)
+                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' && busySlots.some((bs: any) => {
                                     if (bs.trainerId !== selectedTrainerId || bs.time !== time) return false;
                                     
                                     // Compare dates timezone-safely by checking if they fall on the same local date
@@ -502,9 +518,10 @@ export const CalendarView = () => {
 
                                  const displaySessions = slotSessions.filter((s: any) => {
                                     if (!isClient) return true;
-                                    // If user is client, only show if they are in the clients array
-                                    if (s.clients) return s.clients.some((c: any) => c.id === user?.uid || c.id === profile?.clientId);
-                                    return s.clientName === profile?.name;
+                                    // SUPPORT BOTH: client_ids (new array) and clients (legacy object array) or clientId (legacy root)
+                                    if (s.client_ids) return s.client_ids.some((cid: string) => clientIds.includes(cid));
+                                    if (s.clients) return s.clients.some((c: any) => clientIds.includes(c.id));
+                                    return clientIds.includes(s.clientId);
                                 });
 
                                 // Find service max capacity to check for group room
