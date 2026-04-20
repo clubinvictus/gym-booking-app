@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DocumentSnapshot } from 'firebase/firestore';
 import { subscribeSessions, fetchSessions } from '../services/SessionService';
-import type { Session, FetchSessionsOptions, UserRole } from '../services/SessionService';
+import type { Session, FetchSessionsOptions } from '../services/SessionService';
 
 interface UseSessionsResult {
     sessions: Session[];

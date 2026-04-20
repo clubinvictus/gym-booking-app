@@ -10,7 +10,7 @@ import {
     sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { LogIn, UserPlus } from 'lucide-react';
+import { LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { SITE_ID } from '../constants';
 
 export const LoginPage = () => {
@@ -21,6 +21,7 @@ export const LoginPage = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [resetSent, setResetSent] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
     const determineRoleAndRedirect = async (user: any) => {
@@ -182,6 +183,11 @@ export const LoginPage = () => {
         }
     };
 
+    const toggleMode = () => {
+        setIsSignIn(!isSignIn);
+        setShowPassword(false);
+    };
+
     const handleForgotPassword = async () => {
         if (!email) {
             setError("Please enter your email address first.");
@@ -254,16 +260,16 @@ export const LoginPage = () => {
                     display: 'flex',
                     background: '#f0f0f0',
                     padding: '4px',
-                    borderRadius: 0,
+                    borderRadius: '6px',
                     marginBottom: '32px'
                 }}>
                     <button
-                        onClick={() => setIsSignIn(true)}
+                        onClick={toggleMode}
                         style={{
                             flex: 1,
                             padding: '10px',
                             border: 'none',
-                            borderRadius: 0,
+                            borderRadius: '4px',
                             background: isSignIn ? '#000' : 'transparent',
                             color: isSignIn ? '#fff' : '#000',
                             fontWeight: 800,
@@ -274,12 +280,12 @@ export const LoginPage = () => {
                         SIGN IN
                     </button>
                     <button
-                        onClick={() => setIsSignIn(false)}
+                        onClick={toggleMode}
                         style={{
                             flex: 1,
                             padding: '10px',
                             border: 'none',
-                            borderRadius: 0,
+                            borderRadius: '4px',
                             background: !isSignIn ? '#000' : 'transparent',
                             color: !isSignIn ? '#fff' : '#000',
                             fontWeight: 800,
@@ -316,7 +322,7 @@ export const LoginPage = () => {
                                     width: '100%',
                                     padding: '12px',
                                     border: '2px solid #000',
-                                    borderRadius: 0,
+                                    borderRadius: '6px',
                                     fontSize: '1rem',
                                     fontWeight: 600
                                 }}
@@ -336,7 +342,7 @@ export const LoginPage = () => {
                                 width: '100%',
                                 padding: '12px',
                                 border: '2px solid #000',
-                                borderRadius: 0,
+                                borderRadius: '6px',
                                 fontSize: '1rem',
                                 fontWeight: 600
                             }}
@@ -345,21 +351,44 @@ export const LoginPage = () => {
                     </div>
                     <div>
                         <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.85rem' }}>PASSWORD</label>
-                        <input
-                            type="password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '12px',
-                                border: '2px solid #000',
-                                borderRadius: 0,
-                                fontSize: '1rem',
-                                fontWeight: 600
-                            }}
-                            placeholder="••••••••"
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 48px 12px 12px',
+                                    border: '2px solid #000',
+                                    borderRadius: '6px',
+                                    fontSize: '1rem',
+                                    fontWeight: 600,
+                                    background: '#fff'
+                                }}
+                                placeholder="••••••••"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{
+                                    position: 'absolute',
+                                    right: '12px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: '#000',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '4px'
+                                }}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
                         {isSignIn && (
                             <button
                                 type="button"

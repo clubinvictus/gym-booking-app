@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Moon, User, Layout, Database, Shield, Trash2, Briefcase, Wrench } from 'lucide-react';
+import { Bell, Moon, User, Shield, Briefcase, Wrench } from 'lucide-react';
 import { ServiceManagement } from './ServiceManagement';
 import { healSessions } from '../services/SessionHealer';
 import { purgeAllSessions } from '../services/SessionPurger';
@@ -20,7 +20,6 @@ export const SettingsView = ({ activeTab = 'general', onTabChange, onAddService,
     
     const userRole = (profile?.role || '').toLowerCase();
     const isAdmin = userRole === 'admin';
-    const isManager = userRole === 'manager';
     const isTrainer = userRole === 'trainer';
     const isClient = userRole === 'client';
 

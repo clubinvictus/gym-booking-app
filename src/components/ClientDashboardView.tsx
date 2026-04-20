@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
-import { Calendar, Clock, Briefcase, Plus } from 'lucide-react';
+import { Calendar, Clock, Briefcase } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
-import { Timestamp } from 'firebase/firestore';
 
 export const ClientDashboardView = () => {
     const { profile, user, loading: authLoading } = useAuth();

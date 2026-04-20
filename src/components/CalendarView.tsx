@@ -9,7 +9,7 @@ import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
 import { useConfirm } from '../ConfirmContext';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
 const formatWeekRange = (start: Date) => {
@@ -66,6 +66,13 @@ export const CalendarView = () => {
     const isManager = profile?.role === 'manager';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
+    
+    const clientIds = useMemo(() => {
+        if (!profile) return [];
+        if (profile.clientIds) return profile.clientIds;
+        if (profile.clientId) return [profile.clientId];
+        return [];
+    }, [profile]);
 
     // Set default filter once profile loads
     React.useEffect(() => {
@@ -98,7 +105,7 @@ export const CalendarView = () => {
     }, [currentWeekStart]);
 
     // Use centralized session hook with range filtering
-    const { sessions, loading: sessionsLoading } = useSessions({
+    const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
         startDate: weekStartDate,

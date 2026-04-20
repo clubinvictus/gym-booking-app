@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { ArrowLeft, User, Mail, Phone, Calendar, Clock, Briefcase, Edit2, Trash2 } from 'lucide-react';
-import { useFirestore } from '../hooks/useFirestore';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
 import { db } from '../firebase';
@@ -72,10 +71,6 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const displaySessions = tab === 'upcoming' ? upcomingSessions : pastSessions;
     const isLoading = tab === 'upcoming' ? upcomingLoading : pastLoading;
 
-    const formatDate = (dateStr: string) => {
-        const d = new Date(dateStr);
-        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    };
 
     // Calculate Week Range (Monday - Sunday)
     const getWeekRange = () => {
@@ -105,12 +100,12 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const { start: monthStart, end: monthEnd } = getMonthRange();
 
     const sessionsThisWeek = allSessions.filter(s => {
-        const d = s.startTime?.toDate ? s.startTime.toDate() : new Date(s.date);
+        const d = (s.startTime as any)?.toDate ? (s.startTime as any).toDate() : new Date(s.date);
         return d >= monday && d <= sunday;
     });
 
     const sessionsThisMonth = allSessions.filter(s => {
-        const d = s.startTime?.toDate ? s.startTime.toDate() : new Date(s.date);
+        const d = (s.startTime as any)?.toDate ? (s.startTime as any).toDate() : new Date(s.date);
         return d >= monthStart && d <= monthEnd;
     });
 
@@ -476,7 +471,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                             </div>
                             <div>
                                 <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '4px' }}>
-                                    {session.startTime?.toDate ? session.startTime.toDate().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : session.date}
+                                    {(session.startTime as any)?.toDate ? (session.startTime as any).toDate().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : session.date}
                                 </div>
                                 <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from './CalendarView';
@@ -20,12 +20,11 @@ import { AddManagerModal } from './AddManagerModal';
 import { AddClientModal } from './AddClientModal';
 import { AddServiceModal } from './AddServiceModal';
 import { EditTrainerModal } from './EditTrainerModal';
-import { seedInitialData } from '../seed';
 import { db, auth } from '../firebase';
-import { doc, deleteDoc, addDoc, collection, where } from 'firebase/firestore';
+import { doc, deleteDoc, addDoc, collection } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
-import { useAuth } from '../AuthContext';
 import { signOut } from 'firebase/auth';
+import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
 import { TermsModal } from './TermsModal';
 
@@ -44,7 +43,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [serviceModalOpen, setServiceModalOpen] = useState(false);
     const [selectedService, setSelectedService] = useState<any>(null);
     const [settingsTab, setSettingsTab] = useState('general');
-    const [isSeeding, setIsSeeding] = useState(false);
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const { user, profile } = useAuth();
     const navigate = useNavigate();
@@ -75,25 +73,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { data: clients } = useFirestore<any>('clients');
     
     // Using the centralized useSessions hook for standardized fetching
-    const { sessions, loading: sessionsLoading } = useSessions({
+    const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
         trainerId: profile?.trainerId, // Critical: Ensure trainers only fetch their own sessions
         pageSize: 100 // High limit for dashboard stats/lists
     });
 
-    const handleSeedData = async () => {
-        setIsSeeding(true);
-        try {
-            await seedInitialData();
-            alert('Success: Database seeded with initial trainers, services, and clients.');
-        } catch (error) {
-            console.error(error);
-            alert('Error seeding database. Make sure your Firestore is in Test Mode.');
-        } finally {
-            setIsSeeding(false);
-        }
-    };
 
     const handleClientClick = (client: any) => {
         setSelectedClient(client);
