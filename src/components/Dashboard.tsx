@@ -335,7 +335,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 flexDirection: 'column',
                 padding: '24px 16px',
                 position: 'relative',
-                flexShrink: 0
+                flexShrink: 0,
+                height: '100vh',      /* Fixed sidebar height */
+                overflowY: 'auto',    /* Scroll if menu grows */
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px', padding: '0 8px' }}>
                     <img src="/logo white.png" alt="Invictus" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />

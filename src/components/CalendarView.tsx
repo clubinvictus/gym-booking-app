@@ -413,8 +413,8 @@ export const CalendarView = () => {
                     borderLeft: '2px solid #000',
                     borderRight: '2px solid #000'
                 }}>
-                    {/* Header */}
-                    <div style={{ height: '60px', borderBottom: '2px solid #000' }}></div>
+                    {/* Sticky Day Header Row */}
+                    <div style={{ height: '60px', borderBottom: '2px solid #000', position: 'sticky', top: 0, zIndex: 10, background: '#fff' }}></div>
                     {days.map((day, i) => {
                         const slotDate = new Date(currentWeekStart);
                         slotDate.setDate(slotDate.getDate() + i);
@@ -434,8 +434,11 @@ export const CalendarView = () => {
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     cursor: (isAdmin && selectedTrainerId !== 'all') ? 'pointer' : 'default',
-                                    background: isToday ? '#000' : ((isAdmin && selectedTrainerId !== 'all') ? '#fff' : '#fff'),
+                                    background: isToday ? '#000' : '#fff',
                                     transition: 'background 0.2s',
+                                    position: 'sticky',
+                                    top: 0,
+                                    zIndex: 10,
                                 }}
                                 onMouseEnter={(e) => {
                                     if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = isToday ? '#222' : '#f9f9f9';

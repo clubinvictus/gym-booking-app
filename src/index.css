@@ -122,16 +122,18 @@ h4 {
   border: 2px solid #000;
 }
 
-/* Responsive Layout */
+/* Fixed Web-App Layout — sidebar fixed, only main content scrolls */
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden; /* Prevent full-page scroll */
 }
 
 .main-content {
   flex: 1;
+  height: 100vh;
+  overflow-y: auto; /* Only the right panel scrolls */
   padding: 40px;
-  overflow-x: hidden;
 }
 
 @media (max-width: 768px) {
@@ -150,6 +152,8 @@ h4 {
     bottom: 0;
     z-index: 1000;
     width: 280px !important;
+    height: 100vh; /* Ensure sidebar fills viewport */
+    overflow-y: auto; /* Allow sidebar to scroll if menu grows */
     transform: translateX(-100%);
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.2);
   }
