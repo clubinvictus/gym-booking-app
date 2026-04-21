@@ -11,31 +11,39 @@ export const ActivityLogView = () => {
     const [selectedTrainer, setSelectedTrainer] = useState<string>('All');
     const [clientSearch, setClientSearch] = useState<string>('');
 
+    // Safely convert any timestamp format to a JS Date
+    const toDate = (ts: any): Date => {
+        if (!ts) return new Date(0);
+        if (typeof ts.toDate === 'function') return ts.toDate();   // Firestore Timestamp
+        if (typeof ts === 'string' || typeof ts === 'number') return new Date(ts);
+        return new Date(0);
+    };
+
     const filteredLogs = useMemo(() => {
         if (!logs) return [];
         return logs
             .filter((log: any) => {
                 // Date filter
                 if (selectedDate) {
-                    const logDate = log.timestamp.split('T')[0];
+                    const logDate = toDate(log.timestamp).toISOString().split('T')[0];
                     if (logDate !== selectedDate) return false;
                 }
 
                 // Trainer filter
                 if (selectedTrainer !== 'All') {
-                    if (log.sessionDetails.trainerName !== selectedTrainer) return false;
+                    if (log.sessionDetails?.trainerName !== selectedTrainer) return false;
                 }
 
                 // Client search filter
                 if (clientSearch) {
                     const search = clientSearch.toLowerCase();
-                    const clientName = log.sessionDetails.clientName.toLowerCase();
+                    const clientName = (log.sessionDetails?.clientName || '').toLowerCase();
                     if (!clientName.includes(search)) return false;
                 }
 
                 return true;
             })
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            .sort((a: any, b: any) => toDate(b.timestamp).getTime() - toDate(a.timestamp).getTime());
     }, [logs, selectedDate, selectedTrainer, clientSearch]);
 
     if (loading) {
@@ -64,8 +72,8 @@ export const ActivityLogView = () => {
         }
     };
 
-    const formatTimestamp = (isoString: string) => {
-        const date = new Date(isoString);
+    const formatTimestamp = (ts: any) => {
+        const date = toDate(ts);
         return date.toLocaleString('en-US', {
             month: 'short', day: 'numeric',
             hour: 'numeric', minute: '2-digit', hour12: true
