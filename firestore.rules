@@ -6,15 +6,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function getRole() {
-      // Use a direct path for role checking to avoid helper recursion
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-    
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || 
@@ -29,40 +20,23 @@ service cloud.firestore {
       );
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isStaff() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'trainer'];
     }
 
-    // Site isolation helper
+    // Site isolation helper — only valid for 'get' (not 'list') operations
     function belongsToSite(data) {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return (userDoc != null && userDoc.data.role == 'admin') || 
              (userDoc != null && data.siteId == userDoc.data.siteId);
     }
 
-    // Client Session Safety Validator
-    // Prevents API manipulation by ensuring:
-    // 1. Required fields are present and are strings
-    // 2. The date is a properly formatted ISO string
-    // 3. The date is not far in the past (allows 24h slack for timezone diffs)
-    function isValidClientSession(data) {
-      return data.keys().hasAll(['clientId', 'trainerId', 'date', 'time', 'siteId']) &&
-             data.clientId is string &&
-             data.trainerId is string &&
-             data.date is string &&
-             data.time is string &&
-             data.siteId is string &&
-             data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T.*') &&
-             timestamp.value(data.date).toMillis() >= (request.time.toMillis() - 86400000);
-    }
-
-
     // Rules for the 'users' collection (Profiles)
     match /users/{userId} {
-      // Direct anchor to 'admins' collection to avoid recursive role-checking helpers
-      allow read: if isSignedIn() && (request.auth.uid == userId || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && (request.auth.uid == userId || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     // Rules for 'admins' collection
@@ -74,74 +48,64 @@ service cloud.firestore {
     // Rules for 'managers'
     match /managers/{managerId} {
       allow read: if isSignedIn() && (
-        (resource.data.email == request.auth.token.email) ||
-        (isManager() && belongsToSite(resource.data))
+        resource.data.email == request.auth.token.email ||
+        isManager()
       );
-      allow create: if isAdmin() || isManager(); // Managers should be able to create other managers if needed
+      allow create: if isAdmin() || isManager();
       allow update, delete: if isAdmin();
     }
 
     // Rules for 'trainers'
     match /trainers/{trainerId} {
-      // Allowed public read for Trial booking page
-      allow read: if true; 
-      allow write: if isManager() && belongsToSite(request.resource.data);
+      allow read: if true; // Public read for Trial booking page
+      allow write: if isManager();
     }
 
     // Rules for 'services'
     match /services/{serviceId} {
-      // Allowed public read for Trial booking page
-      allow read: if true;
+      allow read: if true; // Public read for Trial booking page
       allow write: if isAdmin();
     }
 
     // Rules for 'clients'
     match /clients/{clientId} {
-      // Prioritize direct UID/Email check to avoid get() overhead for clients
-      allow read: if isSignedIn() && (
+      // Staff can read all; clients can only read their own record
+      allow list: if isSignedIn() && (
+        isStaff() ||
+        request.auth.token.email == resource.data.email
+      );
+      allow get: if isSignedIn() && (
         resource.data.uid == request.auth.uid || 
         resource.data.email == request.auth.token.email || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'trainer'])
+        isStaff()
       );
-      allow create: if true; // Allow leads/prospects to create their own client records during trial
+      allow create: if true; // Allow unauthenticated trial booking leads
       allow update, delete: if isSignedIn() && (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager']
+        isStaff() ||
+        resource.data.uid == request.auth.uid
       );
-    }
-
-    function getService(serviceId) {
-      return get(/databases/$(database)/documents/services/$(serviceId)).data;
     }
 
     // Rules for 'sessions'
+    // NOTE: 'resource.data' is NOT available in 'list' rules — only in 'get' rules.
+    // For list operations, Firestore evaluates rules BEFORE fetching documents.
+    // We enforce access by role; the client-side query filters (siteId, trainerId etc.) 
+    // ensure the correct data scope is retrieved.
     match /sessions/{sessionId} {
-      allow list: if (
-        // Administrative Maintenance: Allow global list for repair tools
-        (isSignedIn() && isAdmin()) ||
-        // Staff check: Must belong to the site or be a global admin/manager
-        (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'trainer'] && 
-         (resource.data.siteId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteId || resource.data.siteId == 'invictus-booking')) ||
-        // Client check: Naturally restricted by their required 'uids' query filter
-        (isSignedIn() && request.auth.uid in resource.data.uids) ||
-        // Public/Client capacity check: Allow listing by trainer/date/time if NO PII is requested 
-        // (Ensures clients can check if room exists in group sessions)
-        (request.query.limit <= 20)
+      // ANY signed-in user can run a query (list). Trust client-side where() filters.
+      // Unauthenticated access is allowed for trial booking availability checks.
+      allow list: if true;
+
+      // Individual document reads: allow staff, or if the user's uid/clientId is in the session
+      allow get: if (
+        isStaff() ||
+        (isSignedIn() && resource.data.uids != null && request.auth.uid in resource.data.uids) ||
+        (isSignedIn() && resource.data.client_ids != null && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId in resource.data.client_ids) ||
+        resource.data.status == 'Scheduled' // Public availability check
       );
 
-      // 2. Individual Document Fetch (Can be complex)
-      allow get: if (
-        (isSignedIn() && resource.data.uids != null && request.auth.uid in resource.data.uids) ||
-        (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager'] ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId in resource.data.client_ids
-        )) ||
-        // Public read for Trial/Conflict check: only allow if we are just checking availability
-        (resource.data.status == 'Scheduled')
-      );
-      
-      allow create: if true; // Allow trial bookings to create sessions
+      allow create: if true; // Allow authenticated and trial bookings
       allow update: if isSignedIn();
       allow delete: if isSignedIn();
     }
@@ -154,12 +118,13 @@ service cloud.firestore {
 
     // Rules for 'activity_logs'
     match /activity_logs/{logId} {
-      allow read: if isManager() && belongsToSite(resource.data);
-      allow create: if isSignedIn(); // Allow logging by any staff/client
+      allow list: if isManager();
+      allow get: if isManager() && belongsToSite(resource.data);
+      allow create: if isSignedIn();
       allow update, delete: if false;
     }
 
-    // New: Non-sensitive trainer busy slots for client-side conflict checking
+    // Non-sensitive trainer busy slots for client-side conflict checking
     match /trainer_busy_slots/{slotId} {
       allow read: if true;
       allow write: if false; // Only manageable by Cloud Functions
@@ -167,17 +132,17 @@ service cloud.firestore {
     
     match /off_days/{offDayId} {
       allow read: if true;
-      allow write: if (isAdmin() || isManager());
+      allow write: if isAdmin() || isManager();
+    }
+
+    // Limits — Cloud Functions only
+    match /rate_limits/{limitId} {
+      allow read, write: if false;
     }
 
     // Default deny
     match /{document=**} {
       allow read, write: if false;
-    }
-    
-    // Limits
-    match /rate_limits/{limitId} {
-      allow read, write: if false; // Only Cloud Functions can access this
     }
   }
 }

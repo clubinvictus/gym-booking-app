@@ -44,11 +44,12 @@ export interface Session {
 }
 
 /**
- * Shared logic to build the Firestore query for sessions
- * 1. Site isolation (siteId)
- * 2. Time filtering (endTime > now)
- * 3. Role-based filtering (uids for clients, trainerId for trainers)
- * 4. Sorting (date ASC)
+ * Shared logic to build the Firestore query for sessions.
+ *
+ * KEY RULES for Firestore composite queries:
+ * - When using an inequality filter (>, <, >=, <=) on field X, the first orderBy MUST be on field X.
+ * - Equality filters (==) can be combined freely.
+ * - The siteId equality filter is always first, enabling the composite index.
  */
 export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     const { role, userId, pageSize = 10, lastVisible } = options;
@@ -58,15 +59,18 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     console.log(`SessionService: [Querying] SITE_ID='${SITE_ID}'`);
     constraints.push(where('siteId', '==', SITE_ID));
 
-    // 2. Time Filtering
-    // By default, we only show upcoming sessions (endTime > now).
-    // Views like Calendar or History can opt-out by setting includePast: true.
-    if (!options.includePast) {
+    // 2. Determine query mode:
+    //    - Calendar/History view: uses date range (startDate/endDate), order by 'date'
+    //    - Dashboard/upcoming view: uses endTime > now, must order by 'endTime' first
+    const hasDateRange = !!(options.startDate || options.endDate);
+    const useEndTimeFilter = !options.includePast && !hasDateRange;
+
+    if (useEndTimeFilter) {
+        // Upcoming sessions: filter future sessions only
         constraints.push(where('endTime', '>', Timestamp.now()));
     }
 
-    // 3. Date Range Filtering
-    // Standardizing on 'date' (ISO string) for the primary range filter
+    // 3. Date Range Filtering (Calendar view)
     if (options.startDate) {
         const startISO = options.startDate.toISOString().substring(0, 10);
         constraints.push(where('date', '>=', startISO));
@@ -80,7 +84,6 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     if (role === 'client') {
         constraints.push(where('uids', 'array-contains', userId));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
-        // Staff see all by default, but can filter for specific profiles
         if (options.clientId) {
             constraints.push(where('client_ids', 'array-contains', options.clientId));
         } else if (options.trainerId) {
@@ -89,8 +92,14 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
         }
     }
 
-    // 5. Sorting (Must match the range filter field if one is used)
-    constraints.push(orderBy('date', 'asc'));
+    // 5. Sorting — MUST match the inequality filter field to avoid index errors.
+    //    - endTime filter → orderBy endTime
+    //    - date range filter (or includePast) → orderBy date
+    if (useEndTimeFilter) {
+        constraints.push(orderBy('endTime', 'asc'));
+    } else {
+        constraints.push(orderBy('date', 'asc'));
+    }
 
     // 6. Pagination
     if (lastVisible) {
