@@ -82,7 +82,13 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
 
     // 4. Role-based and Target-based Filtering
     if (role === 'client') {
-        constraints.push(where('uids', 'array-contains', userId));
+        // Prefer clientId-based lookup (always populated by staff bookings).
+        // Fall back to uid-based lookup for backwards compatibility.
+        if (options.clientId) {
+            constraints.push(where('client_ids', 'array-contains', options.clientId));
+        } else {
+            constraints.push(where('uids', 'array-contains', userId));
+        }
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
             constraints.push(where('client_ids', 'array-contains', options.clientId));

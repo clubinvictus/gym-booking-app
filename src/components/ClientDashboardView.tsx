@@ -8,9 +8,13 @@ import { BookingModal } from './BookingModal';
 export const ClientDashboardView = () => {
     const { profile, user, loading: authLoading } = useAuth();
     
+    // Use clientId (from profile or client record) to query sessions.
+    // This is more reliable than uid because admins booking for clients
+    // always populate 'client_ids' even when 'uids' may be empty.
     const { sessions, loading: sessionsLoading, hasMore, loadMore } = useSessions({
         role: profile?.role as any,
         userId: user?.uid || '',
+        clientId: profile?.clientId || undefined,
         pageSize: 10
     });
 
