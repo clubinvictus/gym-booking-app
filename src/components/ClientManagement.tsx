@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { Search, Plus, Filter } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 
@@ -8,6 +9,19 @@ interface ClientManagementProps {
 
 export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagementProps) => {
     const { data: clients, loading } = useFirestore<any>('clients');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredClients = useMemo(() => {
+        if (!clients) return [];
+        if (!searchQuery.trim()) return clients;
+        
+        const lowerQuery = searchQuery.toLowerCase();
+        return clients.filter((client: any) => 
+            (client.name && client.name.toLowerCase().includes(lowerQuery)) ||
+            (client.email && client.email.toLowerCase().includes(lowerQuery)) ||
+            (client.phone && client.phone.toLowerCase().includes(lowerQuery))
+        );
+    }, [clients, searchQuery]);
 
     if (loading) {
         return (
@@ -57,13 +71,19 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                 }}>
                     <div style={{ position: 'relative', flex: 1 }}>
                         <div style={{ position: 'absolute', left: '12px', top: '10px' }}><Search size={18} className="text-muted" /></div>
-                        <input type="text" placeholder="Search clients..." style={{
-                            width: '100%',
-                            padding: '10px 10px 10px 40px',
-                            borderRadius: 0,
-                            border: '2px solid #000',
-                            fontSize: '0.9rem'
-                        }} />
+                        <input 
+                            type="text" 
+                            placeholder="Search clients by name, email, or phone..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '10px 10px 10px 40px',
+                                borderRadius: 0,
+                                border: '2px solid #000',
+                                fontSize: '0.9rem'
+                            }} 
+                        />
                     </div>
                     <button
                         className="button-secondary"
@@ -82,7 +102,7 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
 
                 {window.innerWidth <= 768 ? (
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        {clients.map((client) => (
+                        {filteredClients.map((client) => (
                             <div
                                 key={client.id}
                                 onClick={() => onClientClick(client)}
@@ -138,7 +158,7 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                             </tr>
                         </thead>
                         <tbody>
-                            {clients.map((client) => (
+                            {filteredClients.map((client) => (
                                 <tr
                                     key={client.id}
                                     style={{ borderTop: '1px solid #f0f0f0', cursor: 'pointer', transition: 'background 0.15s ease' }}
