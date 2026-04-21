@@ -76,7 +76,8 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
-        trainerId: profile?.trainerId, // Critical: Ensure trainers only fetch their own sessions
+        // Only filter by trainerId if the user IS a trainer (admins/managers see all sessions)
+        trainerId: profile?.role === 'trainer' ? profile?.trainerId : undefined,
         pageSize: 100 // High limit for dashboard stats/lists
     });
 
