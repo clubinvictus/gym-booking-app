@@ -521,7 +521,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         query(
                             collection(db, 'sessions'),
                             where('seriesId', '==', editingSession.seriesId),
-                            where('date', '>=', editingSession.date)
+                            where('date', '>=', editingSession.date),
+                            where('siteId', '==', SITE_ID)
                         )
                     );
                     let deleteBatch = writeBatch(db);
@@ -652,7 +653,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                 // Fetch ALL existing sessions for this trainer to handle group appends
                 const existingSnap = await getDocs(
-                    query(collection(db, 'sessions'), where('trainerId', '==', trainer?.id))
+                    query(
+                        collection(db, 'sessions'), 
+                        where('trainerId', '==', trainer?.id),
+                        where('siteId', '==', SITE_ID)
+                    )
                 );
                 const existingMap = new Map<string, { id: string, clients: any[], serviceName: string }>();
                 existingSnap.forEach(d => {
