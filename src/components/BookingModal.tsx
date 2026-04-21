@@ -291,7 +291,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     const conflictField = 'trainerId';
                     const existingSessions = new Map<string, { serviceName: string, count: number, max: number, clients: any[] }>();
                     
-                    const existingSnap = await getDocs(query(collection(db, conflictCollection), where(conflictField, '==', trainer.id)));
+                    const existingSnap = await getDocs(query(
+                        collection(db, conflictCollection), 
+                        where(conflictField, '==', trainer.id),
+                        where('siteId', '==', SITE_ID)
+                    ));
                     
                     existingSnap.forEach((d: any) => {
                         const s = d.data();
@@ -755,7 +759,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     collection(db, 'sessions'),
                     where('trainerId', '==', trainer?.id),
                     where('date', '==', dateIso),
-                    where('time', '==', selectedTime)
+                    where('time', '==', selectedTime),
+                    where('siteId', '==', SITE_ID)
                 );
                 const existingSnap = await getDocs(q);
                 const bookingData = getBookingData(baseDate, selectedDay);
