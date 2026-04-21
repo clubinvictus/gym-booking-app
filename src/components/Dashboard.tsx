@@ -272,7 +272,8 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                     {todaySessions.length > 0 ? todaySessions.map((session: any) => (
                                         <SessionItem
                                             key={session.id}
-                                            name={session.clientName}
+                                            clientName={session.clientName || session.clients?.[0]?.name || 'Unknown Client'}
+                                            trainerName={session.trainerName}
                                             type={session.serviceName}
                                             time={session.time}
                                             onClick={() => setSelectedSession(session)}
@@ -284,14 +285,18 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             </div>
 
                             {nextSessions.length > 0 && (
-                                <div className="card" style={{ padding: '32px', backgroundColor: '#111' }}>
-                                    <h2 style={{ marginBottom: '24px', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', color: '#fff' }}>UPCOMING SESSIONS</h2>
+                                <div className="card" style={{ padding: '32px' }}>
+                                    <h2 style={{ marginBottom: '24px', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase' }}>UPCOMING SESSIONS</h2>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                         {nextSessions.map((session: any) => (
-                                            <div key={session.id} style={{ padding: '12px', borderLeft: '2px solid #fff', backgroundColor: '#000' }}>
-                                                <p style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>{session.clientName}</p>
-                                                <p style={{ fontSize: '0.75rem', color: '#888' }}>{new Date(session.date).toLocaleDateString()} @ {session.time}</p>
-                                            </div>
+                                            <SessionItem
+                                                key={session.id}
+                                                clientName={session.clientName || session.clients?.[0]?.name || 'Unknown Client'}
+                                                trainerName={session.trainerName}
+                                                type={session.serviceName}
+                                                time={`${new Date(session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} @ ${session.time}`}
+                                                onClick={() => setSelectedSession(session)}
+                                            />
                                         ))}
                                     </div>
                                 </div>
@@ -584,7 +589,7 @@ function StatCard({ title, value, icon }: { title: string, value: string, icon: 
     );
 }
 
-function SessionItem({ name, type, time, onClick }: { name: string, type: string, time: string, onClick?: () => void }) {
+function SessionItem({ clientName, trainerName, type, time, onClick }: { clientName: string, trainerName?: string, type: string, time: string, onClick?: () => void }) {
     return (
         <div
             onClick={onClick}
@@ -611,14 +616,14 @@ function SessionItem({ name, type, time, onClick }: { name: string, type: string
                 }
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '40px', height: '40px', background: '#000', borderRadius: 0 }}></div>
-                <div>
-                    <h4 style={{ fontSize: '1rem' }}>{name}</h4>
-                    <p className="text-muted" style={{ fontSize: '0.85rem' }}>{type}</p>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>{clientName}</h4>
+                {trainerName && (
+                    <p style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600, margin: 0 }}>with {trainerName}</p>
+                )}
+                <p className="text-muted" style={{ fontSize: '0.8rem', margin: 0 }}>{type}</p>
             </div>
-            <div style={{ fontWeight: 800 }}>{time}</div>
+            <div style={{ fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap', paddingLeft: '16px' }}>{time}</div>
         </div>
     );
 }
