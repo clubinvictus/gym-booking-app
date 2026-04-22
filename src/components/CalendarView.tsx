@@ -4,6 +4,8 @@ import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
 import { OffDayModal } from './OffDayModal';
 import { ConfirmOffDayModal } from './ConfirmOffDayModal';
+import { WeekGrid } from './WeekGrid';
+import { ResourceGrid } from './ResourceGrid';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
@@ -39,6 +41,7 @@ export const CalendarView = () => {
     const [offDayModalOpen, setOffDayModalOpen] = useState(false);
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
+    const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
 
     // Auto-refresh the week reference if the app is left open overnight
     React.useEffect(() => {
@@ -120,120 +123,6 @@ export const CalendarView = () => {
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days');
     const { data: services } = useFirestore<any>('services');
-
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const timeSlots = [
-        '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-        '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM',
-        '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM'
-    ];
-
-    const daysMap: { [key: number]: string } = {
-        0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday', 5: 'saturday', 6: 'sunday'
-    };
-
-    const convertTo24h = (timeStr: string) => {
-        if (!timeStr) return '';
-        if (timeStr.includes(':') && timeStr.length === 5) return timeStr;
-        const [time, modifier] = timeStr.split(' ');
-        let [hours, minutes] = time.split(':');
-        if (hours === '12') hours = '00';
-        if (modifier === 'PM') hours = (parseInt(hours, 10) + 12).toString().padStart(2, '0');
-        else hours = hours.padStart(2, '0');
-        return `${hours}:${minutes}`;
-    };
-
-    const isTrainerAvailable = (dayIndex: number, time: string) => {
-        const dayName = daysMap[dayIndex];
-        const slotTime = convertTo24h(time);
-
-        const activeTrainers = (selectedTrainerId === 'all' || selectedTrainerId === 'my')
-            ? trainers
-            : trainers.filter(t => t.id === selectedTrainerId);
-
-        const slotDate = new Date(currentWeekStart);
-        slotDate.setDate(slotDate.getDate() + dayIndex);
-        const dateStr = slotDate.toISOString().split('T')[0];
-
-        return activeTrainers.some(trainer => {
-            // Check if day is marked as persistent OFF in Firestore
-            const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
-            if (isOff) return false;
-
-            const daySchedule = trainer.availability?.[dayName];
-            if (!daySchedule || !daySchedule.active || !daySchedule.shifts) return false;
-
-            // Check if slot falls within ANY of the trainer's shifts for that day
-            return daySchedule.shifts.some((shift: any) => {
-                const startTime = convertTo24h(shift.start);
-                const endTime = convertTo24h(shift.end);
-                return slotTime >= startTime && slotTime < endTime;
-            });
-        });
-    };
-
-    const getSessionClientNames = (session: any) => {
-        if (session.clients && Array.isArray(session.clients)) {
-            return session.clients.map((c: any) => c.name).join(', ');
-        }
-        return session.clientName || 'Unknown Client';
-    };
-
-    const handlePrevWeek = () => {
-        const d = new Date(currentWeekStart);
-        d.setDate(d.getDate() - 7);
-        setCurrentWeekStart(d);
-    };
-
-    const handleNextWeek = () => {
-        const d = new Date(currentWeekStart);
-        d.setDate(d.getDate() + 7);
-        setCurrentWeekStart(d);
-    };
-
-    const handleToday = () => {
-        setCurrentWeekStart(getStartOfWeek(new Date()));
-    };
-
-    const handleSlotClick = (dayIndex: number, time: string) => {
-        const effectiveTrainerId = isTrainer ? profile?.trainerId : ((selectedTrainerId === 'all' || selectedTrainerId === 'my') ? null : selectedTrainerId);
-
-        const slotDate = new Date(currentWeekStart);
-        slotDate.setDate(slotDate.getDate() + dayIndex);
-        const isPastLimit = isClient && slotDate > limitDate;
-
-        let available = isTrainerAvailable(dayIndex, time) && !isPastLimit;
-
-        // Evaluate group session capacity if viewing a specific trainer
-        if (selectedTrainerId !== 'all' && selectedTrainerId !== 'my') {
-            const existingSessions = sessions.filter((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
-            
-            if (existingSessions.length > 0) {
-                const session = existingSessions[0];
-                const service = services.find((sv: any) => sv.id === session.serviceId);
-                const maxCap = service?.max_capacity || 1;
-                const currentCount = session.clients?.length || 1;
-                
-                if (currentCount >= maxCap) {
-                    available = false;
-                }
-            }
-
-            // Also check busySlots (for clients)
-            const slotDateStr = slotDate.toISOString().split('T')[0];
-            const isBusy = busySlots.some((bs: any) => {
-                const bsDate = bs.date ? bs.date.split('T')[0] : '';
-                return bs.trainerId === selectedTrainerId && bsDate === slotDateStr && bs.time === time;
-            });
-            if (isBusy) available = false;
-        }
-
-        // Prevent trainers from booking sessions
-        // Allow clients/admins/managers if a trainer is available and not in the past
-        if (available && !isTrainer) {
-            setSelectedSlot({ day: dayIndex, time, trainerId: effectiveTrainerId, date: slotDate });
-        }
-    };
 
     const [confirmOffDayOpen, setConfirmOffDayOpen] = useState(false);
 
@@ -388,6 +277,38 @@ export const CalendarView = () => {
                             </select>
                         </div>
                     )}
+                    
+                    {(isAdmin || isManager) && (
+                        <div style={{ display: 'flex', border: '2px solid #000', borderRadius: '4px', overflow: 'hidden' }}>
+                            <button
+                                onClick={() => setViewMode('week')}
+                                style={{
+                                    padding: '8px 16px',
+                                    background: viewMode === 'week' ? '#000' : '#fff',
+                                    color: viewMode === 'week' ? '#fff' : '#000',
+                                    fontWeight: 800,
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                WEEK
+                            </button>
+                            <button
+                                onClick={() => setViewMode('day')}
+                                style={{
+                                    padding: '8px 16px',
+                                    background: viewMode === 'day' ? '#000' : '#fff',
+                                    color: viewMode === 'day' ? '#fff' : '#000',
+                                    fontWeight: 800,
+                                    border: 'none',
+                                    borderLeft: '2px solid #000',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                DAY
+                            </button>
+                        </div>
+                    )}
                     {!isTrainer && (
                         <button
                             onClick={handleBookButtonClick}
@@ -415,238 +336,45 @@ export const CalendarView = () => {
                 </div>
             </header>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '60px repeat(7, 1fr)',
-                    minWidth: window.innerWidth <= 768 ? '800px' : '1000px',
-                    borderLeft: '2px solid #000',
-                    borderRight: '2px solid #000'
-                }}>
-                    {/* Sticky Day Header Row */}
-                    <div style={{ height: '60px', borderBottom: '2px solid #000', position: 'sticky', top: 0, zIndex: 10, background: '#fff' }}></div>
-                    {days.map((day, i) => {
-                        const slotDate = new Date(currentWeekStart);
-                        slotDate.setDate(slotDate.getDate() + i);
-                        const isToday = slotDate.toDateString() === new Date().toDateString();
-
-                        return (
-                            <div
-                                key={day}
-                                onClick={() => handleDayHeaderClick(i)}
-                                style={{
-                                    height: '60px',
-                                    borderBottom: '2px solid #000',
-                                    borderLeft: isToday ? '2px solid #000' : '1px solid #eee',
-                                    borderRight: isToday ? '2px solid #000' : 'none',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: (isAdmin && selectedTrainerId !== 'all') ? 'pointer' : 'default',
-                                    background: isToday ? '#000' : '#fff',
-                                    transition: 'background 0.2s',
-                                    position: 'sticky',
-                                    top: 0,
-                                    zIndex: 10,
-                                }}
-                                onMouseEnter={(e) => {
-                                    if (isAdmin && selectedTrainerId !== 'all') e.currentTarget.style.background = isToday ? '#222' : '#f9f9f9';
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = isToday ? '#000' : '#fff';
-                                }}
-                            >
-                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? '#fff' : '#666' }}>{day}</span>
-                                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isToday ? '#fff' : 'inherit' }}>{getDayDate(currentWeekStart, i)}</span>
-                            </div>
-                        );
-                    })}
-
-                    {/* Time Slots */}
-                    {timeSlots.map(time => (
-                        <React.Fragment key={time}>
-                            <div style={{
-                                minHeight: '100px',
-                                borderBottom: '1px solid #eee',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                color: '#999'
-                            }}>
-                                {time}
-                            </div>
-                            {days.map((_, dayIndex) => {
-                                const slotDate = new Date(currentWeekStart);
-                                slotDate.setDate(slotDate.getDate() + dayIndex);
-                                const isPastLimit = isClient && slotDate > limitDate;
-                                const isToday = slotDate.toDateString() === new Date().toDateString();
-
-                                // Compute week boundaries for filtering
-                                const weekStartMs = new Date(currentWeekStart).setHours(0, 0, 0, 0);
-                                const weekEndDate = new Date(currentWeekStart);
-                                weekEndDate.setDate(weekEndDate.getDate() + 7);
-                                const weekEndMs = weekEndDate.setHours(0, 0, 0, 0);
-
-                                const slotSessions = sessions.filter((s: any) => {
-                                    // 1. Primary Match: Native Timestamp visibility
-                                    if (s.startTime) {
-                                        const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
-                                        // Compare local date strings to match day-of-month
-                                        if (start.toDateString() !== slotDate.toDateString()) return false;
-                                        
-                                        // Compare formatted time string (e.g. "09:00 AM")
-                                        const sessionTimeStr = start.toLocaleTimeString('en-US', {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: true
-                                        }).replace(/\u202F/g, ' ');
-                                        if (sessionTimeStr !== time) return false;
-                                    } else {
-                                        // 2. Legacy Match: dayIndex and time string
-                                        if (s.day !== dayIndex || s.time !== time) return false;
-
-                                        // Week guard: only show sessions that belong to this displayed week
-                                        if (s.date) {
-                                            const sessionMs = new Date(s.date).getTime();
-                                            if (sessionMs < weekStartMs || sessionMs >= weekEndMs) return false;
-                                        }
-                                    }
-
-                                    if (selectedTrainerId === 'all' || selectedTrainerId === 'my') return true;
-                                    return s.trainerId === selectedTrainerId;
-                                });
-
-                                // Find if this slot is busy for the selected trainer (PRIVACY VIEW FOR CLIENTS)
-                                const isBusyByOthers = isClient && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' && busySlots.some((bs: any) => {
-                                    if (bs.trainerId !== selectedTrainerId || bs.time !== time) return false;
-                                    
-                                    // Compare dates timezone-safely by checking if they fall on the same local date
-                                    if (!bs.date) return false;
-                                    const bsDateObj = new Date(bs.date);
-                                    if (
-                                        bsDateObj.getFullYear() !== slotDate.getFullYear() ||
-                                        bsDateObj.getMonth() !== slotDate.getMonth() ||
-                                        bsDateObj.getDate() !== slotDate.getDate()
-                                    ) return false;
-
-                                    // Exclude the client's own session (same doc ID)
-                                    return !sessions.some((s: any) => s.id === bs.id);
-                                });
-
-                                 const displaySessions = slotSessions.filter((s: any) => {
-                                    if (!isClient) return true;
-                                    // SUPPORT BOTH: client_ids (new array) and clients (legacy object array) or clientId (legacy root)
-                                    if (s.client_ids) return s.client_ids.some((cid: string) => clientIds.includes(cid));
-                                    if (s.clients) return s.clients.some((c: any) => clientIds.includes(c.id));
-                                    return clientIds.includes(s.clientId);
-                                });
-
-                                // Find service max capacity to check for group room
-                                const firstSession = slotSessions[0];
-                                const activeService = firstSession ? services.find((sv: any) => sv.name === firstSession.serviceName) : null;
-                                const hasRoom = firstSession && activeService && (firstSession.clients?.length || 1) < (activeService.max_capacity || 1);
-
-                                const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && (slotSessions.length === 0 || hasRoom) && !isBusyByOthers;
-                                const showAsAvailable = selectedTrainerId === 'all' || selectedTrainerId === 'my' || available;
-
-                                let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
-                                if (isToday && showAsAvailable) {
-                                    baseBackgroundColor = '#f5f5f5'; // muted gray for today's empty slots
-                                }
-
-                                return (
-                                    <div
-                                        key={`${dayIndex}-${time}`}
-                                        onClick={() => handleSlotClick(dayIndex, time)}
-                                        className={`calendar-slot ${showAsAvailable ? 'available' : ''}`}
-                                        style={{
-                                            borderBottom: '1px solid #eee',
-                                            borderLeft: isToday ? '2px solid #000' : '1px solid #eee',
-                                            borderRight: isToday ? '2px solid #000' : 'none',
-                                            position: 'relative',
-                                            minHeight: '100px',
-                                            padding: '4px',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '4px',
-                                            cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable && !isTrainer ? 'pointer' : 'not-allowed'),
-                                            backgroundColor: baseBackgroundColor,
-                                            backgroundImage: displaySessions.length === 0 && !showAsAvailable && !isBusyByOthers
-                                                ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'
-                                                : 'none',
-                                            transition: 'all 0.2s ease'
-                                        }}
-                                    >
-                                        {displaySessions.map((displaySession: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
-                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
-                                            
-                                            return (
-                                                <div
-                                                    key={idx}
-                                                    className="session-card"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedSession(displaySession);
-                                                    }}
-                                                    style={{
-                                                        backgroundColor: '#000',
-                                                        borderRadius: '4px',
-                                                        padding: '8px',
-                                                        color: '#fff',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        cursor: 'pointer',
-                                                        flexShrink: 0,
-                                                        borderLeft: `6px solid ${serviceColor}`
-                                                    }}
-                                                >
-                                                <div>
-                                                    <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
-                                                        {getSessionClientNames(displaySession)}
-                                                        {displaySession.clients && displaySession.clients.length > 1 && (
-                                                            <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
-                                                                ({displaySession.clients.length})
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{displaySession.serviceName}</div>
-                                                </div>
-                                                <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
-                                            </div>
-                                        );
-                                        })}
-
-                                        {isBusyByOthers && (
-                                            <div
-                                                style={{
-                                                    backgroundColor: '#000',
-                                                    borderRadius: '4px',
-                                                    padding: '8px',
-                                                    color: '#fff',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    cursor: 'not-allowed',
-                                                    flexShrink: 0,
-                                                    margin: 'auto 0'
-                                                }}
-                                            >
-                                                <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>Booked</div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </React.Fragment>
-
-                    ))}
-                </div>
-            </div>
+            {viewMode === 'week' ? (
+                <WeekGrid
+                    sessions={sessions}
+                    trainers={trainers}
+                    services={services}
+                    busySlots={busySlots}
+                    offDays={offDays}
+                    currentWeekStart={currentWeekStart}
+                    selectedTrainerId={selectedTrainerId}
+                    clientIds={clientIds}
+                    limitDate={limitDate}
+                    isAdmin={isAdmin}
+                    isClient={isClient}
+                    isTrainer={isTrainer}
+                    profile={profile}
+                    onSlotSelected={setSelectedSlot}
+                    onSessionClick={setSelectedSession}
+                    onDayHeaderClick={handleDayHeaderClick}
+                />
+            ) : (
+                <ResourceGrid
+                    sessions={sessions}
+                    trainers={trainers}
+                    services={services}
+                    busySlots={busySlots}
+                    offDays={offDays}
+                    currentWeekStart={currentWeekStart}
+                    selectedTrainerId={selectedTrainerId}
+                    clientIds={clientIds}
+                    limitDate={limitDate}
+                    isAdmin={isAdmin}
+                    isClient={isClient}
+                    isTrainer={isTrainer}
+                    profile={profile}
+                    onSlotSelected={setSelectedSlot}
+                    onSessionClick={setSelectedSession}
+                    onDayHeaderClick={handleDayHeaderClick}
+                />
+            )}
 
             <BookingModal
                 isOpen={!!selectedSlot}
