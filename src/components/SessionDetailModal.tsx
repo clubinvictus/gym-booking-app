@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
+import { useFirestore } from '../hooks/useFirestore';
 import { SITE_ID } from '../constants';
 
 interface SessionDetailModalProps {
@@ -22,6 +23,20 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const { profile } = useAuth();
     const isTrainer = profile?.role === 'trainer';
     const [targetClientId, setTargetClientId] = useState<string | undefined>(undefined);
+    
+    // Add Client State
+    const [isAddingClient, setIsAddingClient] = useState(false);
+    const [newClientId, setNewClientId] = useState<string>('');
+
+    // Fetch data for capacity limits and client list
+    const { data: services } = useFirestore<any>('services');
+    const { data: clients } = useFirestore<any>('clients');
+
+    // Compute Capacity
+    const sessionService = services.find((s: any) => s.id === session?.serviceId);
+    const maxCapacity = sessionService?.max_capacity || 1;
+    const currentCount = session?.clients?.length || 1;
+    const hasCapacity = currentCount < maxCapacity;
 
     // Reset state when modal opens/closes or session changes
     useEffect(() => {
@@ -29,6 +44,8 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             setIsDeleting(false);
             setIsProcessing(false);
             setDeleteScope('single');
+            setIsAddingClient(false);
+            setNewClientId('');
         }
     }, [isOpen, session]);
 
@@ -129,6 +146,53 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                 alert('Failed to delete session. Please try again.');
                 setIsProcessing(false);
             }
+        }
+    };
+
+    const confirmAddClient = async () => {
+        if (!newClientId) return;
+        setIsProcessing(true);
+        try {
+            const clientToAdd = clients.find((c: any) => c.id === newClientId);
+            if (!clientToAdd) throw new Error('Client not found');
+
+            const updatedClients = [...(session.clients || []), { id: clientToAdd.id, name: clientToAdd.name, email: clientToAdd.email || '', phone: clientToAdd.phone || '' }];
+            const newClientIds = Array.from(new Set(updatedClients.map(c => c.id))).filter(Boolean) as string[];
+
+            await updateDoc(doc(db, 'sessions', session.id), {
+                clients: updatedClients,
+                clientIds: newClientIds,
+                client_ids: newClientIds,
+                clientId: newClientIds[0] || null
+            });
+
+            // Log activity
+            await addDoc(collection(db, 'activity_logs'), {
+                action: 'booked',
+                isRecurring: false,
+                sessionDetails: {
+                    clientName: clientToAdd.name,
+                    trainerName: session.trainerName,
+                    serviceName: session.serviceName,
+                    date: session.date,
+                    time: session.time
+                },
+                performedBy: {
+                    uid: profile?.uid || 'unknown',
+                    name: profile?.name || 'Unknown User',
+                    role: profile?.role || 'unknown'
+                },
+                timestamp: new Date().toISOString(),
+                siteId: SITE_ID
+            });
+
+            alert('Client added to session successfully!');
+            onClose();
+        } catch (err) {
+            console.error('Error adding client to session:', err);
+            alert('Failed to add client to session.');
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -250,10 +314,70 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                     </div>
                 ) : (
                     <>
-                        <h2 style={{ fontSize: '1.8rem', marginBottom: '8px' }}>Session Details</h2>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <h2 style={{ fontSize: '1.8rem', margin: 0 }}>Session Details</h2>
+                            {sessionService && (
+                                <div style={{ 
+                                    background: hasCapacity ? '#e6f4ea' : '#fce8e6', 
+                                    color: hasCapacity ? '#137333' : '#c5221f',
+                                    padding: '4px 8px', 
+                                    borderRadius: '4px', 
+                                    fontSize: '0.8rem', 
+                                    fontWeight: 800,
+                                    border: `1px solid ${hasCapacity ? '#137333' : '#c5221f'}`
+                                }}>
+                                    {currentCount} / {maxCapacity} Booked
+                                </div>
+                            )}
+                        </div>
                         <p className="text-muted" style={{ marginBottom: '32px' }}>Review or modify this booking</p>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '40px' }}>
+                        {isAddingClient ? (
+                            <div style={{ padding: '20px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '32px' }}>
+                                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px' }}>Add Client to Session</h3>
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.8rem', color: '#666' }}>SELECT CLIENT</label>
+                                    <select
+                                        value={newClientId}
+                                        onChange={(e) => setNewClientId(e.target.value)}
+                                        style={{ width: '100%', padding: '12px', border: '2px solid #000', fontSize: '1rem', fontWeight: 600 }}
+                                    >
+                                        <option value="">-- Choose a Client --</option>
+                                        {clients
+                                            .filter((c: any) => !session.clients?.some((sc: any) => sc.id === c.id)) // Filter out already booked clients
+                                            .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                                            .map((c: any) => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <button
+                                        onClick={() => setIsAddingClient(false)}
+                                        className="button-secondary"
+                                        style={{ flex: 1, padding: '12px' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={confirmAddClient}
+                                        disabled={!newClientId || isProcessing}
+                                        style={{
+                                            flex: 1,
+                                            padding: '12px',
+                                            background: !newClientId || isProcessing ? '#ccc' : '#000',
+                                            color: '#fff',
+                                            border: 'none',
+                                            fontWeight: 800,
+                                            cursor: !newClientId || isProcessing ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        Confirm
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '40px' }}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                                 <div style={{ width: '40px', height: '40px', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <User size={20} />
@@ -286,6 +410,26 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                             </div>
                                         )) : (
                                             <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{session.clientName || 'Unknown Client'}</div>
+                                        )}
+                                        {hasCapacity && (
+                                            <button
+                                                onClick={() => setIsAddingClient(true)}
+                                                style={{
+                                                    marginTop: '8px',
+                                                    padding: '8px',
+                                                    background: 'transparent',
+                                                    border: '2px dashed #ccc',
+                                                    color: '#666',
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '8px'
+                                                }}
+                                            >
+                                                + Add Client to Session
+                                            </button>
                                         )}
                                     </div>
                                 </div>
@@ -344,8 +488,9 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                 </div>
                             )}
                         </div>
+                        )}
 
-                        {!isTrainer && (
+                        {!isAddingClient && !isTrainer && (
                             <div style={{ display: 'flex', gap: '16px' }}>
                                 <button
                                     onClick={() => onReschedule(session)}
