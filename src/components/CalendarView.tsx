@@ -126,6 +126,22 @@ export const CalendarView = () => {
 
     const [confirmOffDayOpen, setConfirmOffDayOpen] = useState(false);
 
+    const handlePrevWeek = () => {
+        const d = new Date(currentWeekStart);
+        d.setDate(d.getDate() - 7);
+        setCurrentWeekStart(d);
+    };
+
+    const handleNextWeek = () => {
+        const d = new Date(currentWeekStart);
+        d.setDate(d.getDate() + 7);
+        setCurrentWeekStart(d);
+    };
+
+    const handleToday = () => {
+        setCurrentWeekStart(getStartOfWeek(new Date()));
+    };
+
     const handleDayHeaderClick = async (dayIndex: number) => {
         if (!isAdmin || selectedTrainerId === 'all' || selectedTrainerId === 'my') return;
 
