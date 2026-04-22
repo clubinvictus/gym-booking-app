@@ -72,12 +72,16 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: clients } = useFirestore<any>('clients');
     
+    // Fetch sessions for the current month to support stats
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    
     // Using the centralized useSessions hook for standardized fetching
     const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
         // Only filter by trainerId if the user IS a trainer (admins/managers see all sessions)
         trainerId: profile?.role === 'trainer' ? profile?.trainerId : undefined,
+        startDate: monthStart,
         pageSize: 100 // High limit for dashboard stats/lists
     });
 
@@ -187,13 +191,26 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 const todayDay = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
-                // Sessions are already filtered by role and endTime > now by useSessions
+                // Calculate week boundaries (Mon-Sun)
+                const startOfWeek = new Date(now);
+                const day = (now.getDay() + 6) % 7;
+                startOfWeek.setDate(now.getDate() - day);
+                startOfWeek.setHours(0, 0, 0, 0);
+                
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                endOfWeek.setHours(23, 59, 59, 999);
+
+                // Calculate month boundaries
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+                // Sessions are already filtered by role and siteId
                 const userSessions = sessions || [];
 
                 // Today's sessions: match by date OR day-of-week (for recurring)
-                const todaySessions = (userSessions || []).filter((s: any) => {
+                const todaySessions = userSessions.filter((s: any) => {
                     if (!s) return false;
-                    
                     if (s.date) {
                         try {
                             const sessionDate = new Date(s.date);
@@ -215,15 +232,25 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     }
                 });
 
-                // Next Upcoming Sessions (even if not today, to avoid empty dashboard feel)
-                const nextSessions = (userSessions || [])
+                // Sessions this week
+                const sessionsThisWeek = userSessions.filter((s: any) => {
+                    if (!s.date) return false;
+                    const d = new Date(s.date);
+                    return d >= startOfWeek && d <= endOfWeek;
+                });
+
+                // Sessions this month
+                const sessionsThisMonth = userSessions.filter((s: any) => {
+                    if (!s.date) return false;
+                    const d = new Date(s.date);
+                    return d >= startOfMonth && d <= endOfMonth;
+                });
+
+                // Next Upcoming Sessions
+                const nextSessions = userSessions
                     .filter((s: any) => !todaySessions.find(ts => ts.id === s.id))
                     .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
                     .slice(0, 3);
-
-                const myClients = isTrainer ? 
-                    clients.filter((c: any) => c.trainerId === profile?.trainerId).length : 
-                    clients.length;
 
                 return (
                     <div style={{ width: '100%' }}>
@@ -249,14 +276,19 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                            gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : 'repeat(3, 1fr)',
                             gap: '24px',
                             marginBottom: '40px'
                         }}>
                             <StatCard title="TODAY'S SESSIONS" value={todaySessions.length.toString()} icon={<Calendar size={24} />} />
+                            
                             {isTrainer && (
-                                <StatCard title="MY CLIENTS" value={myClients.toString()} icon={<Users size={24} />} />
+                                <>
+                                    <StatCard title="SESSIONS THIS WEEK" value={sessionsThisWeek.length.toString()} icon={<Briefcase size={24} />} />
+                                    <StatCard title="SESSIONS THIS MONTH" value={sessionsThisMonth.length.toString()} icon={<Briefcase size={24} />} />
+                                </>
                             )}
+
                             {isAdmin && (
                                 <>
                                     <StatCard title="ACTIVE TRAINERS" value={trainers.filter((t: any) => t.status === 'Active').length.toString()} icon={<Users size={24} />} />
