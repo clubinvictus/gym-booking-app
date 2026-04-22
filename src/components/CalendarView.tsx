@@ -210,29 +210,6 @@ export const CalendarView = () => {
                 {/* Row 1: Macro Context */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
-                    {!isTrainer && (
-                        <button
-                            onClick={handleBookButtonClick}
-                            style={{
-                                height: '42px',
-                                padding: '0 20px',
-                                background: '#000',
-                                color: '#fff',
-                                border: '2px solid #000',
-                                fontWeight: 900,
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '10px',
-                                letterSpacing: '0.02em'
-                            }}
-                        >
-                            <Plus size={18} />
-                            {window.innerWidth > 768 && 'BOOK SESSION'}
-                        </button>
-                    )}
                 </div>
 
                 {/* Row 2: Micro Controls */}
@@ -284,7 +261,7 @@ export const CalendarView = () => {
                     </div>
 
                     {/* Right Side Group */}
-                    <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'stretch' : 'center', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', gap: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', gap: '16px' }}>
                         {(isAdmin || isClient) && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>
@@ -317,17 +294,18 @@ export const CalendarView = () => {
                         )}
                         
                         {(isAdmin || isManager) && (
-                            <div style={{ display: 'flex', border: '2px solid #000', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', border: '2px solid #000', borderRadius: '4px', overflow: 'hidden', height: '42px' }}>
                                 <button
                                     onClick={() => setViewMode('week')}
                                     style={{
-                                        padding: '8px 16px',
+                                        padding: '0 16px',
                                         background: viewMode === 'week' ? '#000' : '#fff',
                                         color: viewMode === 'week' ? '#fff' : '#000',
                                         fontWeight: 800,
                                         border: 'none',
                                         cursor: 'pointer',
-                                        flex: 1
+                                        flex: 1,
+                                        height: '100%'
                                     }}
                                 >
                                     WEEK
@@ -335,20 +313,45 @@ export const CalendarView = () => {
                                 <button
                                     onClick={() => setViewMode('day')}
                                     style={{
-                                        padding: '8px 16px',
+                                        padding: '0 16px',
                                         background: viewMode === 'day' ? '#000' : '#fff',
                                         color: viewMode === 'day' ? '#fff' : '#000',
                                         fontWeight: 800,
                                         border: 'none',
                                         borderLeft: '2px solid #000',
                                         cursor: 'pointer',
-                                        flex: 1
+                                        flex: 1,
+                                        height: '100%'
                                     }}
                                 >
                                     DAY
                                 </button>
                             </div>
                         )}
+
+                        {!isTrainer && (
+                            <button
+                                onClick={handleBookButtonClick}
+                                style={{
+                                    height: '42px',
+                                    width: '42px',
+                                    background: '#000',
+                                    color: '#fff',
+                                    border: '2px solid #000',
+                                    fontWeight: 900,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    borderRadius: 0
+                                }}
+                            >
+                                <Plus size={24} />
+                            </button>
+                        )}
+                    </div>
+                </div>
                     </div>
                 </div>
             </header>
