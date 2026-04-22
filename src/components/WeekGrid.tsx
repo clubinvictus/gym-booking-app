@@ -290,45 +290,87 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         transition: 'all 0.2s ease'
                                     }}
                                 >
-                                    {displaySessions.map((displaySession: any, idx: number) => {
-                                        const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
-                                        const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
-                                        
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className="session-card"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onSessionClick(displaySession);
-                                                }}
-                                                style={{
-                                                    backgroundColor: '#000',
-                                                    borderRadius: '4px',
-                                                    padding: '8px',
-                                                    color: '#fff',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    cursor: 'pointer',
-                                                    flexShrink: 0,
-                                                    borderLeft: `6px solid ${serviceColor}`
-                                                }}
-                                            >
-                                                <div>
-                                                    <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
+                                    {displaySessions.length > 1 ? (
+                                        <>
+                                            {displaySessions.slice(0, 3).map((displaySession: any, idx: number) => {
+                                                const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
+                                                const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                                return (
+                                                    <div
+                                                        key={idx}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onSessionClick(displaySession);
+                                                        }}
+                                                        style={{
+                                                            height: '24px',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            backgroundColor: '#000',
+                                                            color: '#fff',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: 700,
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            borderLeft: `4px solid ${serviceColor}`,
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            cursor: 'pointer',
+                                                            flexShrink: 0
+                                                        }}
+                                                    >
                                                         {getSessionClientNames(displaySession)}
-                                                        {displaySession.clients && displaySession.clients.length > 1 && (
-                                                            <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
-                                                                ({displaySession.clients.length})
-                                                            </span>
-                                                        )}
                                                     </div>
-                                                    <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{displaySession.serviceName}</div>
+                                                );
+                                            })}
+                                            {displaySessions.length > 3 && (
+                                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#666', textAlign: 'center', marginTop: '2px' }}>
+                                                    + {displaySessions.length - 3} more
                                                 </div>
-                                                <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
-                                            </div>
-                                        );
-                                    })}
+                                            )}
+                                        </>
+                                    ) : (
+                                        displaySessions.map((displaySession: any, idx: number) => {
+                                            const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
+                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                            
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className="session-card"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onSessionClick(displaySession);
+                                                    }}
+                                                    style={{
+                                                        backgroundColor: '#000',
+                                                        borderRadius: '4px',
+                                                        padding: '8px',
+                                                        color: '#fff',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        cursor: 'pointer',
+                                                        flexShrink: 0,
+                                                        borderLeft: `6px solid ${serviceColor}`
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
+                                                            {getSessionClientNames(displaySession)}
+                                                            {displaySession.clients && displaySession.clients.length > 1 && (
+                                                                <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
+                                                                    ({displaySession.clients.length})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{displaySession.serviceName}</div>
+                                                    </div>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
 
                                     {isBusyByOthers && (
                                         <div
