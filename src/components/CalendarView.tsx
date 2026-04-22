@@ -203,134 +203,18 @@ export const CalendarView = () => {
                 padding: window.innerWidth <= 768 ? '16px 20px' : '20px 40px',
                 borderBottom: '2px solid #000',
                 display: 'flex',
-                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
-                gap: '20px',
-                justifyContent: 'space-between',
-                alignItems: window.innerWidth <= 768 ? 'stretch' : 'center',
+                flexDirection: 'column',
+                gap: '16px',
                 background: '#fff'
             }}>
-                {/* Left: Branding/Title */}
-                <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'center' : 'center', gap: window.innerWidth <= 768 ? '4px' : '16px', justifyContent: window.innerWidth <= 768 ? 'center' : 'space-between' }}>
-                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0, textAlign: 'center' }}>SCHEDULE</h1>
-                    {window.innerWidth <= 768 && (
-                        <span style={{ fontWeight: 800, fontSize: '0.95rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                            {formatWeekRange(currentWeekStart)}
-                        </span>
-                    )}
-                </div>
-
-                {/* Center: Navigation & Date */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: window.innerWidth <= 768 ? '12px' : '32px', justifyContent: 'center' }}>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button onClick={handlePrevWeek} className="button-secondary" style={{ padding: '6px 10px', height: '36px' }}><ChevronLeft size={18} /></button>
-                        <button
-                            onClick={handleToday}
-                            style={{
-                                height: '36px',
-                                padding: '0 16px',
-                                background: '#000',
-                                color: '#fff',
-                                border: 'none',
-                                fontWeight: 800,
-                                fontSize: '0.75rem',
-                                cursor: 'pointer',
-                                letterSpacing: '0.05em'
-                            }}
-                        >
-                            TODAY
-                        </button>
-                        <button
-                            onClick={handleNextWeek}
-                            disabled={isNextWeekBlocked}
-                            className="button-secondary"
-                            style={{
-                                padding: '6px 10px',
-                                height: '36px',
-                                opacity: isNextWeekBlocked ? 0.3 : 1,
-                                cursor: isNextWeekBlocked ? 'not-allowed' : 'pointer'
-                            }}
-                        >
-                            <ChevronRight size={18} />
-                        </button>
-                    </div>
-                    {window.innerWidth > 768 && (
-                        <span style={{ fontWeight: 800, fontSize: '1.1rem', whiteSpace: 'nowrap' }}>
-                            {formatWeekRange(currentWeekStart)}
-                        </span>
-                    )}
-                </div>
-
-                {/* Right: Controls & Primary Action */}
-                <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'stretch' : 'center', gap: '16px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
-                    {(isAdmin || isClient) && (
-                        <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'stretch' : 'center', gap: window.innerWidth <= 768 ? '6px' : '12px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
-                            <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em', textAlign: window.innerWidth <= 768 ? 'center' : 'left' }}>FILTER:</span>
-                            <select
-                                value={selectedTrainerId}
-                                onChange={(e) => setSelectedTrainerId(e.target.value)}
-                                style={{
-                                    height: '42px',
-                                    flex: window.innerWidth <= 768 ? 1 : 'none',
-                                    padding: '0 16px',
-                                    border: '2px solid #000',
-                                    borderRadius: 0,
-                                    fontWeight: 800,
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer',
-                                    outline: 'none',
-                                    background: '#fff'
-                                }}
-                            >
-                                {isClient ? (
-                                    <option value="my">My Calendar</option>
-                                ) : (
-                                    <option value="all">All Trainers</option>
-                                )}
-                                {trainers.map((t: any) => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    
-                    {(isAdmin || isManager) && (
-                        <div style={{ display: 'flex', border: '2px solid #000', borderRadius: '4px', overflow: 'hidden' }}>
-                            <button
-                                onClick={() => setViewMode('week')}
-                                style={{
-                                    padding: '8px 16px',
-                                    background: viewMode === 'week' ? '#000' : '#fff',
-                                    color: viewMode === 'week' ? '#fff' : '#000',
-                                    fontWeight: 800,
-                                    border: 'none',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                WEEK
-                            </button>
-                            <button
-                                onClick={() => setViewMode('day')}
-                                style={{
-                                    padding: '8px 16px',
-                                    background: viewMode === 'day' ? '#000' : '#fff',
-                                    color: viewMode === 'day' ? '#fff' : '#000',
-                                    fontWeight: 800,
-                                    border: 'none',
-                                    borderLeft: '2px solid #000',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                DAY
-                            </button>
-                        </div>
-                    )}
+                {/* Row 1: Macro Context */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
                     {!isTrainer && (
                         <button
                             onClick={handleBookButtonClick}
                             style={{
                                 height: '42px',
-                                width: window.innerWidth <= 768 ? '100%' : 'auto',
                                 padding: '0 20px',
                                 background: '#000',
                                 color: '#fff',
@@ -346,9 +230,126 @@ export const CalendarView = () => {
                             }}
                         >
                             <Plus size={18} />
-                            BOOK SESSION
+                            {window.innerWidth > 768 && 'BOOK SESSION'}
                         </button>
                     )}
+                </div>
+
+                {/* Row 2: Micro Controls */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: window.innerWidth <= 768 ? 'stretch' : 'center',
+                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                    gap: '16px',
+                    flexWrap: 'wrap'
+                }}>
+                    {/* Left Side Group */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: window.innerWidth <= 768 ? 'center' : 'flex-start' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button onClick={handlePrevWeek} className="button-secondary" style={{ padding: '6px 10px', height: '36px' }}><ChevronLeft size={18} /></button>
+                            <button
+                                onClick={handleToday}
+                                style={{
+                                    height: '36px',
+                                    padding: '0 16px',
+                                    background: '#000',
+                                    color: '#fff',
+                                    border: 'none',
+                                    fontWeight: 800,
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer',
+                                    letterSpacing: '0.05em'
+                                }}
+                            >
+                                TODAY
+                            </button>
+                            <button
+                                onClick={handleNextWeek}
+                                disabled={isNextWeekBlocked}
+                                className="button-secondary"
+                                style={{
+                                    padding: '6px 10px',
+                                    height: '36px',
+                                    opacity: isNextWeekBlocked ? 0.3 : 1,
+                                    cursor: isNextWeekBlocked ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
+                        <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem', whiteSpace: 'nowrap' }}>
+                            {formatWeekRange(currentWeekStart)}
+                        </span>
+                    </div>
+
+                    {/* Right Side Group */}
+                    <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'stretch' : 'center', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', gap: '16px' }}>
+                        {(isAdmin || isClient) && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>
+                                <select
+                                    value={selectedTrainerId}
+                                    onChange={(e) => setSelectedTrainerId(e.target.value)}
+                                    style={{
+                                        height: '42px',
+                                        flex: window.innerWidth <= 768 ? 1 : 'none',
+                                        padding: '0 16px',
+                                        border: '2px solid #000',
+                                        borderRadius: 0,
+                                        fontWeight: 800,
+                                        fontSize: '0.85rem',
+                                        cursor: 'pointer',
+                                        outline: 'none',
+                                        background: '#fff'
+                                    }}
+                                >
+                                    {isClient ? (
+                                        <option value="my">My Calendar</option>
+                                    ) : (
+                                        <option value="all">All Trainers</option>
+                                    )}
+                                    {trainers.map((t: any) => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        
+                        {(isAdmin || isManager) && (
+                            <div style={{ display: 'flex', border: '2px solid #000', borderRadius: '4px', overflow: 'hidden' }}>
+                                <button
+                                    onClick={() => setViewMode('week')}
+                                    style={{
+                                        padding: '8px 16px',
+                                        background: viewMode === 'week' ? '#000' : '#fff',
+                                        color: viewMode === 'week' ? '#fff' : '#000',
+                                        fontWeight: 800,
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        flex: 1
+                                    }}
+                                >
+                                    WEEK
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('day')}
+                                    style={{
+                                        padding: '8px 16px',
+                                        background: viewMode === 'day' ? '#000' : '#fff',
+                                        color: viewMode === 'day' ? '#fff' : '#000',
+                                        fontWeight: 800,
+                                        border: 'none',
+                                        borderLeft: '2px solid #000',
+                                        cursor: 'pointer',
+                                        flex: 1
+                                    }}
+                                >
+                                    DAY
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
