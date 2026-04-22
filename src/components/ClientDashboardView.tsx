@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
-import { Calendar, Clock, Briefcase } from 'lucide-react';
+import { Calendar, Clock, Briefcase, ChevronLeft, ChevronRight } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
 
@@ -11,20 +11,48 @@ export const ClientDashboardView = () => {
     // Use clientId (from profile or client record) to query sessions.
     // This is more reliable than uid because admins booking for clients
     // always populate 'client_ids' even when 'uids' may be empty.
+    const [selectedSession, setSelectedSession] = useState<any>(null);
+    const [selectedSlot, setSelectedSlot] = useState<any>(null);
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    
+    // Fetch sessions for the selected month
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    
     const { sessions, loading: sessionsLoading, hasMore, loadMore } = useSessions({
         role: profile?.role as any,
         userId: user?.uid || '',
         clientId: profile?.clientId || undefined,
-        pageSize: 10
+        startDate: monthStart,
+        pageSize: 100
     });
-
-    const [selectedSession, setSelectedSession] = useState<any>(null);
-    const [selectedSlot, setSelectedSlot] = useState<any>(null);
 
     const isLoading = authLoading || sessionsLoading;
 
-    // Sessions are already filtered (endTime > now) and sorted (startTime ASC) by the hook
-    const displayedSessions = sessions;
+    // Filtering Logic
+    const now = new Date();
+    const isSelectedToday = selectedDate.toDateString() === now.toDateString();
+    const selectedDateStr = selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    const displayedSessions = sessions.filter((s: any) => {
+        if (!s) return false;
+        
+        const sessionDate = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : new Date());
+        const isSameDay = sessionDate.toDateString() === selectedDate.toDateString();
+        
+        if (!isSameDay) return false;
+
+        // If it's today, only show upcoming sessions (startTime >= now)
+        if (isSelectedToday) {
+            const startTime = s.startTime?.toDate ? s.startTime.toDate() : new Date(`${s.date} ${s.time}`);
+            return startTime >= now;
+        }
+
+        return true;
+    }).sort((a: any, b: any) => {
+        const timeA = a.startTime?.toDate ? a.startTime.toDate().getTime() : new Date(`${a.date} ${a.time}`).getTime();
+        const timeB = b.startTime?.toDate ? b.startTime.toDate().getTime() : new Date(`${b.date} ${b.time}`).getTime();
+        return timeA - timeB;
+    });
 
     const formatSessionDate = (session: any) => {
         const d = session.startTime?.toDate ? session.startTime.toDate() : new Date(session.date);
@@ -116,61 +144,107 @@ export const ClientDashboardView = () => {
                 </button>
             </header>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {displayedSessions.length > 0 ? displayedSessions.map(session => (
-                    <div
-                        key={session.id}
-                        onClick={() => setSelectedSession(session)}
-                        className="card"
-                        style={{
-                            padding: window.innerWidth <= 768 ? '16px' : '24px',
-                            display: 'flex',
-                            flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
-                            alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
-                            justifyContent: 'space-between',
-                            gap: window.innerWidth <= 768 ? '16px' : '24px',
-                            cursor: 'pointer',
-                            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                            border: '3px solid #000',
-                            flexWrap: 'wrap' // allows wrapping on very narrow screens
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '4px 4px 0px #000';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'none';
-                            e.currentTarget.style.boxShadow = 'none';
-                        }}
-                    >
-                        <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '12px' : '24px', flexWrap: 'wrap', flexDirection: window.innerWidth <= 768 ? 'column-reverse' : 'row' }}>
-                            <div style={{ padding: '6px 12px', background: '#000', color: '#fff', fontWeight: 800, fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.85rem', width: 'fit-content' }}>
-                                {session.serviceName.toUpperCase()}
+            <div className="card" style={{ padding: window.innerWidth <= 768 ? '20px' : '32px', marginBottom: '32px', border: '3px solid #000' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                    justifyContent: 'space-between', 
+                    alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', 
+                    marginBottom: '24px',
+                    gap: '16px'
+                }}>
+                    <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
+                        {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
+                    </h2>
+                    <div style={{ display: 'flex', gap: '8px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
+                        <button 
+                            onClick={() => {
+                                const prev = new Date(selectedDate);
+                                prev.setDate(prev.getDate() - 1);
+                                setSelectedDate(prev);
+                            }}
+                            style={{ flex: 1, background: '#000', color: '#fff', border: 'none', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                        <button 
+                            onClick={() => setSelectedDate(new Date())}
+                            style={{ flex: 2, background: '#000', color: '#fff', border: 'none', padding: '12px 16px', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}
+                        >
+                            Today
+                        </button>
+                        <button 
+                            onClick={() => {
+                                const next = new Date(selectedDate);
+                                next.setDate(next.getDate() + 1);
+                                setSelectedDate(next);
+                            }}
+                            style={{ flex: 1, background: '#000', color: '#fff', border: 'none', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {displayedSessions.length > 0 ? displayedSessions.map(session => (
+                        <div
+                            key={session.id}
+                            onClick={() => setSelectedSession(session)}
+                            className="session-card" // Added a class for internal styling if needed
+                            style={{
+                                padding: window.innerWidth <= 768 ? '16px' : '24px',
+                                display: 'flex',
+                                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                                alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                                justifyContent: 'space-between',
+                                gap: window.innerWidth <= 768 ? '16px' : '24px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                border: '2px solid #eee',
+                                borderRadius: '4px',
+                                flexWrap: 'wrap'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = '#000';
+                                e.currentTarget.style.background = '#f9f9f9';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = '#eee';
+                                e.currentTarget.style.background = 'transparent';
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '12px' : '24px', flexWrap: 'wrap', flexDirection: window.innerWidth <= 768 ? 'column-reverse' : 'row' }}>
+                                <div style={{ padding: '6px 12px', background: '#000', color: '#fff', fontWeight: 800, fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.85rem', width: 'fit-content' }}>
+                                    {session.serviceName.toUpperCase()}
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Clock size={window.innerWidth <= 768 ? 16 : 20} className="text-muted" />
+                                    <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.2rem' }}>{session.time}</span>
+                                </div>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Calendar size={window.innerWidth <= 768 ? 16 : 20} className="text-muted" />
-                                <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.2rem' }}>{formatSessionDate(session)}</span>
+                            <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '8px' : '32px', color: '#444', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Calendar size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
+                                    <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{formatSessionDate(session)}</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Briefcase size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
+                                    <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{session.trainerName}</span>
+                                </div>
                             </div>
                         </div>
-
-                        <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '8px' : '32px', color: '#444', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Clock size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
-                                <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{session.time}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Briefcase size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
-                                <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{session.trainerName}</span>
-                            </div>
+                    )) : (
+                        <div style={{ padding: '40px', textAlign: 'center', background: '#f9f9f9', border: '2px dashed #000' }}>
+                            <p style={{ fontWeight: 800, color: '#000', fontSize: '1rem', textTransform: 'uppercase' }}>
+                                {isSelectedToday ? 'No more sessions for today. Enjoy your day!' : 'No sessions scheduled for this date.'}
+                            </p>
                         </div>
-                    </div>
-                )) : (
-                    <div style={{ padding: '40px', textAlign: 'center', background: '#f9f9f9', border: '2px dashed #ccc' }}>
-                        <p style={{ fontWeight: 700, color: '#666', fontSize: '1.1rem' }}>You have no upcoming sessions booked.</p>
-                        <p className="text-muted" style={{ marginTop: '8px' }}>Go to the Calendar to book your next visit!</p>
-                    </div>
-                )}
+                    )}
+                </div>
+            </div>
 
                 {hasMore && (
                     <button
@@ -190,7 +264,6 @@ export const ClientDashboardView = () => {
                         {sessionsLoading ? 'LOADING MORE...' : 'LOAD MORE SESSIONS'}
                     </button>
                 )}
-            </div>
 
             <BookingModal
                 isOpen={!!selectedSlot}

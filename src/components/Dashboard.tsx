@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from './CalendarView';
 import { ServiceManagement } from './ServiceManagement';
@@ -44,6 +44,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [selectedService, setSelectedService] = useState<any>(null);
     const [settingsTab, setSettingsTab] = useState('general');
     const [selectedSession, setSelectedSession] = useState<any>(null);
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const { user, profile } = useAuth();
     const navigate = useNavigate();
     const confirm = useConfirm();
@@ -72,8 +73,8 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: clients } = useFirestore<any>('clients');
     
-    // Fetch sessions for the current month to support stats
-    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    // Fetch sessions for the selected month to support stats and navigation
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
     
     // Using the centralized useSessions hook for standardized fetching
     const { sessions } = useSessions({
@@ -82,7 +83,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
         // Only filter by trainerId if the user IS a trainer (admins/managers see all sessions)
         trainerId: profile?.role === 'trainer' ? profile?.trainerId : undefined,
         startDate: monthStart,
-        pageSize: 100 // High limit for dashboard stats/lists
+        pageSize: 200 // Higher limit to cover the month's sessions
     });
 
 
@@ -188,68 +189,68 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 }
 
                 const now = new Date();
-                const todayStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                const todayDay = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
-
-                // Calculate week boundaries (Mon-Sun)
-                const startOfWeek = new Date(now);
-                const day = (now.getDay() + 6) % 7;
-                startOfWeek.setDate(now.getDate() - day);
-                startOfWeek.setHours(0, 0, 0, 0);
-                
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(startOfWeek.getDate() + 6);
-                endOfWeek.setHours(23, 59, 59, 999);
-
-                // Calculate month boundaries
-                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                const isSelectedToday = selectedDate.toDateString() === now.toDateString();
+                const selectedDateStr = selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
                 // Sessions are already filtered by role and siteId
                 const userSessions = sessions || [];
 
-                // Today's sessions: match by date OR day-of-week (for recurring)
-                const todaySessions = userSessions.filter((s: any) => {
+                // Filtered sessions for the selected date
+                const filteredSessions = userSessions.filter((s: any) => {
                     if (!s) return false;
-                    if (s.date) {
-                        try {
-                            const sessionDate = new Date(s.date);
-                            if (isNaN(sessionDate.getTime())) return false;
-                            return sessionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) === todayStr;
-                        } catch (e) {
-                            return false;
-                        }
+                    
+                    const sessionDate = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : new Date());
+                    const isSameDay = sessionDate.toDateString() === selectedDate.toDateString();
+                    
+                    if (!isSameDay) return false;
+
+                    // If it's today, only show upcoming sessions (startTime >= now)
+                    if (isSelectedToday) {
+                        const startTime = s.startTime?.toDate ? s.startTime.toDate() : new Date(`${s.date} ${s.time}`);
+                        return startTime >= now;
                     }
-                    return s.day === todayDay;
+
+                    return true;
                 }).sort((a: any, b: any) => {
-                    if (!a?.time || !b?.time) return 0;
-                    try {
-                        const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
-                        const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
-                        return timeA - timeB;
-                    } catch (e) {
-                        return 0;
-                    }
+                    const timeA = a.startTime?.toDate ? a.startTime.toDate().getTime() : new Date(`${a.date} ${a.time}`).getTime();
+                    const timeB = b.startTime?.toDate ? b.startTime.toDate().getTime() : new Date(`${b.date} ${b.time}`).getTime();
+                    return timeA - timeB;
                 });
 
-                // Sessions this week
+                // Stats calculation (keeping these relative to 'Today' for the macro view)
+                const todaySessionsCount = userSessions.filter((s: any) => {
+                    const d = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : null);
+                    return d?.toDateString() === now.toDateString();
+                }).length;
+
+                // Week boundaries for stats
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                startOfWeek.setHours(0, 0, 0, 0);
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                endOfWeek.setHours(23, 59, 59, 999);
+
                 const sessionsThisWeek = userSessions.filter((s: any) => {
-                    if (!s.date) return false;
-                    const d = new Date(s.date);
-                    return d >= startOfWeek && d <= endOfWeek;
+                    const d = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : null);
+                    return d && d >= startOfWeek && d <= endOfWeek;
                 });
 
-                // Sessions this month
                 const sessionsThisMonth = userSessions.filter((s: any) => {
-                    if (!s.date) return false;
-                    const d = new Date(s.date);
-                    return d >= startOfMonth && d <= endOfMonth;
+                    const d = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : null);
+                    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
                 });
 
-                // Next Upcoming Sessions
                 const nextSessions = userSessions
-                    .filter((s: any) => !todaySessions.find(ts => ts.id === s.id))
-                    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                    .filter((s: any) => {
+                        const d = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : null);
+                        return d && d > now;
+                    })
+                    .sort((a: any, b: any) => {
+                        const timeA = a.startTime?.toDate ? a.startTime.toDate().getTime() : new Date(`${a.date} ${a.time}`).getTime();
+                        const timeB = b.startTime?.toDate ? b.startTime.toDate().getTime() : new Date(`${b.date} ${b.time}`).getTime();
+                        return timeA - timeB;
+                    })
                     .slice(0, 3);
 
                 return (
@@ -280,7 +281,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             gap: '24px',
                             marginBottom: '40px'
                         }}>
-                            <StatCard title="TODAY'S SESSIONS" value={todaySessions.length.toString()} icon={<Calendar size={24} />} />
+                            <StatCard title="TODAY'S SESSIONS" value={todaySessionsCount.toString()} icon={<Calendar size={24} />} />
                             
                             {isTrainer && (
                                 <>
@@ -299,9 +300,49 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
                         <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 1024 ? '1fr' : '2fr 1fr', gap: '24px' }}>
                             <div className="card" style={{ padding: '32px' }}>
-                                <h2 style={{ marginBottom: '24px', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase' }}>TODAY'S SESSIONS</h2>
+                                <div style={{ 
+                                    display: 'flex', 
+                                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                                    justifyContent: 'space-between', 
+                                    alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', 
+                                    marginBottom: '32px',
+                                    gap: '16px'
+                                }}>
+                                    <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
+                                        {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
+                                    </h2>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button 
+                                            onClick={() => {
+                                                const prev = new Date(selectedDate);
+                                                prev.setDate(prev.getDate() - 1);
+                                                setSelectedDate(prev);
+                                            }}
+                                            style={{ background: '#000', color: '#fff', border: 'none', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        >
+                                            <ChevronLeft size={20} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setSelectedDate(new Date())}
+                                            style={{ background: '#000', color: '#fff', border: 'none', padding: '8px 16px', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}
+                                        >
+                                            Today
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                const next = new Date(selectedDate);
+                                                next.setDate(next.getDate() + 1);
+                                                setSelectedDate(next);
+                                            }}
+                                            style={{ background: '#000', color: '#fff', border: 'none', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        >
+                                            <ChevronRight size={20} />
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    {todaySessions.length > 0 ? todaySessions.map((session: any) => (
+                                    {filteredSessions.length > 0 ? filteredSessions.map((session: any) => (
                                         <SessionItem
                                             key={session.id}
                                             clientName={session.clientName || session.clients?.[0]?.name || 'Unknown Client'}
@@ -311,7 +352,11 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                             onClick={() => setSelectedSession(session)}
                                         />
                                     )) : (
-                                        <p className="text-muted" style={{ fontWeight: 500, fontSize: '0.9rem' }}>NO SESSIONS SCHEDULED FOR TODAY.</p>
+                                        <div style={{ padding: '40px', textAlign: 'center', background: '#f9f9f9', border: '2px dashed #000' }}>
+                                            <p style={{ fontWeight: 800, color: '#000', fontSize: '1rem', textTransform: 'uppercase' }}>
+                                                {isSelectedToday ? 'No more sessions for today. Enjoy your day!' : 'No sessions scheduled for this date.'}
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
