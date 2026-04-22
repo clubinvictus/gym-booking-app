@@ -352,8 +352,6 @@ export const CalendarView = () => {
                         )}
                     </div>
                 </div>
-                    </div>
-                </div>
             </header>
 
             {viewMode === 'week' ? (
