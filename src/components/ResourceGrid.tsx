@@ -46,9 +46,13 @@ export const ResourceGrid: React.FC<GridProps> = ({
     };
 
     return (
-        <div style={{ flex: 1, overflow: 'auto', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
-            <div style={{
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
+            <div 
+                className="no-scrollbar"
+                style={{
                 display: 'grid',
+                overflowX: 'auto',
+                overscrollBehaviorX: 'contain',
                 // First column is Time (80px), then 1fr for each active trainer
                 gridTemplateColumns: `80px repeat(${activeTrainers.length}, 1fr)`,
                 minWidth: window.innerWidth <= 768 ? '800px' : '1000px',

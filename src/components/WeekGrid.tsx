@@ -136,7 +136,13 @@ export const WeekGrid: React.FC<GridProps> = ({
     };
 
     return (
-        <div style={{ flex: 1, overflow: 'auto', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
+        <div style={{ 
+            flex: 1, 
+            overflowX: 'hidden', 
+            overflowY: 'auto', 
+            touchAction: 'pan-y',
+            padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' 
+        }}>
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: '60px repeat(7, 1fr)',
