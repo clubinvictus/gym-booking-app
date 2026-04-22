@@ -207,22 +207,48 @@ export const CalendarView = () => {
                 gap: '16px',
                 background: '#fff'
             }}>
-                {/* Row 1: Macro Context */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
+                {/* Row 1: Macro Context & Mobile Action */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '1.8rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
+                    {window.innerWidth <= 768 && !isTrainer && (
+                        <button
+                            onClick={handleBookButtonClick}
+                            style={{
+                                height: '42px',
+                                width: '42px',
+                                background: '#000',
+                                color: '#fff',
+                                border: '2px solid #000',
+                                fontWeight: 900,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                borderRadius: 0
+                            }}
+                        >
+                            <Plus size={24} />
+                        </button>
+                    )}
                 </div>
 
-                {/* Row 2: Micro Controls */}
+                {/* Row 2 & 3 Container */}
                 <div style={{
                     display: 'flex',
+                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
                     justifyContent: 'space-between',
                     alignItems: window.innerWidth <= 768 ? 'stretch' : 'center',
-                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
-                    gap: '16px',
-                    flexWrap: 'wrap'
+                    gap: window.innerWidth <= 768 ? '12px' : '16px'
                 }}>
-                    {/* Left Side Group */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: window.innerWidth <= 768 ? 'center' : 'flex-start' }}>
+                    {/* Date Navigation (Row 2 on Mobile) */}
+                    <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        gap: '16px',
+                        width: window.innerWidth <= 768 ? '100%' : 'auto'
+                    }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button onClick={handlePrevWeek} className="button-secondary" style={{ padding: '6px 10px', height: '36px' }}><ChevronLeft size={18} /></button>
                             <button
@@ -255,23 +281,33 @@ export const CalendarView = () => {
                                 <ChevronRight size={18} />
                             </button>
                         </div>
-                        <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ 
+                            fontWeight: 800, 
+                            fontSize: window.innerWidth <= 768 ? '0.85rem' : '1.1rem', 
+                            whiteSpace: 'nowrap' 
+                        }}>
                             {formatWeekRange(currentWeekStart)}
                         </span>
                     </div>
 
-                    {/* Right Side Group */}
-                    <div style={{ display: 'flex', alignItems: 'center', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', gap: '16px' }}>
+                    {/* Right Side Group (Row 3 on Mobile) */}
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        width: window.innerWidth <= 768 ? '100%' : 'auto'
+                    }}>
                         {(isAdmin || isClient) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: window.innerWidth <= 768 ? 1 : 'none' }}>
+                                {window.innerWidth > 768 && <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>}
                                 <select
                                     value={selectedTrainerId}
                                     onChange={(e) => setSelectedTrainerId(e.target.value)}
                                     style={{
                                         height: '42px',
-                                        flex: window.innerWidth <= 768 ? 1 : 'none',
-                                        padding: '0 16px',
+                                        width: '100%',
+                                        padding: '0 12px',
                                         border: '2px solid #000',
                                         borderRadius: 0,
                                         fontWeight: 800,
@@ -294,11 +330,18 @@ export const CalendarView = () => {
                         )}
                         
                         {(isAdmin || isManager) && (
-                            <div style={{ display: 'flex', border: '2px solid #000', borderRadius: '4px', overflow: 'hidden', height: '42px' }}>
+                            <div style={{ 
+                                display: 'flex', 
+                                border: '2px solid #000', 
+                                borderRadius: '4px', 
+                                overflow: 'hidden', 
+                                height: '42px',
+                                flex: window.innerWidth <= 768 ? 1 : 'none'
+                            }}>
                                 <button
                                     onClick={() => setViewMode('week')}
                                     style={{
-                                        padding: '0 16px',
+                                        padding: '0 12px',
                                         background: viewMode === 'week' ? '#000' : '#fff',
                                         color: viewMode === 'week' ? '#fff' : '#000',
                                         fontWeight: 800,
@@ -313,7 +356,7 @@ export const CalendarView = () => {
                                 <button
                                     onClick={() => setViewMode('day')}
                                     style={{
-                                        padding: '0 16px',
+                                        padding: '0 12px',
                                         background: viewMode === 'day' ? '#000' : '#fff',
                                         color: viewMode === 'day' ? '#fff' : '#000',
                                         fontWeight: 800,
@@ -329,7 +372,7 @@ export const CalendarView = () => {
                             </div>
                         )}
 
-                        {!isTrainer && (
+                        {window.innerWidth > 768 && !isTrainer && (
                             <button
                                 onClick={handleBookButtonClick}
                                 style={{
