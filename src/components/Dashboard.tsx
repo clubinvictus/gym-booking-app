@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from './CalendarView';
@@ -45,6 +45,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [settingsTab, setSettingsTab] = useState('general');
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const dateInputRef = useRef<HTMLInputElement>(null);
     const { user, profile } = useAuth();
     const navigate = useNavigate();
     const confirm = useConfirm();
@@ -310,28 +311,37 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 }}>
                                     <div style={{ position: 'relative' }}>
                                         <button 
+                                            onClick={() => dateInputRef.current?.showPicker()}
                                             style={{ 
                                                 background: 'transparent', 
                                                 border: 'none', 
-                                                padding: 0, 
+                                                padding: '8px 12px', 
+                                                margin: '-8px -12px',
+                                                borderRadius: '4px',
                                                 textAlign: 'left', 
                                                 cursor: 'pointer', 
                                                 display: 'flex', 
                                                 alignItems: 'center', 
-                                                gap: '8px' 
+                                                gap: '12px',
+                                                transition: 'background 0.2s ease'
                                             }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                         >
+                                            <Calendar size={20} />
                                             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
                                                 {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
                                             </h2>
-                                            <ChevronDown size={20} />
+                                            <ChevronDown size={18} className="text-muted" />
                                         </button>
                                         <input 
+                                            ref={dateInputRef}
                                             type="date"
                                             value={selectedDate.toISOString().split('T')[0]}
                                             onChange={(e) => {
                                                 if (e.target.value) {
-                                                    setSelectedDate(new Date(e.target.value));
+                                                    const [y, m, d] = e.target.value.split('-').map(Number);
+                                                    setSelectedDate(new Date(y, m - 1, d));
                                                 }
                                             }}
                                             style={{
@@ -341,7 +351,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                                 width: '100%',
                                                 height: '100%',
                                                 opacity: 0,
-                                                cursor: 'pointer'
+                                                pointerEvents: 'none'
                                             }}
                                         />
                                     </div>

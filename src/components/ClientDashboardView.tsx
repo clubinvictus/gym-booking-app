@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
 import { Calendar, Clock, Briefcase, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
@@ -14,6 +14,7 @@ export const ClientDashboardView = () => {
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const dateInputRef = useRef<HTMLInputElement>(null);
     
     // Fetch sessions for the selected month
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -155,28 +156,37 @@ export const ClientDashboardView = () => {
                 }}>
                     <div style={{ position: 'relative' }}>
                         <button 
+                            onClick={() => dateInputRef.current?.showPicker()}
                             style={{ 
                                 background: 'transparent', 
                                 border: 'none', 
-                                padding: 0, 
+                                padding: '8px 12px', 
+                                margin: '-8px -12px',
+                                borderRadius: '4px',
                                 textAlign: 'left', 
                                 cursor: 'pointer', 
                                 display: 'flex', 
                                 alignItems: 'center', 
-                                gap: '8px' 
+                                gap: '12px',
+                                transition: 'background 0.2s ease'
                             }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
+                            <Calendar size={20} />
                             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
                                 {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
                             </h2>
-                            <ChevronDown size={20} />
+                            <ChevronDown size={18} className="text-muted" />
                         </button>
                         <input 
+                            ref={dateInputRef}
                             type="date"
                             value={selectedDate.toISOString().split('T')[0]}
                             onChange={(e) => {
                                 if (e.target.value) {
-                                    setSelectedDate(new Date(e.target.value));
+                                    const [y, m, d] = e.target.value.split('-').map(Number);
+                                    setSelectedDate(new Date(y, m - 1, d));
                                 }
                             }}
                             style={{
@@ -186,7 +196,7 @@ export const ClientDashboardView = () => {
                                 width: '100%',
                                 height: '100%',
                                 opacity: 0,
-                                cursor: 'pointer'
+                                pointerEvents: 'none'
                             }}
                         />
                     </div>
