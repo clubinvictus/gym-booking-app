@@ -21,11 +21,7 @@ const formatWeekRange = (start: Date) => {
     return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}, ${start.getFullYear()}`;
 };
 
-const getDayDate = (start: Date, dayIndex: number) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + dayIndex);
-    return date.getDate();
-};
+
 
 const getStartOfWeek = (d: Date) => {
     const date = new Date(d);
@@ -94,9 +90,6 @@ export const CalendarView = () => {
         return nextWeekStart > limitDate;
     })();
 
-    // Removed auto-filter that restricted trainers to only see their own sessions.
-    // Following user request for "one source of truth," staff should see all sessions by default.
-
     // Calculate start and end of visible week for optimized fetching
     const { weekStartDate, weekEndDate } = useMemo(() => {
         const start = new Date(currentWeekStart);
@@ -115,7 +108,6 @@ export const CalendarView = () => {
         endDate: weekEndDate,
         includePast: true,
         pageSize: 200, // Enough to cover a busy week
-        // Pass trainerId if specifically filtering the view (except for 'all' which handles itself in-service)
         trainerId: (isAdmin || isManager || isTrainer) && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
                   (isTrainer && selectedTrainerId === 'my' ? profile?.trainerId : undefined)
     });
@@ -175,13 +167,11 @@ export const CalendarView = () => {
     };
 
     const handleBookButtonClick = () => {
-        // Use next clean hour so the booking is always in the future
         const nextHour = new Date();
         nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
 
-        // Map JS getDay() (0 = Sun) to our Mon=0..Sun=6 system
-        const jsDow = nextHour.getDay(); // 0=Sun,1=Mon,...,6=Sat
-        const dayIndex = jsDow === 0 ? 6 : jsDow - 1; // Sun→6, Mon→0, ..., Sat→5
+        const jsDow = nextHour.getDay();
+        const dayIndex = jsDow === 0 ? 6 : jsDow - 1;
 
         const timeStr = nextHour.toLocaleTimeString('en-US', {
             hour: '2-digit',
@@ -207,7 +197,6 @@ export const CalendarView = () => {
                 gap: '16px',
                 background: '#fff'
             }}>
-                {/* Row 1: Macro Context & Mobile Action */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                     <h1 style={{ fontSize: window.innerWidth <= 768 ? '1.8rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
                     {window.innerWidth <= 768 && !isTrainer && (
@@ -233,7 +222,6 @@ export const CalendarView = () => {
                     )}
                 </div>
 
-                {/* Row 2 & 3 Container */}
                 <div style={{
                     display: 'flex',
                     flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
@@ -241,7 +229,6 @@ export const CalendarView = () => {
                     alignItems: window.innerWidth <= 768 ? 'stretch' : 'center',
                     gap: window.innerWidth <= 768 ? '12px' : '16px'
                 }}>
-                    {/* Date Navigation (Row 2 on Mobile) */}
                     <div style={{ 
                         display: 'flex', 
                         justifyContent: 'space-between', 
@@ -290,7 +277,6 @@ export const CalendarView = () => {
                         </span>
                     </div>
 
-                    {/* Right Side Group (Row 3 on Mobile) */}
                     <div style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
@@ -447,7 +433,7 @@ export const CalendarView = () => {
                 selectedSlot={selectedSlot}
                 editingSession={selectedSession}
                 excludedTrainerId={excludedTrainerId}
-                onBook={(data) => {
+                onBook={(data: any) => {
                     console.log('Session booked/updated:', data);
                     setSelectedSlot(null);
                     setSelectedSession(null);
@@ -459,20 +445,17 @@ export const CalendarView = () => {
                 isOpen={!!selectedSession && !selectedSlot}
                 onClose={() => setSelectedSession(null)}
                 session={selectedSession}
-                onDelete={(id) => {
+                onDelete={(id: string) => {
                     console.log('Session deleted:', id);
                     setSelectedSession(null);
                 }}
-                onReschedule={(session) => {
-                    // Pass the session date so getTargetDate doesn't default to today,
-                    // which would fail the past-booking check for old sessions.
+                onReschedule={(session: any) => {
                     setSelectedSlot({
                         day: session.day,
                         time: session.time,
                         trainerId: session.trainerId,
                         date: session.date ? new Date(session.date) : new Date()
                     });
-                    // selectedSession stays set so BookingModal knows we are editing
                 }}
             />
 
@@ -484,6 +467,7 @@ export const CalendarView = () => {
 
                     try {
                         const dateStr = offDayDate.toISOString().split('T')[0];
+                        
                         await addDoc(collection(db, 'off_days'), {
                             trainerId: selectedTrainerId,
                             date: dateStr,

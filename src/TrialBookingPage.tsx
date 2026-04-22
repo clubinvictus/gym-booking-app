@@ -9,7 +9,7 @@ import {
     EyeOff
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, getDocs, query, where, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot, QuerySnapshot, type DocumentData } from 'firebase/firestore';
 import { SITE_ID } from './constants';
 import { submitTrialBooking } from './utils/trialBooking';
 import { useNavigate } from 'react-router-dom';
@@ -105,15 +105,15 @@ export const TrialBookingPage = () => {
                 setTrainers(trainersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
                 // Use real-time listeners for dynamic availability data
-                unsubSessions = onSnapshot(query(collection(db, 'sessions'), where('siteId', '==', SITE_ID)), (snap) => {
+                unsubSessions = onSnapshot(query(collection(db, 'sessions'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
                     setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
-                unsubOffDays = onSnapshot(query(collection(db, 'off_days'), where('siteId', '==', SITE_ID)), (snap) => {
+                unsubOffDays = onSnapshot(query(collection(db, 'off_days'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
                     setOffDays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
-                unsubBusySlots = onSnapshot(query(collection(db, 'trainer_busy_slots'), where('siteId', '==', SITE_ID)), (snap) => {
+                unsubBusySlots = onSnapshot(query(collection(db, 'trainer_busy_slots'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
                     setBusySlots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 

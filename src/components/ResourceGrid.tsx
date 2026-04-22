@@ -6,18 +6,13 @@ export const ResourceGrid: React.FC<GridProps> = ({
     trainers,
     services,
     busySlots,
-    offDays,
     currentWeekStart, // In Day view, we'll treat this as the 'active' day for now
     selectedTrainerId,
     clientIds,
-    limitDate,
-    isAdmin,
     isClient,
     isTrainer,
-    profile,
     onSlotSelected,
     onSessionClick,
-    onDayHeaderClick
 }) => {
     // 1. Time Slots & Basic Config
     const timeSlots = [
@@ -35,15 +30,6 @@ export const ResourceGrid: React.FC<GridProps> = ({
     // For now, we use currentWeekStart as the target Date. 
     // (If the container implements day-level navigation later, this will just read the active day)
     const activeDate = new Date(currentWeekStart);
-    const activeDateStr = activeDate.toISOString().split('T')[0];
-    const isToday = activeDate.toDateString() === new Date().toDateString();
-
-    const getSessionClientNames = (session: any) => {
-        if (session.clients && Array.isArray(session.clients)) {
-            return session.clients.map((c: any) => c.name).join(', ');
-        }
-        return session.clientName || 'Unknown Client';
-    };
 
     return (
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
