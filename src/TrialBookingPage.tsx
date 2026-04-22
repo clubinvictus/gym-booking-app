@@ -72,21 +72,25 @@ export const TrialBookingPage = () => {
 
     // 1. Initial Data Fetch
     useEffect(() => {
+        let unsubSessions: (() => void) | null = null;
+        let unsubOffDays: (() => void) | null = null;
+        let unsubBusySlots: (() => void) | null = null;
+
         const fetchData = async () => {
-            setLoading(true);
             try {
-                // Fetch 'Trial' service (strictly lead-tier)
-                const serviceQ = query(
-                    collection(db, 'services'), 
-                    where('allowed_tiers', 'array-contains', 'lead'),
-                    limit(1)
+                // Fetch service info
+                const qService = query(
+                    collection(db, 'services'),
+                    where('siteId', '==', SITE_ID),
+                    where('isTrial', '==', true)
                 );
-                const serviceSnap = await getDocs(serviceQ);
+                const serviceSnap = await getDocs(qService);
                 
                 if (serviceSnap.empty) {
-                    setError('Trial service not configured strictly for leads. Please contact support.');
+                    setError('Trial service not configured for this site.');
                     return;
                 }
+
                 const s = { id: serviceSnap.docs[0].id, ...(serviceSnap.docs[0].data() as any) };
                 setTrialService(s);
 
@@ -100,15 +104,18 @@ export const TrialBookingPage = () => {
                 const trainersSnap = await getDocs(query(collection(db, 'trainers'), where('__name__', 'in', trainerIds.slice(0, 10))));
                 setTrainers(trainersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-                // Fetch occupied slots and off-days
-                const sessionsSnap = await getDocs(query(collection(db, 'sessions'), where('siteId', '==', SITE_ID)));
-                setSessions(sessionsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                // Use real-time listeners for dynamic availability data
+                unsubSessions = onSnapshot(query(collection(db, 'sessions'), where('siteId', '==', SITE_ID)), (snap) => {
+                    setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
 
-                const offDaysSnap = await getDocs(query(collection(db, 'off_days'), where('siteId', '==', SITE_ID)));
-                setOffDays(offDaysSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                unsubOffDays = onSnapshot(query(collection(db, 'off_days'), where('siteId', '==', SITE_ID)), (snap) => {
+                    setOffDays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
 
-                const busySnap = await getDocs(query(collection(db, 'trainer_busy_slots'), where('siteId', '==', SITE_ID)));
-                setBusySlots(busySnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                unsubBusySlots = onSnapshot(query(collection(db, 'trainer_busy_slots'), where('siteId', '==', SITE_ID)), (snap) => {
+                    setBusySlots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
 
             } catch (err: any) {
                 console.error('Fetch error:', err);
@@ -119,6 +126,13 @@ export const TrialBookingPage = () => {
         };
 
         fetchData();
+
+        // Cleanup listeners on unmount
+        return () => {
+            if (unsubSessions) unsubSessions();
+            if (unsubOffDays) unsubOffDays();
+            if (unsubBusySlots) unsubBusySlots();
+        };
     }, []);
 
     // Calendar Helper
