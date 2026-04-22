@@ -1296,10 +1296,10 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                             fontSize: '1.2rem'
                         }}>⚠️</div>
-                        <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>Double-Booking Detected</h2>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>Scheduling Conflict</h2>
                     </div>
                     <p style={{ color: '#555', marginBottom: '16px', fontSize: '0.95rem' }}>
-                        <strong>{selectedTrainer}</strong> is already booked on the following date{conflictModal.conflicts.length > 1 ? 's' : ''}:
+                        <strong>{selectedTrainer}</strong> is unavailable on the following date{conflictModal.conflicts.length > 1 ? 's' : ''} (due to full capacity or conflicting sessions):
                     </p>
                     <div style={{
                         background: '#f9f9f9', border: '1px solid #e0e0e0',

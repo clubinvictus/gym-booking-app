@@ -204,10 +204,20 @@ export const CalendarView = () => {
 
         let available = isTrainerAvailable(dayIndex, time) && !isPastLimit;
 
-        // Block double booking the same trainer if viewing individually
+        // Evaluate group session capacity if viewing a specific trainer
         if (selectedTrainerId !== 'all' && selectedTrainerId !== 'my') {
-            const isBooked = sessions.some((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
-            if (isBooked) available = false;
+            const existingSessions = sessions.filter((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
+            
+            if (existingSessions.length > 0) {
+                const session = existingSessions[0];
+                const service = services.find((sv: any) => sv.id === session.serviceId);
+                const maxCap = service?.max_capacity || 1;
+                const currentCount = session.clients?.length || 1;
+                
+                if (currentCount >= maxCap) {
+                    available = false;
+                }
+            }
 
             // Also check busySlots (for clients)
             const slotDateStr = slotDate.toISOString().split('T')[0];

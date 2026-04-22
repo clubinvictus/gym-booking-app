@@ -147,7 +147,7 @@ export const TrialBookingPage = () => {
             const isOff = offDays.some(od => od.trainerId === trainer.id && od.date === dateStr);
             if (isOff) continue;
 
-            const isBooked = sessions.some(s => {
+            const existingSessions = sessions.filter(s => {
                 if (s.trainerId !== trainer.id) return false;
                 if (s.startTime) {
                     const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
@@ -160,7 +160,19 @@ export const TrialBookingPage = () => {
                 }
                 return s.time === time && s.date === dateISO;
             });
-            if (isBooked) continue;
+            
+            let hasConflict = false;
+            if (existingSessions.length > 0) {
+                const session = existingSessions[0];
+                const maxCap = trialService.max_capacity || 1;
+                const currentCount = session.clients?.length || 1;
+                
+                // Reject if full, or if the existing session is a different service type
+                if (currentCount >= maxCap || session.serviceId !== trialService.id) {
+                    hasConflict = true;
+                }
+            }
+            if (hasConflict) continue;
 
             const isBusy = busySlots.some(bs => bs.trainerId === trainer.id && bs.time === time && bs.date === dateISO);
             if (isBusy) continue;
