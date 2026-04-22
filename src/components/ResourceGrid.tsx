@@ -1,5 +1,5 @@
 import React from 'react';
-import { GridProps } from './WeekGrid';
+import type { GridProps } from './WeekGrid';
 
 export const ResourceGrid: React.FC<GridProps> = ({ trainers }) => {
     return (
