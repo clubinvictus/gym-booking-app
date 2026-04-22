@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
-import { Calendar, Clock, Briefcase, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, Briefcase, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
 
@@ -153,9 +153,43 @@ export const ClientDashboardView = () => {
                     marginBottom: '24px',
                     gap: '16px'
                 }}>
-                    <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
-                        {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
-                    </h2>
+                    <div style={{ position: 'relative' }}>
+                        <button 
+                            style={{ 
+                                background: 'transparent', 
+                                border: 'none', 
+                                padding: 0, 
+                                textAlign: 'left', 
+                                cursor: 'pointer', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px' 
+                            }}
+                        >
+                            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
+                                {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
+                            </h2>
+                            <ChevronDown size={20} />
+                        </button>
+                        <input 
+                            type="date"
+                            value={selectedDate.toISOString().split('T')[0]}
+                            onChange={(e) => {
+                                if (e.target.value) {
+                                    setSelectedDate(new Date(e.target.value));
+                                }
+                            }}
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                opacity: 0,
+                                cursor: 'pointer'
+                            }}
+                        />
+                    </div>
                     <div style={{ display: 'flex', gap: '8px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
                         <button 
                             onClick={() => {
