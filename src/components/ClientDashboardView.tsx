@@ -18,7 +18,6 @@ export const ClientDashboardView = () => {
     const { sessions, loading: sessionsLoading } = useSessions({
         role: profile?.role as any,
         userId: user?.uid || '',
-        clientId: profile?.clientId || undefined,
         startDate: today,
         includePast: false, // Only fetch future sessions from Firestore
         pageSize: 100
@@ -47,9 +46,16 @@ export const ClientDashboardView = () => {
 
     const now = Date.now();
 
-    // Filter to strictly future sessions, sort chronologically, cap at 10
+    // Filter to strictly future sessions that belong to this client, sort chronologically, cap at 10
     const upcomingSessions = sessions
-        .filter((s: any) => sessionToMs(s) >= now)
+        .filter((s: any) => {
+            const isMySession = s.clientId === profile?.clientId || 
+                                s.clientIds?.includes(profile?.clientId) || 
+                                s.client_ids?.includes(profile?.clientId) || 
+                                s.uids?.includes(user?.uid) || 
+                                (s.clients && s.clients.some((c: any) => c.id === profile?.clientId));
+            return isMySession && sessionToMs(s) >= now;
+        })
         .sort((a: any, b: any) => sessionToMs(a) - sessionToMs(b))
         .slice(0, 10);
 
