@@ -207,18 +207,34 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 // Format selectedDate as YYYY-MM-DD string (matching the 'date' prefix in Firestore)
                 const selectedDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
+                // Parse a time string like "06:00 AM" or "05:00 PM" into minutes since midnight
+                // so that AM/PM sessions sort correctly (not lexicographically).
+                const timeToMinutes = (timeStr: string): number => {
+                    if (!timeStr) return 9999;
+                    try {
+                        const normalized = timeStr.replace(/\u202F/g, ' ').trim();
+                        const [timePart, ampm] = normalized.split(' ');
+                        let [h, m] = timePart.split(':').map(Number);
+                        if (ampm?.toUpperCase() === 'PM' && h < 12) h += 12;
+                        if (ampm?.toUpperCase() === 'AM' && h === 12) h = 0;
+                        return h * 60 + m;
+                    } catch { return 9999; }
+                };
+
                 // Sessions store date as a full ISO string e.g. "2026-04-23T04:30:00.000Z"
-                // Extract just the YYYY-MM-DD portion for comparison
-                const filteredSessions = userSessions
+                // Extract just the YYYY-MM-DD portion for date matching.
+                const sessionsForDay = userSessions
                     .filter((s: any) => {
                         if (!s?.date) return false;
-                        const sessionDatePrefix = String(s.date).substring(0, 10);
-                        return sessionDatePrefix === selectedDateISO;
+                        return String(s.date).substring(0, 10) === selectedDateISO;
                     })
-                    .sort((a: any, b: any) => {
-                        if (!a.time || !b.time) return 0;
-                        return a.time.localeCompare(b.time);
-                    });
+                    .sort((a: any, b: any) => timeToMinutes(a.time) - timeToMinutes(b.time));
+
+                // For today: hide sessions that have already started/passed.
+                // For any other date: show all sessions in chronological order.
+                const filteredSessions = isSelectedToday
+                    ? sessionsForDay.filter((s: any) => timeToMinutes(s.time) >= (now.getHours() * 60 + now.getMinutes()))
+                    : sessionsForDay;
 
                 // Stats calculation (keeping these relative to 'Today' for the macro view)
                 const todaySessionsCount = userSessions.filter((s: any) => {

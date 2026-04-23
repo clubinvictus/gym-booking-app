@@ -34,50 +34,32 @@ export const ClientDashboardView = () => {
     const isSelectedToday = selectedDate.toDateString() === now.toDateString();
     const selectedDateStr = selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-    const displayedSessions = sessions.filter((s: any) => {
-        if (!s) return false;
-        
-        const now = new Date();
-        const isToday = selectedDate.toDateString() === now.toDateString();
-        
+    // Format selectedDate as YYYY-MM-DD for matching against the ISO date prefix stored in Firestore
+    const selectedDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+
+    // Parse "06:00 AM" / "05:00 PM" → minutes since midnight for correct chronological sort
+    const timeToMinutes = (timeStr: string): number => {
+        if (!timeStr) return 9999;
         try {
-            let sessionStart: Date;
-            if (s.startTime?.toDate) {
-                sessionStart = s.startTime.toDate();
-            } else if (s.startTime instanceof Date) {
-                sessionStart = s.startTime;
-            } else if (s.date && s.time) {
-                const [y, m, d] = s.date.split('-').map(Number);
-                const timeStr = s.time.replace(/\u202F/g, ' ');
-                const [timePart, ampm] = timeStr.split(' ');
-                let [hours, minutes] = timePart.split(':').map(Number);
-                if (ampm?.toUpperCase() === 'PM' && hours < 12) hours += 12;
-                if (ampm?.toUpperCase() === 'AM' && hours === 12) hours = 0;
-                sessionStart = new Date(y, m - 1, d, hours, minutes);
-            } else {
-                sessionStart = new Date(s.date || now);
-            }
+            const normalized = timeStr.replace(/\u202F/g, ' ').trim();
+            const [timePart, ampm] = normalized.split(' ');
+            let [h, m] = timePart.split(':').map(Number);
+            if (ampm?.toUpperCase() === 'PM' && h < 12) h += 12;
+            if (ampm?.toUpperCase() === 'AM' && h === 12) h = 0;
+            return h * 60 + m;
+        } catch { return 9999; }
+    };
 
-            if (isNaN(sessionStart.getTime())) return true;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
-            const isSameDay = sessionStart.toDateString() === selectedDate.toDateString();
-            if (!isSameDay) return false;
+    const sessionsForDay = sessions
+        .filter((s: any) => s?.date && String(s.date).substring(0, 10) === selectedDateISO)
+        .sort((a: any, b: any) => timeToMinutes(a.time) - timeToMinutes(b.time));
 
-            if (isToday) {
-                return sessionStart.getTime() >= now.getTime();
-            }
-            return true;
-        } catch (err) {
-            return true; // Failsafe
-        }
-    }).sort((a: any, b: any) => {
-        const parseTime = (s: any) => {
-            if (s.startTime?.toDate) return s.startTime.toDate().getTime();
-            if (s.startTime instanceof Date) return s.startTime.getTime();
-            return new Date(`${s.date} ${s.time}`).getTime();
-        };
-        return parseTime(a) - parseTime(b);
-    });
+    // Today: hide already-started sessions. Other dates: show all in order.
+    const displayedSessions = isSelectedToday
+        ? sessionsForDay.filter((s: any) => timeToMinutes(s.time) >= nowMinutes)
+        : sessionsForDay;
 
     const formatSessionDate = (session: any) => {
         const d = session.startTime?.toDate ? session.startTime.toDate() : new Date(session.date);
