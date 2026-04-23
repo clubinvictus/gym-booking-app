@@ -200,22 +200,46 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 const filteredSessions = userSessions.filter((s: any) => {
                     if (!s) return false;
                     
-                    const sessionDate = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : new Date());
-                    const isSameDay = sessionDate.toDateString() === selectedDate.toDateString();
+                    const now = new Date();
+                    const isToday = selectedDate.toDateString() === now.toDateString();
                     
-                    if (!isSameDay) return false;
+                    try {
+                        let sessionStart: Date;
+                        if (s.startTime?.toDate) {
+                            sessionStart = s.startTime.toDate();
+                        } else if (s.startTime instanceof Date) {
+                            sessionStart = s.startTime;
+                        } else if (s.date && s.time) {
+                            const [y, m, d] = s.date.split('-').map(Number);
+                            const timeStr = s.time.replace(/\u202F/g, ' ');
+                            const [timePart, ampm] = timeStr.split(' ');
+                            let [hours, minutes] = timePart.split(':').map(Number);
+                            if (ampm?.toUpperCase() === 'PM' && hours < 12) hours += 12;
+                            if (ampm?.toUpperCase() === 'AM' && hours === 12) hours = 0;
+                            sessionStart = new Date(y, m - 1, d, hours, minutes);
+                        } else {
+                            sessionStart = new Date(s.date || now);
+                        }
 
-                    // If it's today, only show upcoming sessions (startTime >= now)
-                    if (isSelectedToday) {
-                        const startTime = s.startTime?.toDate ? s.startTime.toDate() : new Date(`${s.date} ${s.time}`);
-                        return startTime >= now;
+                        if (isNaN(sessionStart.getTime())) return true;
+
+                        const isSameDay = sessionStart.toDateString() === selectedDate.toDateString();
+                        if (!isSameDay) return false;
+
+                        if (isToday) {
+                            return sessionStart.getTime() >= now.getTime();
+                        }
+                        return true;
+                    } catch (err) {
+                        return true; // Failsafe
                     }
-
-                    return true;
                 }).sort((a: any, b: any) => {
-                    const timeA = a.startTime?.toDate ? a.startTime.toDate().getTime() : new Date(`${a.date} ${a.time}`).getTime();
-                    const timeB = b.startTime?.toDate ? b.startTime.toDate().getTime() : new Date(`${b.date} ${b.time}`).getTime();
-                    return timeA - timeB;
+                    const parseTime = (s: any) => {
+                        if (s.startTime?.toDate) return s.startTime.toDate().getTime();
+                        if (s.startTime instanceof Date) return s.startTime.getTime();
+                        return new Date(`${s.date} ${s.time}`).getTime();
+                    };
+                    return parseTime(a) - parseTime(b);
                 });
 
                 // Stats calculation (keeping these relative to 'Today' for the macro view)
