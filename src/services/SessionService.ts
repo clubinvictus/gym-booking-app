@@ -7,9 +7,9 @@ import {
     startAfter, 
     getDocs, 
     Timestamp,
-    QueryConstraint,
     onSnapshot,
-    DocumentSnapshot
+    DocumentSnapshot,
+    or
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { SITE_ID } from '../constants';
@@ -53,7 +53,7 @@ export interface Session {
  */
 export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     const { role, userId, pageSize = 10, lastVisible } = options;
-    const constraints: QueryConstraint[] = [];
+    const constraints: any[] = [];
 
     // 1. Mandatory Site Isolation
     console.log(`SessionService: [Querying] SITE_ID='${SITE_ID}'`);
@@ -82,13 +82,12 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
 
     // 4. Role-based and Target-based Filtering
     if (role === 'client') {
-        // Must use camelCase 'clientIds' for backward compatibility with existing Limitless bookings
-        if (options.clientId) {
-            constraints.push(where('clientIds', 'array-contains', options.clientId));
-        } else {
-            // If somehow we don't have clientId, fallback to UID
-            constraints.push(where('uids', 'array-contains', userId));
-        }
+        const myClientId = options.clientId || userId;
+        constraints.push(or(
+            where('clientIds', 'array-contains', myClientId),
+            where('serviceName', '==', 'Limitless Open'),
+            where('serviceName', '==', 'Limitless Open (Shared)')
+        ));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
             constraints.push(where('client_ids', 'array-contains', options.clientId));

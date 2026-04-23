@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '../firebase';
-import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where, Timestamp, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '../AuthContext';
 import { SITE_ID } from '../constants';
 import { useFirestore } from '../hooks/useFirestore';
@@ -10,7 +10,7 @@ import { useConfirm } from '../ConfirmContext';
 interface BookingModalProps {
     isOpen: boolean;
     onClose: () => void;
-    selectedSlot: { day: number; time: string; date?: Date; trainerId?: string | null } | null;
+    selectedSlot: { day: number; time: string; date?: Date; trainerId?: string | null; joinSessionId?: string } | null;
     editingSession?: any;
     excludedTrainerId?: string | null;
     onBook: (data: any) => void;
@@ -438,11 +438,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             const service = services.find(s => s.name === (selectedService || editingSession?.serviceName));
 
             const clientObj = {
-                id: isClient ? (profile?.clientId || user?.uid) : (client?.id || null),
-                name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
-                email: isClient ? profile?.email : (client?.email || null),
-                uid: isClient ? user?.uid : (client?.uid || null),
-                phone: isClient ? profile?.phone : (client?.phone || null)
+                id: isClient ? (profile?.clientId || user?.uid || null) : (client?.id || null),
+                name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName || 'Unknown Client'),
+                email: isClient ? (profile?.email || null) : (client?.email || null),
+                uid: isClient ? (user?.uid || null) : (client?.uid || null),
+                phone: isClient ? (profile?.phone || null) : (client?.phone || null)
             };
 
             const clientIdList = [clientObj.id].filter(Boolean) as string[];
@@ -508,6 +508,25 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 console.error('Failed to log activity:', err);
             }
         };
+
+        if (selectedSlot?.joinSessionId) {
+            const bookingData = getBookingData(baseDate, selectedDay);
+            const clientObj = bookingData.clients[0];
+            const sessionRef = doc(db, 'sessions', selectedSlot.joinSessionId);
+            
+            await updateDoc(sessionRef, {
+                clients: arrayUnion(clientObj),
+                clientIds: arrayUnion(clientObj.id),
+                client_ids: arrayUnion(clientObj.id),
+                uids: arrayUnion(clientObj.uid)
+            });
+            await logActivity('booked', bookingData);
+            
+            setIsSubmitting(false);
+            onBook({});
+            onClose();
+            return;
+        }
 
         if (editingSession) {
                 // Adjust baseDate to match possibly changed selectedDay
@@ -659,9 +678,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 const activeService = services.find((sv: any) => sv.name === currentServiceName);
                 const currentClient = clients.find(c => c.name === selectedClient);
                 const clientObj = {
-                    id: isClient ? (profile?.clientId || user?.uid) : (currentClient?.id || null),
-                    name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
-                    email: isClient ? profile?.email : (currentClient?.email || null)
+                    id: isClient ? (profile?.clientId || user?.uid || null) : (currentClient?.id || null),
+                    name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName || 'Unknown Client'),
+                    email: isClient ? (profile?.email || null) : (currentClient?.email || null),
+                    uid: isClient ? (user?.uid || null) : (currentClient?.uid || null),
+                    phone: isClient ? (profile?.phone || null) : (currentClient?.phone || null)
                 };
 
                 // Fetch ALL existing sessions for this trainer to handle group appends

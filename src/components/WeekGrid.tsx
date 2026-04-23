@@ -14,7 +14,7 @@ export interface GridProps {
     isClient: boolean;
     isTrainer: boolean;
     profile: any;
-    onSlotSelected: (slotData: { day: number; time: string; trainerId: string | null; date: Date }) => void;
+    onSlotSelected: (slotData: { day: number; time: string; trainerId: string | null; date: Date; joinSessionId?: string }) => void;
     onSessionClick: (session: any) => void;
     onDayHeaderClick: (dayIndex: number) => void;
 }
@@ -256,6 +256,8 @@ export const WeekGrid: React.FC<GridProps> = ({
 
                             const displaySessions = slotSessions.filter((s: any) => {
                                 if (!isClient) return true;
+                                const isLimitlessOpen = s.serviceName?.toLowerCase().includes('limitless open') || s.serviceType?.toLowerCase().includes('limitless open');
+                                if (isLimitlessOpen) return true;
                                 if (s.client_ids) return s.client_ids.some((cid: string) => clientIds.includes(cid));
                                 if (s.clients) return s.clients.some((c: any) => clientIds.includes(c.id));
                                 return clientIds.includes(s.clientId);
@@ -299,20 +301,58 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     {displaySessions.length > 1 ? (
                                         <>
                                             {displaySessions.slice(0, 3).map((displaySession: any, idx: number) => {
-                                                const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
+                                                const matchService = services?.find((s: any) => s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase());
                                                 const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                                
+                                                const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
+                                                const attendeesCount = displaySession.clients?.length || 1;
+                                                
+                                                let isUserInSession = false;
+                                                if (isClient) {
+                                                    isUserInSession = (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
+                                                                      (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
+                                                                      clientIds.includes(displaySession.clientId);
+                                                }
+
+                                                let chipBg = '#000';
+                                                let chipCursor = 'pointer';
+                                                let chipText = getSessionClientNames(displaySession);
+                                                let handleClick = (e: any) => {
+                                                    e.stopPropagation();
+                                                    onSessionClick(displaySession);
+                                                };
+
+                                                if (isClient && !isUserInSession) {
+                                                    if (isLimitlessOpen && attendeesCount < 3) {
+                                                        chipBg = serviceColor;
+                                                        chipText = `Limitless Open (${attendeesCount}/3)`;
+                                                        handleClick = (e: any) => {
+                                                            e.stopPropagation();
+                                                            onSlotSelected({
+                                                                day: displaySession.day,
+                                                                time: displaySession.time,
+                                                                trainerId: displaySession.trainerId,
+                                                                date: displaySession.date,
+                                                                joinSessionId: displaySession.id
+                                                            });
+                                                        };
+                                                    } else {
+                                                        chipBg = '#000';
+                                                        chipText = 'Booked';
+                                                        chipCursor = 'not-allowed';
+                                                        handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
+                                                    }
+                                                }
+
                                                 return (
                                                     <div
                                                         key={idx}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            onSessionClick(displaySession);
-                                                        }}
+                                                        onClick={handleClick}
                                                         style={{
                                                             height: '24px',
                                                             padding: '2px 6px',
                                                             borderRadius: '4px',
-                                                            backgroundColor: '#000',
+                                                            backgroundColor: chipBg,
                                                             color: '#fff',
                                                             fontSize: '0.75rem',
                                                             fontWeight: 700,
@@ -322,11 +362,11 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                             whiteSpace: 'nowrap',
                                                             overflow: 'hidden',
                                                             textOverflow: 'ellipsis',
-                                                            cursor: 'pointer',
+                                                            cursor: chipCursor,
                                                             flexShrink: 0
                                                         }}
                                                     >
-                                                        {getSessionClientNames(displaySession)}
+                                                        {chipText}
                                                     </div>
                                                 );
                                             })}
@@ -338,43 +378,87 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         </>
                                     ) : (
                                         displaySessions.map((displaySession: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => s.name === displaySession.serviceName);
+                                            const matchService = services?.find((s: any) => s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase());
                                             const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
                                             
-                                            return (
-                                                <div
-                                                    key={idx}
-                                                    className="session-card"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onSessionClick(displaySession);
-                                                    }}
-                                                    style={{
-                                                        backgroundColor: '#000',
-                                                        borderRadius: '4px',
-                                                        padding: '8px',
-                                                        color: '#fff',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        cursor: 'pointer',
-                                                        flexShrink: 0,
-                                                        borderLeft: `6px solid ${serviceColor}`
-                                                    }}
-                                                >
-                                                    <div>
-                                                        <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
-                                                            {getSessionClientNames(displaySession)}
-                                                            {displaySession.clients && displaySession.clients.length > 1 && (
-                                                                <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
-                                                                    ({displaySession.clients.length})
-                                                                </span>
+                                                const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
+                                                const attendeesCount = displaySession.clients?.length || 1;
+                                                
+                                                let isUserInSession = false;
+                                                if (isClient) {
+                                                    isUserInSession = (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
+                                                                      (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
+                                                                      clientIds.includes(displaySession.clientId);
+                                                }
+
+                                                let chipBg = '#000';
+                                                let chipCursor = 'pointer';
+                                                let chipTextPrimary = getSessionClientNames(displaySession);
+                                                let chipTextSecondary = displaySession.serviceName;
+                                                let handleClick = (e: any) => {
+                                                    e.stopPropagation();
+                                                    onSessionClick(displaySession);
+                                                };
+
+                                                if (isClient && !isUserInSession) {
+                                                    if (isLimitlessOpen && attendeesCount < 3) {
+                                                        chipBg = serviceColor;
+                                                        chipTextPrimary = `Limitless Open (${attendeesCount}/3)`;
+                                                        chipTextSecondary = 'Click to Join';
+                                                        handleClick = (e: any) => {
+                                                            e.stopPropagation();
+                                                            onSlotSelected({
+                                                                day: displaySession.day,
+                                                                time: displaySession.time,
+                                                                trainerId: displaySession.trainerId,
+                                                                date: displaySession.date,
+                                                                joinSessionId: displaySession.id
+                                                            });
+                                                        };
+                                                    } else {
+                                                        chipBg = '#000';
+                                                        chipTextPrimary = 'Booked';
+                                                        chipTextSecondary = '';
+                                                        chipCursor = 'not-allowed';
+                                                        handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
+                                                    }
+                                                }
+
+                                                return (
+                                                    <div
+                                                        key={idx}
+                                                        className="session-card"
+                                                        onClick={handleClick}
+                                                        style={{
+                                                            backgroundColor: chipBg,
+                                                            borderRadius: '4px',
+                                                            padding: '8px',
+                                                            color: '#fff',
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            cursor: chipCursor,
+                                                            flexShrink: 0,
+                                                            borderLeft: `6px solid ${serviceColor}`
+                                                        }}
+                                                    >
+                                                        <div>
+                                                            <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
+                                                                {chipTextPrimary}
+                                                                {(!isClient || isUserInSession) && displaySession.clients && displaySession.clients.length > 1 && (
+                                                                    <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
+                                                                        ({displaySession.clients.length})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {chipTextSecondary && (
+                                                                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{chipTextSecondary}</div>
                                                             )}
                                                         </div>
-                                                        <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{displaySession.serviceName}</div>
+                                                        {(!isClient || isUserInSession || (isLimitlessOpen && attendeesCount < 3)) && (
+                                                            <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
+                                                        )}
                                                     </div>
-                                                    <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
-                                                </div>
-                                            );
+                                                );
                                         })
                                     )}
 

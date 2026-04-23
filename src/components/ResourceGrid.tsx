@@ -164,10 +164,72 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         <div style={{ margin: 'auto', fontSize: '0.8rem', fontWeight: 800, color: '#999' }}>Booked</div>
                                     ) : (
                                         slotSessions.map((session: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => s.name === session.serviceName);
+                                            const matchService = services?.find((s: any) => s.name?.trim().toLowerCase() === session.serviceName?.trim().toLowerCase());
                                             const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
                                             
-                                            // Handle multiple clients in a single group session
+                                            const isLimitlessOpen = session.serviceName?.toLowerCase().includes('limitless open') || session.serviceType?.toLowerCase().includes('limitless open');
+                                            const attendeesCount = session.clients?.length || 1;
+                                            
+                                            let isUserInSession = false;
+                                            if (isClient) {
+                                                isUserInSession = (session.client_ids && session.client_ids.some((cid: string) => clientIds.includes(cid))) ||
+                                                                  (session.clients && session.clients.some((c: any) => clientIds.includes(c.id))) ||
+                                                                  clientIds.includes(session.clientId);
+                                            }
+
+                                            if (isClient && !isUserInSession) {
+                                                let chipBg = '#000';
+                                                let chipText = 'Booked';
+                                                let chipCursor = 'not-allowed';
+                                                let handleClick = (e: any) => { e.stopPropagation(); };
+
+                                                if (isLimitlessOpen && attendeesCount < 3) {
+                                                    chipBg = serviceColor;
+                                                    chipText = `Limitless Open (${attendeesCount}/3) - Join`;
+                                                    chipCursor = 'pointer';
+                                                    handleClick = (e: any) => {
+                                                        e.stopPropagation();
+                                                        onSlotSelected({
+                                                            day: session.day || 0,
+                                                            time: session.time,
+                                                            trainerId: session.trainerId,
+                                                            date: new Date(session.date || activeDate),
+                                                            joinSessionId: session.id
+                                                        });
+                                                    };
+                                                }
+
+                                                return (
+                                                    <div 
+                                                        key={idx} 
+                                                        style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
+                                                        onClick={handleClick}
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                height: '24px',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                backgroundColor: chipBg,
+                                                                color: '#fff',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: 700,
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                borderLeft: `4px solid ${serviceColor}`,
+                                                                whiteSpace: 'nowrap',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis',
+                                                                cursor: chipCursor
+                                                            }}
+                                                        >
+                                                            {chipText}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            // Handle multiple clients in a single group session for trainers/admins or if user is in session
                                             const displayClients = session.clients && Array.isArray(session.clients) 
                                                 ? session.clients 
                                                 : [{ name: session.clientName || 'Unknown' }];
@@ -200,7 +262,8 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                                 borderLeft: `4px solid ${serviceColor}`,
                                                                 whiteSpace: 'nowrap',
                                                                 overflow: 'hidden',
-                                                                textOverflow: 'ellipsis'
+                                                                textOverflow: 'ellipsis',
+                                                                cursor: 'pointer'
                                                             }}
                                                         >
                                                             {client.name}
