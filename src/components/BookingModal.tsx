@@ -431,7 +431,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 id: isClient ? (profile?.clientId || user?.uid) : (client?.id || null),
                 name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName),
                 email: isClient ? profile?.email : (client?.email || null),
-                uid: isClient ? user?.uid : (client?.uid || null)
+                uid: isClient ? user?.uid : (client?.uid || null),
+                phone: isClient ? profile?.phone : (client?.phone || null)
             };
 
             const clientIdList = [clientObj.id].filter(Boolean) as string[];
@@ -454,6 +455,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 client_ids: clientIdList, // new standard
                 uids: uidList, // ADDED: Mirror UID for secure rules lookup
                 clientId: clientObj.id || null, // legacy support root
+                clientName: clientObj.name || 'Unknown Client',
+                clientPhone: clientObj.phone || null,
                 trainerName: selectedTrainer,
                 trainerId: trainer?.id || null,
                 serviceName: selectedService || editingSession?.serviceName,

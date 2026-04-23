@@ -145,6 +145,19 @@ exports.onSessionWritten = functions.firestore
         const sessionDate = new Date(data.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
         const sessionTime = data.time;
 
+        // Retroactive Safety Fallback: Fetch client name if missing from session doc
+        if (!data.clientName && data.clientId) {
+            try {
+                const userDoc = await db.collection('users').doc(data.clientId).get();
+                if (userDoc.exists) {
+                    data.clientName = userDoc.data().name || 'Client';
+                }
+            } catch (err) {
+                console.error('Fallback client lookup failed:', err);
+                data.clientName = 'Client';
+            }
+        }
+
         const { clientPhone, trainerPhone } = await getContactNumbers(data.clientId, data.trainerId);
 
         // Determine who made the booking: Client vs Admin/Manager
