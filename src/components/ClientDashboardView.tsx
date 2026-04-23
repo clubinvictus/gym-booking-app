@@ -18,6 +18,7 @@ export const ClientDashboardView = () => {
     const { sessions, loading: sessionsLoading } = useSessions({
         role: profile?.role as any,
         userId: user?.uid || '',
+        clientId: profile?.clientId || undefined,
         startDate: today,
         includePast: false, // Only fetch future sessions from Firestore
         pageSize: 100

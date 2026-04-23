@@ -82,11 +82,11 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
 
     // 4. Role-based and Target-based Filtering
     if (role === 'client') {
-        // Prefer clientId-based lookup (always populated by staff bookings).
-        // Fall back to uid-based lookup for backwards compatibility.
+        // Must use camelCase 'clientIds' for backward compatibility with existing Limitless bookings
         if (options.clientId) {
-            constraints.push(where('client_ids', 'array-contains', options.clientId));
+            constraints.push(where('clientIds', 'array-contains', options.clientId));
         } else {
+            // If somehow we don't have clientId, fallback to UID
             constraints.push(where('uids', 'array-contains', userId));
         }
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {

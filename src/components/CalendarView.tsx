@@ -104,6 +104,7 @@ export const CalendarView = () => {
     const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
+        clientId: profile?.role === 'client' ? profile?.clientId : undefined,
         startDate: weekStartDate,
         endDate: weekEndDate,
         includePast: true,
