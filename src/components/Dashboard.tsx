@@ -78,12 +78,18 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
     const monthEnd   = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
     
+    // For trainers: resolve their trainerId. The AuthContext may sync this async,
+    // so we also check profile.id as a fallback (the Firestore users doc ID equals
+    // the trainers doc ID for trainer accounts created correctly).
+    const resolvedTrainerId = isTrainer
+        ? (profile?.trainerId || profile?.id || undefined)
+        : undefined;
+
     // Using the centralized useSessions hook for standardized fetching
     const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
-        // Only filter by trainerId if the user IS a trainer (admins/managers see all sessions)
-        trainerId: profile?.role === 'trainer' ? profile?.trainerId : undefined,
+        trainerId: resolvedTrainerId,
         startDate: monthStart,
         endDate:   monthEnd,
         includePast: true, // we handle filtering ourselves in the component
@@ -198,14 +204,18 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 // Sessions are already filtered by role and siteId
                 const userSessions = sessions || [];
 
-                // Format selectedDate as YYYY-MM-DD string (matching the 'date' field in Firestore)
+                // Format selectedDate as YYYY-MM-DD string (matching the 'date' prefix in Firestore)
                 const selectedDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
-                // Filtered sessions for the selected date — simple string equality, no time filtering
+                // Sessions store date as a full ISO string e.g. "2026-04-23T04:30:00.000Z"
+                // Extract just the YYYY-MM-DD portion for comparison
                 const filteredSessions = userSessions
-                    .filter((s: any) => s?.date === selectedDateISO)
+                    .filter((s: any) => {
+                        if (!s?.date) return false;
+                        const sessionDatePrefix = String(s.date).substring(0, 10);
+                        return sessionDatePrefix === selectedDateISO;
+                    })
                     .sort((a: any, b: any) => {
-                        // Sort by time string ascending (HH:MM AM/PM)
                         if (!a.time || !b.time) return 0;
                         return a.time.localeCompare(b.time);
                     });

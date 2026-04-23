@@ -95,7 +95,13 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
         } else if (options.trainerId) {
             console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
             constraints.push(where('trainerId', '==', options.trainerId));
+        } else if (role === 'trainer' && userId) {
+            // Fallback: trainerId not yet synced (AuthContext race condition).
+            // Filter by uid so the trainer always sees their own sessions.
+            console.log(`SessionService: [Fallback] trainer uid filter userId='${userId}'`);
+            constraints.push(where('uids', 'array-contains', userId));
         }
+        // If admin/manager with no trainerId/clientId filter → return all site sessions
     }
 
     // 5. Sorting — MUST match the inequality filter field to avoid index errors.
