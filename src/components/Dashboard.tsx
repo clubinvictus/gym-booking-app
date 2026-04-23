@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarView } from './CalendarView';
 import { ServiceManagement } from './ServiceManagement';
@@ -45,7 +45,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [settingsTab, setSettingsTab] = useState('general');
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
-    const dateInputRef = useRef<HTMLInputElement>(null);
     const { user, profile } = useAuth();
     const navigate = useNavigate();
     const confirm = useConfirm();
@@ -74,8 +73,10 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: clients } = useFirestore<any>('clients');
     
-    // Fetch sessions for the selected month to support stats and navigation
+    // Fetch sessions for the selected month — always provide both startDate and endDate
+    // so SessionService uses the date range path (not the endTime > now path).
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    const monthEnd   = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
     
     // Using the centralized useSessions hook for standardized fetching
     const { sessions } = useSessions({
@@ -84,7 +85,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
         // Only filter by trainerId if the user IS a trainer (admins/managers see all sessions)
         trainerId: profile?.role === 'trainer' ? profile?.trainerId : undefined,
         startDate: monthStart,
-        pageSize: 200 // Higher limit to cover the month's sessions
+        endDate:   monthEnd,
+        includePast: true, // we handle filtering ourselves in the component
+        pageSize: 200
     });
 
 
@@ -191,56 +194,21 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
                 const now = new Date();
                 const isSelectedToday = selectedDate.toDateString() === now.toDateString();
-                const selectedDateStr = selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
                 // Sessions are already filtered by role and siteId
                 const userSessions = sessions || [];
 
-                // Filtered sessions for the selected date
-                const filteredSessions = userSessions.filter((s: any) => {
-                    if (!s) return false;
-                    
-                    const now = new Date();
-                    const isToday = selectedDate.toDateString() === now.toDateString();
-                    
-                    try {
-                        let sessionStart: Date;
-                        if (s.startTime?.toDate) {
-                            sessionStart = s.startTime.toDate();
-                        } else if (s.startTime instanceof Date) {
-                            sessionStart = s.startTime;
-                        } else if (s.date && s.time) {
-                            const [y, m, d] = s.date.split('-').map(Number);
-                            const timeStr = s.time.replace(/\u202F/g, ' ');
-                            const [timePart, ampm] = timeStr.split(' ');
-                            let [hours, minutes] = timePart.split(':').map(Number);
-                            if (ampm?.toUpperCase() === 'PM' && hours < 12) hours += 12;
-                            if (ampm?.toUpperCase() === 'AM' && hours === 12) hours = 0;
-                            sessionStart = new Date(y, m - 1, d, hours, minutes);
-                        } else {
-                            sessionStart = new Date(s.date || now);
-                        }
+                // Format selectedDate as YYYY-MM-DD string (matching the 'date' field in Firestore)
+                const selectedDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
 
-                        if (isNaN(sessionStart.getTime())) return true;
-
-                        const isSameDay = sessionStart.toDateString() === selectedDate.toDateString();
-                        if (!isSameDay) return false;
-
-                        if (isToday) {
-                            return sessionStart.getTime() >= now.getTime();
-                        }
-                        return true;
-                    } catch (err) {
-                        return true; // Failsafe
-                    }
-                }).sort((a: any, b: any) => {
-                    const parseTime = (s: any) => {
-                        if (s.startTime?.toDate) return s.startTime.toDate().getTime();
-                        if (s.startTime instanceof Date) return s.startTime.getTime();
-                        return new Date(`${s.date} ${s.time}`).getTime();
-                    };
-                    return parseTime(a) - parseTime(b);
-                });
+                // Filtered sessions for the selected date — simple string equality, no time filtering
+                const filteredSessions = userSessions
+                    .filter((s: any) => s?.date === selectedDateISO)
+                    .sort((a: any, b: any) => {
+                        // Sort by time string ascending (HH:MM AM/PM)
+                        if (!a.time || !b.time) return 0;
+                        return a.time.localeCompare(b.time);
+                    });
 
                 // Stats calculation (keeping these relative to 'Today' for the macro view)
                 const todaySessionsCount = userSessions.filter((s: any) => {
@@ -333,52 +301,12 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                     marginBottom: '32px',
                                     gap: '16px'
                                 }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <button 
-                                            onClick={() => dateInputRef.current?.showPicker()}
-                                            style={{ 
-                                                background: 'transparent', 
-                                                border: 'none', 
-                                                padding: '8px 12px', 
-                                                margin: '-8px -12px',
-                                                borderRadius: '4px',
-                                                textAlign: 'left', 
-                                                cursor: 'pointer', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                gap: '12px',
-                                                transition: 'background 0.2s ease'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                                        >
-                                            <Calendar size={20} />
-                                            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
-                                                {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
-                                            </h2>
-                                            <ChevronDown size={18} className="text-muted" />
-                                        </button>
-                                        <input 
-                                            ref={dateInputRef}
-                                            type="date"
-                                            value={selectedDate.toISOString().split('T')[0]}
-                                            onChange={(e) => {
-                                                if (e.target.value) {
-                                                    const [y, m, d] = e.target.value.split('-').map(Number);
-                                                    setSelectedDate(new Date(y, m - 1, d));
-                                                }
-                                            }}
-                                            style={{
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                width: '100%',
-                                                height: '100%',
-                                                opacity: 0,
-                                                pointerEvents: 'none'
-                                            }}
-                                        />
-                                    </div>
+                                    <input
+                                        type="date"
+                                        value={selectedDate ? new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000).toISOString().split('T')[0] : ''}
+                                        onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                                        style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f3f4f6', color: 'black' }}
+                                    />
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <button 
                                             onClick={() => {
