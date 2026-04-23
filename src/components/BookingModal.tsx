@@ -45,6 +45,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: services } = useFirestore<any>('services');
     const { data: offDays } = useFirestore<any>('off_days');
+    const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
 
     const [selectedClient, setSelectedClient] = useState('');
     const [showClientDropdown, setShowClientDropdown] = useState(false);
@@ -188,6 +189,15 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         const targetDateStr = getTargetDate();
         const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === targetDateStr);
         if (isOff) return false;
+
+        // Pre-Filter: Check if trainer is already booked for this exact date and time
+        const isBusy = busySlots?.some((bs: any) => {
+            const bsDate = bs.date ? bs.date.split('T')[0] : '';
+            // If editing, ignore the session's own slot
+            if (editingSession && bs.id === editingSession.id) return false;
+            return bs.trainerId === trainer.id && bsDate === targetDateStr && bs.time === selectedTime;
+        });
+        if (isBusy) return false;
 
         const slotTime = convertTo24h(selectedTime);
 
@@ -333,7 +343,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         currentDate.setDate(currentDate.getDate() + diff);
                         if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
 
-                        while (currentDate <= endDate) {
+                        while (currentDate < endDate) {
                             const key = `${currentDate.toDateString()}|${selectedTime}`;
                             const sessionInfo = existingSessions.get(key);
                             
@@ -602,7 +612,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         currentDate.setDate(currentDate.getDate() + diff);
                         if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
 
-                        while (currentDate <= endDate) {
+                        while (currentDate < endDate) {
                             sessionBatch.set(doc(collection(db, 'sessions')), newSeriesData(new Date(currentDate), dayIdx));
                             opCount++;
                             await commitIfFull();
@@ -717,7 +727,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     todayStart.setHours(0, 0, 0, 0);
                     if (currentDate < todayStart) currentDate = new Date(todayStart);
 
-                    while (currentDate <= endDate) {
+                    while (currentDate < endDate) {
                         const sessDay = (currentDate.getDay() + 6) % 7;
                         const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
                         const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
@@ -741,7 +751,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                         if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
 
-                        while (currentDate <= endDate) {
+                        while (currentDate < endDate) {
                             const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
                             const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
                             if (!skipKeys || !skipKeys.has(skipKey)) {
