@@ -231,8 +231,8 @@ exports.onSessionWritten = functions.firestore
         }
 
         // --- RECURRING SERIES LOGIC ---
-        // Debounce via locking so we only send ONE message for the whole batch of 100+ recurring bookings.
-        if (data.seriesId) {
+        // Priority Check: If this is explicitly marked as a single deletion, bypass recurring logic
+        if (data.seriesId && !(isDelete && data.deletionIntent === 'single')) {
             const seriesAction = isDelete ? 'delete' : (isCreate ? 'create' : 'update');
             const lockRef = db.collection('whatsapp_locks').doc(`${data.seriesId}_${seriesAction}`);
 

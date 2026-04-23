@@ -83,6 +83,9 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
 
         if (deleteScope === 'future' && session.seriesId) {
             try {
+                // Explicit Intent Flag: Inform backend this is a bulk operation before deleting
+                await updateDoc(doc(db, 'sessions', session.id), { deletionIntent: 'bulk' });
+
                 const batch = writeBatch(db);
                 // For recurring, we'll keep the logic simple for now: delete the documents
                 // In a multi-client world, this might need refinement (e.g. only remove THIS client from the documents)
@@ -126,6 +129,9 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                 } else {
                     // Single delete/removal
                     try {
+                        // Explicit Intent Flag: Inform backend this is a single operation before deleting
+                        await updateDoc(doc(db, 'sessions', session.id), { deletionIntent: 'single' });
+
                         if (clientId && session.clients && session.clients.length > 1) {
                             const updatedClients = session.clients.filter((c: any) => c.id !== clientId);
                             const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
