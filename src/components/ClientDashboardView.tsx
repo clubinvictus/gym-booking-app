@@ -1,75 +1,71 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
-import { Calendar, Clock, Briefcase, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Clock, Briefcase } from 'lucide-react';
 import { SessionDetailModal } from './SessionDetailModal';
 import { BookingModal } from './BookingModal';
 
 export const ClientDashboardView = () => {
     const { profile, user, loading: authLoading } = useAuth();
-    
-    // Use clientId (from profile or client record) to query sessions.
-    // This is more reliable than uid because admins booking for clients
-    // always populate 'client_ids' even when 'uids' may be empty.
+
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedSlot, setSelectedSlot] = useState<any>(null);
-    const [selectedDate, setSelectedDate] = useState(new Date());
-    const dateInputRef = useRef<HTMLInputElement>(null);
-    
-    // Fetch sessions for the selected month
-    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    
-    const { sessions, loading: sessionsLoading, hasMore, loadMore } = useSessions({
+
+    // Fetch from today forward — clients only need upcoming sessions
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { sessions, loading: sessionsLoading } = useSessions({
         role: profile?.role as any,
         userId: user?.uid || '',
         clientId: profile?.clientId || undefined,
-        startDate: monthStart,
+        startDate: today,
+        includePast: false, // Only fetch future sessions from Firestore
         pageSize: 100
     });
 
     const isLoading = authLoading || sessionsLoading;
 
-    // Filtering Logic
-    const now = new Date();
-    const isSelectedToday = selectedDate.toDateString() === now.toDateString();
-    const selectedDateStr = selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-    // Format selectedDate as YYYY-MM-DD for matching against the ISO date prefix stored in Firestore
-    const selectedDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-
-    // Parse "06:00 AM" / "05:00 PM" → minutes since midnight for correct chronological sort
-    const timeToMinutes = (timeStr: string): number => {
-        if (!timeStr) return 9999;
+    // Parse "06:00 AM" / "05:00 PM" into a UTC-safe timestamp for sorting
+    const sessionToMs = (s: any): number => {
         try {
-            const normalized = timeStr.replace(/\u202F/g, ' ').trim();
+            // Prefer native Firestore Timestamp
+            if (s.startTime?.toDate) return s.startTime.toDate().getTime();
+            if (s.startTime instanceof Date) return s.startTime.getTime();
+
+            // Build from ISO date prefix + time string
+            const datePart = String(s.date).substring(0, 10); // "2026-04-25"
+            const [y, m, d] = datePart.split('-').map(Number);
+            const normalized = (s.time || '').replace(/\u202F/g, ' ').trim();
             const [timePart, ampm] = normalized.split(' ');
-            let [h, m] = timePart.split(':').map(Number);
+            let [h, min] = timePart.split(':').map(Number);
             if (ampm?.toUpperCase() === 'PM' && h < 12) h += 12;
             if (ampm?.toUpperCase() === 'AM' && h === 12) h = 0;
-            return h * 60 + m;
-        } catch { return 9999; }
+            return new Date(y, m - 1, d, h, min).getTime();
+        } catch { return Infinity; }
     };
 
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const now = Date.now();
 
-    const sessionsForDay = sessions
-        .filter((s: any) => s?.date && String(s.date).substring(0, 10) === selectedDateISO)
-        .sort((a: any, b: any) => timeToMinutes(a.time) - timeToMinutes(b.time));
+    // Filter to strictly future sessions, sort chronologically, cap at 10
+    const upcomingSessions = sessions
+        .filter((s: any) => sessionToMs(s) >= now)
+        .sort((a: any, b: any) => sessionToMs(a) - sessionToMs(b))
+        .slice(0, 10);
 
-    // Today: hide already-started sessions. Other dates: show all in order.
-    const displayedSessions = isSelectedToday
-        ? sessionsForDay.filter((s: any) => timeToMinutes(s.time) >= nowMinutes)
-        : sessionsForDay;
-
-    const formatSessionDate = (session: any) => {
-        const d = session.startTime?.toDate ? session.startTime.toDate() : new Date(session.date);
-        return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    // Format date for session cards: "Apr 25 @ 06:00 PM"
+    const formatDateAndTime = (session: any): string => {
+        const ms = sessionToMs(session);
+        if (!isFinite(ms)) return session.time || '';
+        const d = new Date(ms);
+        const datePart = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `${datePart} @ ${session.time}`;
     };
 
     if (isLoading) {
         return (
-            <div style={{ 
-                padding: '100px 40px', 
+            <div style={{
+                padding: '100px 40px',
                 textAlign: 'center',
                 display: 'flex',
                 flexDirection: 'column',
@@ -112,23 +108,20 @@ export const ClientDashboardView = () => {
                 </div>
                 <button
                     onClick={() => {
-                        // Calculate the next clean hour for a suggested slot
                         const nextHour = new Date();
                         nextHour.setHours(nextHour.getHours() + 1);
                         nextHour.setMinutes(0);
                         nextHour.setSeconds(0);
                         nextHour.setMilliseconds(0);
-                        
-                        // Map the Date object to our 0-6 (Mon-Sun) day index
+
                         const dayName = nextHour.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
                         const daysMap = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
                         const dayIndex = daysMap.indexOf(dayName);
-                        
-                        // Force clean "09:00 AM" format for the modal (fix narrow non-breaking spaces on iOS/Safari)
-                        const timeStr = nextHour.toLocaleTimeString('en-US', { 
-                            hour: '2-digit', 
+
+                        const timeStr = nextHour.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
                             minute: '2-digit',
-                            hour12: true 
+                            hour12: true
                         }).replace(/\u202F/g, ' ');
 
                         setSelectedSlot({
@@ -152,96 +145,17 @@ export const ClientDashboardView = () => {
             </header>
 
             <div className="card" style={{ padding: window.innerWidth <= 768 ? '20px' : '32px', marginBottom: '32px', border: '3px solid #000' }}>
-                <div style={{ 
-                    display: 'flex', 
-                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
-                    justifyContent: 'space-between', 
-                    alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', 
-                    marginBottom: '24px',
-                    gap: '16px'
-                }}>
-                    <div style={{ position: 'relative' }}>
-                        <button 
-                            onClick={() => dateInputRef.current?.showPicker()}
-                            style={{ 
-                                background: 'transparent', 
-                                border: 'none', 
-                                padding: '8px 12px', 
-                                margin: '-8px -12px',
-                                borderRadius: '4px',
-                                textAlign: 'left', 
-                                cursor: 'pointer', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '12px',
-                                transition: 'background 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                            <Calendar size={20} />
-                            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
-                                {isSelectedToday ? `TODAY: ${selectedDateStr}` : selectedDateStr}
-                            </h2>
-                            <ChevronDown size={18} className="text-muted" />
-                        </button>
-                        <input 
-                            ref={dateInputRef}
-                            type="date"
-                            value={selectedDate.toISOString().split('T')[0]}
-                            onChange={(e) => {
-                                if (e.target.value) {
-                                    const [y, m, d] = e.target.value.split('-').map(Number);
-                                    setSelectedDate(new Date(y, m - 1, d));
-                                }
-                            }}
-                            style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                opacity: 0,
-                                pointerEvents: 'none'
-                            }}
-                        />
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
-                        <button 
-                            onClick={() => {
-                                const prev = new Date(selectedDate);
-                                prev.setDate(prev.getDate() - 1);
-                                setSelectedDate(prev);
-                            }}
-                            style={{ flex: 1, background: '#000', color: '#fff', border: 'none', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <ChevronLeft size={20} />
-                        </button>
-                        <button 
-                            onClick={() => setSelectedDate(new Date())}
-                            style={{ flex: 2, background: '#000', color: '#fff', border: 'none', padding: '12px 16px', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}
-                        >
-                            Today
-                        </button>
-                        <button 
-                            onClick={() => {
-                                const next = new Date(selectedDate);
-                                next.setDate(next.getDate() + 1);
-                                setSelectedDate(next);
-                            }}
-                            style={{ flex: 1, background: '#000', color: '#fff', border: 'none', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <ChevronRight size={20} />
-                        </button>
-                    </div>
-                </div>
+                {/* Section header */}
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', margin: '0 0 24px 0' }}>
+                    UPCOMING SESSIONS
+                </h2>
 
+                {/* Session list */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {displayedSessions.length > 0 ? displayedSessions.map(session => (
+                    {upcomingSessions.length > 0 ? upcomingSessions.map((session: any) => (
                         <div
                             key={session.id}
                             onClick={() => setSelectedSession(session)}
-                            className="session-card" // Added a class for internal styling if needed
                             style={{
                                 padding: window.innerWidth <= 768 ? '16px' : '24px',
                                 display: 'flex',
@@ -264,56 +178,36 @@ export const ClientDashboardView = () => {
                                 e.currentTarget.style.background = 'transparent';
                             }}
                         >
+                            {/* Left: service tag + date/time */}
                             <div style={{ display: 'flex', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '12px' : '24px', flexWrap: 'wrap', flexDirection: window.innerWidth <= 768 ? 'column-reverse' : 'row' }}>
                                 <div style={{ padding: '6px 12px', background: '#000', color: '#fff', fontWeight: 800, fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.85rem', width: 'fit-content' }}>
-                                    {session.serviceName.toUpperCase()}
+                                    {session.serviceName?.toUpperCase()}
                                 </div>
-
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Clock size={window.innerWidth <= 768 ? 16 : 20} className="text-muted" />
-                                    <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.2rem' }}>{session.time}</span>
+                                    <span style={{ fontWeight: 800, fontSize: window.innerWidth <= 768 ? '1rem' : '1.1rem' }}>
+                                        {formatDateAndTime(session)}
+                                    </span>
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: window.innerWidth <= 768 ? 'column' : 'row', alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center', gap: window.innerWidth <= 768 ? '8px' : '32px', color: '#444', flexWrap: 'wrap' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Calendar size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
-                                    <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{formatSessionDate(session)}</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Briefcase size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
-                                    <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>{session.trainerName}</span>
-                                </div>
+                            {/* Right: trainer */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#444' }}>
+                                <Briefcase size={window.innerWidth <= 768 ? 16 : 18} className="text-muted" />
+                                <span style={{ fontWeight: 700, fontSize: window.innerWidth <= 768 ? '0.95rem' : '1.1rem' }}>
+                                    {session.trainerName}
+                                </span>
                             </div>
                         </div>
                     )) : (
                         <div style={{ padding: '40px', textAlign: 'center', background: '#f9f9f9', border: '2px dashed #000' }}>
                             <p style={{ fontWeight: 800, color: '#000', fontSize: '1rem', textTransform: 'uppercase' }}>
-                                {isSelectedToday ? 'No more sessions for today. Enjoy your day!' : 'No sessions scheduled for this date.'}
+                                No upcoming sessions. Book one now!
                             </p>
                         </div>
                     )}
                 </div>
             </div>
-
-                {hasMore && (
-                    <button
-                        onClick={loadMore}
-                        disabled={sessionsLoading}
-                        className="button-secondary"
-                        style={{ 
-                            marginTop: '16px', 
-                            width: '100%', 
-                            padding: '16px', 
-                            fontSize: '1rem', 
-                            border: '3px solid #000',
-                            opacity: sessionsLoading ? 0.5 : 1,
-                            cursor: sessionsLoading ? 'not-allowed' : 'pointer'
-                        }}
-                    >
-                        {sessionsLoading ? 'LOADING MORE...' : 'LOAD MORE SESSIONS'}
-                    </button>
-                )}
 
             <BookingModal
                 isOpen={!!selectedSlot}
@@ -339,8 +233,6 @@ export const ClientDashboardView = () => {
                     setSelectedSession(null);
                 }}
                 onReschedule={(session) => {
-                    // Pass the session date so getTargetDate doesn't default to today,
-                    // which would block the reschedule with a false "past booking" error.
                     setSelectedSlot({
                         day: session.day,
                         time: session.time,
