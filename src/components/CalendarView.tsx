@@ -135,7 +135,13 @@ export const CalendarView = () => {
     };
 
     const handleToday = () => {
-        setCurrentWeekStart(getStartOfWeek(new Date()));
+        if (isMobile) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            setCurrentWeekStart(today);
+        } else {
+            setCurrentWeekStart(getStartOfWeek(new Date()));
+        }
     };
 
     const handleDayHeaderClick = async (dayIndex: number) => {
