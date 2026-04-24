@@ -133,6 +133,14 @@ export const CalendarView = () => {
 
     const handleToday = () => {
         setCurrentWeekStart(getStartOfWeek(new Date()));
+        // Auto-scroll today into view on mobile
+        setTimeout(() => {
+            const todayStr = new Date().toDateString();
+            const element = document.getElementById(`day-header-${todayStr}`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+            }
+        }, 100);
     };
 
     const handleDayHeaderClick = async (dayIndex: number) => {

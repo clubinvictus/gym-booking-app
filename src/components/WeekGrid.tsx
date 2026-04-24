@@ -136,17 +136,22 @@ export const WeekGrid: React.FC<GridProps> = ({
     };
 
     return (
-        <div style={{ 
-            flex: 1, 
-            overflowX: 'hidden', 
-            overflowY: 'auto', 
-            touchAction: 'pan-y',
-            padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' 
-        }}>
+        <div 
+            id="calendar-grid-container"
+            style={{
+                flex: 1, 
+                overflowX: 'auto', 
+                overflowY: 'auto', 
+                scrollBehavior: 'smooth',
+                WebkitOverflowScrolling: 'touch',
+                touchAction: 'auto',
+                padding: window.innerWidth <= 768 ? '0 4px' : '0 40px' 
+            }}
+        >
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: '60px repeat(7, 1fr)',
-                minWidth: window.innerWidth <= 768 ? '800px' : '1000px',
+                gridTemplateColumns: window.innerWidth <= 768 ? '60px repeat(7, 150px)' : '60px repeat(7, 1fr)',
+                minWidth: window.innerWidth <= 768 ? '1110px' : '1000px',
                 borderLeft: '2px solid #000',
                 borderRight: '2px solid #000'
             }}>
@@ -160,6 +165,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                     return (
                         <div
                             key={day}
+                            id={`day-header-${slotDate.toDateString()}`}
                             onClick={() => onDayHeaderClick(i)}
                             style={{
                                 height: '60px',
