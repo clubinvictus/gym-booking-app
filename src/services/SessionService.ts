@@ -9,7 +9,8 @@ import {
     Timestamp,
     onSnapshot,
     DocumentSnapshot,
-    or
+    or,
+    and
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { SITE_ID } from '../constants';
@@ -53,67 +54,68 @@ export interface Session {
  */
 export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     const { role, userId, pageSize = 10, lastVisible } = options;
-    const constraints: any[] = [];
+    const filters: any[] = [];
+    const otherConstraints: any[] = [];
 
     // 1. Mandatory Site Isolation
     console.log(`SessionService: [Querying] SITE_ID='${SITE_ID}'`);
-    constraints.push(where('siteId', '==', SITE_ID));
+    filters.push(where('siteId', '==', SITE_ID));
 
-    // 2. Determine query mode:
-    //    - Calendar/History view: uses date range (startDate/endDate), order by 'date'
-    //    - Dashboard/upcoming view: uses endTime > now, must order by 'endTime' first
+    // 2. Determine query mode
     const hasDateRange = !!(options.startDate || options.endDate);
     const useEndTimeFilter = !options.includePast && !hasDateRange;
 
     if (useEndTimeFilter) {
-        // Upcoming sessions: filter future sessions only
-        constraints.push(where('endTime', '>', Timestamp.now()));
+        filters.push(where('endTime', '>', Timestamp.now()));
     }
 
-    // 3. Date Range Filtering (Calendar view)
+    // 3. Date Range Filtering
     if (options.startDate) {
         const startISO = options.startDate.toISOString().substring(0, 10);
-        constraints.push(where('date', '>=', startISO));
+        filters.push(where('date', '>=', startISO));
     }
     if (options.endDate) {
         const endISO = options.endDate.toISOString().substring(0, 10);
-        constraints.push(where('date', '<=', endISO));
+        filters.push(where('date', '<=', endISO));
     }
 
     // 4. Role-based and Target-based Filtering
     if (role === 'client') {
         const myClientId = options.clientId || userId;
-        constraints.push(or(
+        filters.push(or(
             where('clientIds', 'array-contains', myClientId),
             where('serviceName', '==', 'Limitless Open'),
             where('serviceName', '==', 'Limitless Open (Shared)')
         ));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
-            constraints.push(where('client_ids', 'array-contains', options.clientId));
+            filters.push(where('client_ids', 'array-contains', options.clientId));
         } else if (options.trainerId) {
             console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
-            constraints.push(where('trainerId', '==', options.trainerId));
+            filters.push(where('trainerId', '==', options.trainerId));
         }
-        // If no trainerId/clientId: admin/manager/trainer sees all site sessions (filtered by siteId above)
     }
 
-    // 5. Sorting — MUST match the inequality filter field to avoid index errors.
-    //    - endTime filter → orderBy endTime
-    //    - date range filter (or includePast) → orderBy date
+    // 5. Sorting
     if (useEndTimeFilter) {
-        constraints.push(orderBy('endTime', 'asc'));
+        otherConstraints.push(orderBy('endTime', 'asc'));
     } else {
-        constraints.push(orderBy('date', 'asc'));
+        otherConstraints.push(orderBy('date', 'asc'));
     }
 
     // 6. Pagination
     if (lastVisible) {
-        constraints.push(startAfter(lastVisible));
+        otherConstraints.push(startAfter(lastVisible));
     }
-    constraints.push(limit(pageSize));
+    otherConstraints.push(limit(pageSize));
 
-    return query(collection(db, 'sessions'), ...constraints);
+    // Combine: All filters MUST be wrapped in a single top-level composite filter if OR is used.
+    // However, if we just use one top-level and(), it covers all cases safely.
+    return query(
+        collection(db, 'sessions'),
+        and(...filters),
+        ...otherConstraints
+    );
 };
 
 /**
