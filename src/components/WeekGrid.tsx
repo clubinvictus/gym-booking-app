@@ -37,7 +37,23 @@ export const WeekGrid: React.FC<GridProps> = ({
     onSessionClick,
     onDayHeaderClick
 }) => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const isMobile = window.innerWidth <= 768;
+    const daysToShow = isMobile ? 3 : 7;
+    
+    // Generate the visible days based on currentWeekStart
+    const visibleDays = Array.from({ length: daysToShow }).map((_, i) => {
+        const d = new Date(currentWeekStart);
+        d.setDate(currentWeekStart.getDate() + i);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return {
+            name: dayNames[d.getDay()],
+            date: d.getDate(),
+            fullDate: d,
+            // dayIndex for our internal logic (0=Mon, 1=Tue, ..., 6=Sun)
+            dayIndex: (d.getDay() + 6) % 7
+        };
+    });
+
     const timeSlots = [
         '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
         '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM',
@@ -59,23 +75,13 @@ export const WeekGrid: React.FC<GridProps> = ({
         return `${hours}:${minutes}`;
     };
 
-    const getDayDate = (start: Date, dayIndex: number) => {
-        const date = new Date(start);
-        date.setDate(start.getDate() + dayIndex);
-        return date.getDate();
-    };
-
-    const isTrainerAvailable = (dayIndex: number, time: string) => {
+    const isTrainerAvailable = (dayIndex: number, dateStr: string, time: string) => {
         const dayName = daysMap[dayIndex];
         const slotTime = convertTo24h(time);
 
         const activeTrainers = (selectedTrainerId === 'all' || selectedTrainerId === 'my')
             ? trainers
             : trainers.filter(t => t.id === selectedTrainerId);
-
-        const slotDate = new Date(currentWeekStart);
-        slotDate.setDate(slotDate.getDate() + dayIndex);
-        const dateStr = slotDate.toISOString().split('T')[0];
 
         return activeTrainers.some(trainer => {
             const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
@@ -99,14 +105,12 @@ export const WeekGrid: React.FC<GridProps> = ({
         return session.clientName || 'Unknown Client';
     };
 
-    const handleSlotClick = (dayIndex: number, time: string) => {
+    const handleSlotClick = (dayIndex: number, slotDate: Date, time: string) => {
         const effectiveTrainerId = isTrainer ? profile?.trainerId : ((selectedTrainerId === 'all' || selectedTrainerId === 'my') ? null : selectedTrainerId);
-
-        const slotDate = new Date(currentWeekStart);
-        slotDate.setDate(slotDate.getDate() + dayIndex);
         const isPastLimit = isClient && slotDate > limitDate;
+        const dateStr = slotDate.toISOString().split('T')[0];
 
-        let available = isTrainerAvailable(dayIndex, time) && !isPastLimit;
+        let available = isTrainerAvailable(dayIndex, dateStr, time) && !isPastLimit;
 
         if (selectedTrainerId !== 'all' && selectedTrainerId !== 'my') {
             const existingSessions = sessions.filter((s: any) => s.day === dayIndex && s.time === time && s.trainerId === selectedTrainerId);
@@ -122,10 +126,9 @@ export const WeekGrid: React.FC<GridProps> = ({
                 }
             }
 
-            const slotDateStr = slotDate.toISOString().split('T')[0];
             const isBusy = busySlots.some((bs: any) => {
                 const bsDate = bs.date ? bs.date.split('T')[0] : '';
-                return bs.trainerId === selectedTrainerId && bsDate === slotDateStr && bs.time === time;
+                return bs.trainerId === selectedTrainerId && bsDate === dateStr && bs.time === time;
             });
             if (isBusy) available = false;
         }
@@ -140,33 +143,28 @@ export const WeekGrid: React.FC<GridProps> = ({
             id="calendar-grid-container"
             style={{
                 flex: 1, 
-                overflowX: 'auto', 
+                overflowX: 'hidden', 
                 overflowY: 'auto', 
-                scrollBehavior: 'smooth',
-                WebkitOverflowScrolling: 'touch',
-                touchAction: 'auto',
-                padding: window.innerWidth <= 768 ? '0 4px' : '0 40px' 
+                touchAction: 'pan-y',
+                padding: isMobile ? '0 8px' : '0 40px' 
             }}
         >
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: window.innerWidth <= 768 ? '60px repeat(7, 150px)' : '60px repeat(7, 1fr)',
-                minWidth: window.innerWidth <= 768 ? '1110px' : '1000px',
+                gridTemplateColumns: `60px repeat(${daysToShow}, 1fr)`,
+                width: '100%',
                 borderLeft: '2px solid #000',
                 borderRight: '2px solid #000'
             }}>
                 {/* Sticky Day Header Row */}
                 <div style={{ height: '60px', borderBottom: '2px solid #000', position: 'sticky', top: 0, zIndex: 10, background: '#fff' }}></div>
-                {days.map((day, i) => {
-                    const slotDate = new Date(currentWeekStart);
-                    slotDate.setDate(slotDate.getDate() + i);
-                    const isToday = slotDate.toDateString() === new Date().toDateString();
+                {visibleDays.map((day) => {
+                    const isToday = day.fullDate.toDateString() === new Date().toDateString();
 
                     return (
                         <div
-                            key={day}
-                            id={`day-header-${slotDate.toDateString()}`}
-                            onClick={() => onDayHeaderClick(i)}
+                            key={day.fullDate.toISOString()}
+                            onClick={() => onDayHeaderClick(day.dayIndex)}
                             style={{
                                 height: '60px',
                                 borderBottom: '2px solid #000',
@@ -190,8 +188,8 @@ export const WeekGrid: React.FC<GridProps> = ({
                                 e.currentTarget.style.background = isToday ? '#000' : '#fff';
                             }}
                         >
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? '#fff' : '#666' }}>{day}</span>
-                            <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isToday ? '#fff' : 'inherit' }}>{getDayDate(currentWeekStart, i)}</span>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? '#fff' : '#666' }}>{day.name.toUpperCase()}</span>
+                            <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isToday ? '#fff' : 'inherit' }}>{day.date}</span>
                         </div>
                     );
                 })}
@@ -211,16 +209,11 @@ export const WeekGrid: React.FC<GridProps> = ({
                         }}>
                             {time}
                         </div>
-                        {days.map((_, dayIndex) => {
-                            const slotDate = new Date(currentWeekStart);
-                            slotDate.setDate(slotDate.getDate() + dayIndex);
+                        {visibleDays.map((day) => {
+                            const { dayIndex, fullDate: slotDate } = day;
                             const isPastLimit = isClient && slotDate > limitDate;
                             const isToday = slotDate.toDateString() === new Date().toDateString();
-
-                            const weekStartMs = new Date(currentWeekStart).setHours(0, 0, 0, 0);
-                            const weekEndDate = new Date(currentWeekStart);
-                            weekEndDate.setDate(weekEndDate.getDate() + 7);
-                            const weekEndMs = weekEndDate.setHours(0, 0, 0, 0);
+                            const dateStr = slotDate.toISOString().split('T')[0];
 
                             const slotSessions = sessions.filter((s: any) => {
                                 if (s.startTime) {
@@ -237,8 +230,8 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     if (s.day !== dayIndex || s.time !== time) return false;
 
                                     if (s.date) {
-                                        const sessionMs = new Date(s.date).getTime();
-                                        if (sessionMs < weekStartMs || sessionMs >= weekEndMs) return false;
+                                        const sessionDateStr = new Date(s.date).toISOString().split('T')[0];
+                                        if (sessionDateStr !== dateStr) return false;
                                     }
                                 }
 
@@ -273,7 +266,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                             const activeService = firstSession ? services.find((sv: any) => sv.name === firstSession.serviceName) : null;
                             const hasRoom = firstSession && activeService && (firstSession.clients?.length || 1) < (activeService.max_capacity || 1);
 
-                            const available = isTrainerAvailable(dayIndex, time) && !isPastLimit && (slotSessions.length === 0 || hasRoom) && !isBusyByOthers;
+                            const available = isTrainerAvailable(dayIndex, dateStr, time) && !isPastLimit && (slotSessions.length === 0 || hasRoom) && !isBusyByOthers;
                             const showAsAvailable = selectedTrainerId === 'all' || selectedTrainerId === 'my' || available;
 
                             let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
@@ -284,7 +277,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                             return (
                                 <div
                                     key={`${dayIndex}-${time}`}
-                                    onClick={() => handleSlotClick(dayIndex, time)}
+                                    onClick={() => handleSlotClick(dayIndex, slotDate, time)}
                                     className={`calendar-slot ${showAsAvailable ? 'available' : ''}`}
                                     style={{
                                         borderBottom: '1px solid #eee',
@@ -450,48 +443,19 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         <div>
                                                             <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>
                                                                 {chipTextPrimary}
-                                                                {(!isClient || isUserInSession) && displaySession.clients && displaySession.clients.length > 1 && (
-                                                                    <span style={{ marginLeft: '4px', opacity: 0.6, fontSize: '0.7rem' }}>
-                                                                        ({displaySession.clients.length})
-                                                                    </span>
-                                                                )}
                                                             </div>
-                                                            {chipTextSecondary && (
-                                                                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{chipTextSecondary}</div>
-                                                            )}
+                                                            <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>
+                                                                {chipTextSecondary}
+                                                            </div>
                                                         </div>
-                                                        {(!isClient || isUserInSession || (isLimitlessOpen && attendeesCount < 3)) && (
-                                                            <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '4px' }}>{displaySession.trainerName}</div>
-                                                        )}
                                                     </div>
                                                 );
                                         })
-                                    )}
-
-                                    {isBusyByOthers && (
-                                        <div
-                                            style={{
-                                                backgroundColor: '#000',
-                                                borderRadius: '4px',
-                                                padding: '8px',
-                                                color: '#fff',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                cursor: 'not-allowed',
-                                                flexShrink: 0,
-                                                margin: 'auto 0'
-                                            }}
-                                        >
-                                            <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>Booked</div>
-                                        </div>
                                     )}
                                 </div>
                             );
                         })}
                     </React.Fragment>
-
                 ))}
             </div>
         </div>

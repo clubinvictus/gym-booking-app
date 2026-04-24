@@ -14,9 +14,9 @@ import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
-const formatWeekRange = (start: Date) => {
+const formatWeekRange = (start: Date, daysToShow: number) => {
     const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    end.setDate(start.getDate() + daysToShow - 1);
     const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
     return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}, ${start.getFullYear()}`;
 };
@@ -90,15 +90,18 @@ export const CalendarView = () => {
         return nextWeekStart > limitDate;
     })();
 
-    // Calculate start and end of visible week for optimized fetching
+    const isMobile = window.innerWidth <= 768;
+    const daysToShow = isMobile ? 3 : 7;
+
+    // Calculate start and end of visible range for optimized fetching
     const { weekStartDate, weekEndDate } = useMemo(() => {
         const start = new Date(currentWeekStart);
         start.setHours(0, 0, 0, 0);
         const end = new Date(currentWeekStart);
-        end.setDate(end.getDate() + 7);
+        end.setDate(end.getDate() + daysToShow - 1);
         end.setHours(23, 59, 59, 999);
         return { weekStartDate: start, weekEndDate: end };
-    }, [currentWeekStart]);
+    }, [currentWeekStart, daysToShow]);
 
     // Use centralized session hook with range filtering
     const { sessions } = useSessions({
@@ -121,26 +124,18 @@ export const CalendarView = () => {
 
     const handlePrevWeek = () => {
         const d = new Date(currentWeekStart);
-        d.setDate(d.getDate() - 7);
+        d.setDate(d.getDate() - daysToShow);
         setCurrentWeekStart(d);
     };
 
     const handleNextWeek = () => {
         const d = new Date(currentWeekStart);
-        d.setDate(d.getDate() + 7);
+        d.setDate(d.getDate() + daysToShow);
         setCurrentWeekStart(d);
     };
 
     const handleToday = () => {
         setCurrentWeekStart(getStartOfWeek(new Date()));
-        // Auto-scroll today into view on mobile
-        setTimeout(() => {
-            const todayStr = new Date().toDateString();
-            const element = document.getElementById(`day-header-${todayStr}`);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth', inline: 'center' });
-            }
-        }, 100);
     };
 
     const handleDayHeaderClick = async (dayIndex: number) => {
@@ -282,7 +277,7 @@ export const CalendarView = () => {
                             fontSize: window.innerWidth <= 768 ? '0.85rem' : '1.1rem', 
                             whiteSpace: 'nowrap' 
                         }}>
-                            {formatWeekRange(currentWeekStart)}
+                            {formatWeekRange(currentWeekStart, daysToShow)}
                         </span>
                     </div>
 
