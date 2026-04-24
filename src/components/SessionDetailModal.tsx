@@ -22,21 +22,23 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const [deleteScope, setDeleteScope] = useState<'single' | 'future'>('single');
     const { profile } = useAuth();
     const isTrainer = profile?.role === 'trainer';
-    const [targetClientId, setTargetClientId] = useState<string | undefined>(undefined);
+    const isAdmin = profile?.role === 'admin';
+    const isManager = profile?.role === 'manager';
+    const isStaff = isAdmin || isManager || isTrainer;
     
-    // Add Client State
+    const [targetClientId, setTargetClientId] = useState<string | undefined>(undefined);
     const [isAddingClient, setIsAddingClient] = useState(false);
     const [newClientId, setNewClientId] = useState<string>('');
 
     // Fetch data for capacity limits and client list
     const { data: services } = useFirestore<any>('services');
-    const { data: clients } = useFirestore<any>('clients');
+    const { data: clients } = useFirestore<any>('clients', [], !isStaff);
 
     // Compute Capacity
     const sessionService = services.find((s: any) => s.id === session?.serviceId);
     const maxCapacity = sessionService?.max_capacity || 1;
     const currentCount = session?.clients?.length || 1;
-    const hasCapacity = currentCount < maxCapacity;
+    const hasCapacity = currentCount < maxCapacity && isStaff;
 
     // Reset state when modal opens/closes or session changes
     useEffect(() => {

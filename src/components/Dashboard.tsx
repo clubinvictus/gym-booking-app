@@ -71,7 +71,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
     // Use Firestore for stats
     const { data: trainers } = useFirestore<any>('trainers');
-    const { data: clients } = useFirestore<any>('clients');
+    const { data: clients } = useFirestore<any>('clients', [], !isAdmin && !isManager);
     
     // Fetch sessions for the selected month — always provide both startDate and endDate
     // so SessionService uses the date range path (not the endTime > now path).
