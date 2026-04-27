@@ -313,11 +313,9 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     {displaySessions.length > 1 ? (
                                         <>
                                             {displaySessions.slice(0, 3).map((displaySession: any, idx: number) => {
-                                                const matchService = services?.find((s: any) => 
-                                                    s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase() ||
-                                                    s.name?.trim().toLowerCase() === displaySession.serviceType?.trim().toLowerCase()
-                                                );
-                                                const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#4B5563';
+                                                const matchedService = services?.find((s: any) => s.name === displaySession.serviceType || s.name === displaySession.serviceName);
+                                                const chipColor = matchedService?.color || '#4B5563';
+                                                console.log('Chip Debug:', { service: displaySession.serviceType || displaySession.serviceName, color: chipColor });
                                                 
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -341,7 +339,7 @@ export const WeekGrid: React.FC<GridProps> = ({
 
                                                 if (isClient && !isUserInSession) {
                                                     if (isLimitlessOpen && attendeesCount < 3) {
-                                                        chipBg = serviceColor;
+                                                        chipBg = chipColor;
                                                         chipText = `Limitless Open (${attendeesCount}/3)`;
                                                         handleClick = (e: any) => {
                                                             e.stopPropagation();
@@ -375,7 +373,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                             fontWeight: 700,
                                                             display: 'flex',
                                                             alignItems: 'center',
-                                                            borderLeft: `4px solid ${serviceColor}`,
+                                                            borderLeft: `4px solid ${chipColor}`,
                                                             whiteSpace: 'nowrap',
                                                             overflow: 'hidden',
                                                             textOverflow: 'ellipsis',
@@ -395,11 +393,9 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         </>
                                     ) : (
                                         displaySessions.map((displaySession: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => 
-                                                s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase() ||
-                                                s.name?.trim().toLowerCase() === displaySession.serviceType?.trim().toLowerCase()
-                                            );
-                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#4B5563';
+                                            const matchedService = services?.find((s: any) => s.name === displaySession.serviceType || s.name === displaySession.serviceName);
+                                            const chipColor = matchedService?.color || '#4B5563';
+                                            console.log('Chip Debug:', { service: displaySession.serviceType || displaySession.serviceName, color: chipColor });
                                             
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -413,7 +409,6 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid)));
                                                 }
 
-                                                let chipBg = '#000';
                                                 let chipCursor = 'pointer';
                                                 let chipTextPrimary = getSessionClientNames(displaySession);
                                                 let chipTextSecondary = displaySession.serviceName;
@@ -424,7 +419,6 @@ export const WeekGrid: React.FC<GridProps> = ({
 
                                                 if (isClient && !isUserInSession) {
                                                     if (isLimitlessOpen && attendeesCount < 3) {
-                                                        chipBg = serviceColor;
                                                         chipTextPrimary = `Limitless Open (${attendeesCount}/3)`;
                                                         chipTextSecondary = 'Click to Join';
                                                         handleClick = (e: any) => {
@@ -438,7 +432,6 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                             });
                                                         };
                                                     } else {
-                                                        chipBg = '#000';
                                                         chipTextPrimary = isLimitlessOpen && attendeesCount >= 3 ? 'Full' : 'Booked';
                                                         chipTextSecondary = '';
                                                         chipCursor = 'not-allowed';
@@ -452,7 +445,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         className="session-card"
                                                         onClick={handleClick}
                                                         style={{
-                                                            backgroundColor: chipBg,
+                                                            backgroundColor: isClient && !isUserInSession && !(isLimitlessOpen && attendeesCount < 3) ? '#000' : chipColor,
                                                             borderRadius: '4px',
                                                             padding: '8px',
                                                             color: '#fff',
@@ -460,7 +453,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                             flexDirection: 'column',
                                                             cursor: chipCursor,
                                                             flexShrink: 0,
-                                                            borderLeft: `6px solid ${serviceColor}`
+                                                            borderLeft: `6px solid ${chipColor}`
                                                         }}
                                                     >
                                                         <div>

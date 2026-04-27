@@ -164,11 +164,9 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         <div style={{ margin: 'auto', fontSize: '0.8rem', fontWeight: 800, color: '#999' }}>Booked</div>
                                     ) : (
                                         slotSessions.map((session: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => 
-                                                s.name?.trim().toLowerCase() === session.serviceName?.trim().toLowerCase() ||
-                                                s.name?.trim().toLowerCase() === session.serviceType?.trim().toLowerCase()
-                                            );
-                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#4B5563';
+                                            const matchedService = services?.find((s: any) => s.name === session.serviceType || s.name === session.serviceName);
+                                            const chipColor = matchedService?.color || '#4B5563';
+                                            console.log('Chip Debug:', { service: session.serviceType || session.serviceName, color: chipColor });
                                             
                                             const isLimitlessOpen = session.serviceName?.toLowerCase().includes('limitless open') || session.serviceType?.toLowerCase().includes('limitless open');
                                             const attendeesCount = session.clients?.length || 1;
@@ -179,15 +177,15 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                                   (session.clients && session.clients.some((c: any) => clientIds.includes(c.id))) ||
                                                                   clientIds.includes(session.clientId);
                                             }
-
+ 
                                             if (isClient && !isUserInSession) {
                                                 let chipBg = '#000';
                                                 let chipText = 'Booked';
                                                 let chipCursor = 'not-allowed';
                                                 let handleClick = (e: any) => { e.stopPropagation(); };
-
+ 
                                                 if (isLimitlessOpen && attendeesCount < 3) {
-                                                    chipBg = serviceColor;
+                                                    chipBg = chipColor;
                                                     chipText = `Limitless Open (${attendeesCount}/3) - Join`;
                                                     chipCursor = 'pointer';
                                                     handleClick = (e: any) => {
@@ -201,7 +199,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                         });
                                                     };
                                                 }
-
+ 
                                                 return (
                                                     <div 
                                                         key={idx} 
@@ -219,7 +217,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                                 fontWeight: 700,
                                                                 display: 'flex',
                                                                 alignItems: 'center',
-                                                                borderLeft: `4px solid ${serviceColor}`,
+                                                                borderLeft: `4px solid ${chipColor}`,
                                                                 whiteSpace: 'nowrap',
                                                                 overflow: 'hidden',
                                                                 textOverflow: 'ellipsis',
@@ -262,7 +260,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                                 fontWeight: 700,
                                                                 display: 'flex',
                                                                 alignItems: 'center',
-                                                                borderLeft: `4px solid ${serviceColor}`,
+                                                                borderLeft: `4px solid ${chipColor}`,
                                                                 whiteSpace: 'nowrap',
                                                                 overflow: 'hidden',
                                                                 textOverflow: 'ellipsis',
