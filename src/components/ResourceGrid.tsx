@@ -164,8 +164,11 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         <div style={{ margin: 'auto', fontSize: '0.8rem', fontWeight: 800, color: '#999' }}>Booked</div>
                                     ) : (
                                         slotSessions.map((session: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => s.name?.trim().toLowerCase() === session.serviceName?.trim().toLowerCase());
-                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                            const matchService = services?.find((s: any) => 
+                                                s.name?.trim().toLowerCase() === session.serviceName?.trim().toLowerCase() ||
+                                                s.name?.trim().toLowerCase() === session.serviceType?.trim().toLowerCase()
+                                            );
+                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#4B5563';
                                             
                                             const isLimitlessOpen = session.serviceName?.toLowerCase().includes('limitless open') || session.serviceType?.toLowerCase().includes('limitless open');
                                             const attendeesCount = session.clients?.length || 1;

@@ -313,8 +313,11 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     {displaySessions.length > 1 ? (
                                         <>
                                             {displaySessions.slice(0, 3).map((displaySession: any, idx: number) => {
-                                                const matchService = services?.find((s: any) => s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase());
-                                                const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                                const matchService = services?.find((s: any) => 
+                                                    s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase() ||
+                                                    s.name?.trim().toLowerCase() === displaySession.serviceType?.trim().toLowerCase()
+                                                );
+                                                const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#4B5563';
                                                 
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -392,8 +395,11 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         </>
                                     ) : (
                                         displaySessions.map((displaySession: any, idx: number) => {
-                                            const matchService = services?.find((s: any) => s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase());
-                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#444';
+                                            const matchService = services?.find((s: any) => 
+                                                s.name?.trim().toLowerCase() === displaySession.serviceName?.trim().toLowerCase() ||
+                                                s.name?.trim().toLowerCase() === displaySession.serviceType?.trim().toLowerCase()
+                                            );
+                                            const serviceColor = matchService?.color && matchService.color !== '#000000' && matchService.color !== '#000' ? matchService.color : '#4B5563';
                                             
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
