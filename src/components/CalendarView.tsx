@@ -295,33 +295,46 @@ export const CalendarView = () => {
                         width: window.innerWidth <= 768 ? '100%' : 'auto'
                     }}>
                         {(isAdmin || isClient) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: window.innerWidth <= 768 ? 1 : 'none' }}>
-                                {window.innerWidth > 768 && <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em' }}>FILTER:</span>}
-                                <select
-                                    value={selectedTrainerId}
-                                    onChange={(e) => setSelectedTrainerId(e.target.value)}
-                                    style={{
-                                        height: '42px',
-                                        width: '100%',
-                                        padding: '0 12px',
-                                        border: '2px solid #000',
-                                        borderRadius: 0,
-                                        fontWeight: 800,
-                                        fontSize: '0.85rem',
-                                        cursor: 'pointer',
-                                        outline: 'none',
-                                        background: '#fff'
-                                    }}
-                                >
-                                    {isClient ? (
-                                        <option value="my">My Calendar</option>
-                                    ) : (
-                                        <option value="all">All Trainers</option>
-                                    )}
-                                    {trainers.map((t: any) => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: window.innerWidth <= 768 ? 1 : 'none' }}>
+                                {window.innerWidth > 768 && <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em', marginRight: '8px' }}>FILTER:</span>}
+                                <div style={{ position: 'relative', width: '100%' }}>
+                                    <select
+                                        value={selectedTrainerId}
+                                        onChange={(e) => setSelectedTrainerId(e.target.value)}
+                                        style={{
+                                            height: '42px',
+                                            width: '100%',
+                                            padding: '0 36px 0 12px',
+                                            border: '2px solid #000',
+                                            borderRadius: 0,
+                                            fontWeight: 800,
+                                            fontSize: '0.85rem',
+                                            cursor: 'pointer',
+                                            outline: 'none',
+                                            background: '#fff',
+                                            color: '#000',
+                                            appearance: 'none',
+                                            WebkitAppearance: 'none'
+                                        }}
+                                    >
+                                        {!isClient && <option value="all">All Trainers / Filter...</option>}
+                                        {isClient && <option value="my">My Calendar</option>}
+                                        {trainers.map((t: any) => (
+                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                        ))}
+                                    </select>
+                                    <div style={{
+                                        position: 'absolute',
+                                        right: '12px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        pointerEvents: 'none',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }}>
+                                        <ChevronRight size={16} style={{ transform: 'rotate(90deg)' }} />
+                                    </div>
+                                </div>
                             </div>
                         )}
                         
