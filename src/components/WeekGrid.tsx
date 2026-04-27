@@ -255,11 +255,17 @@ export const WeekGrid: React.FC<GridProps> = ({
 
                             const displaySessions = slotSessions.filter((s: any) => {
                                 if (!isClient) return true;
+
                                 const isLimitlessOpen = s.serviceName?.toLowerCase().includes('limitless open') || s.serviceType?.toLowerCase().includes('limitless open');
+                                
+                                const isMySession = 
+                                    clientIds.includes(s.clientId) || 
+                                    (s.client_ids && s.client_ids.some((cid: string) => clientIds.includes(cid))) ||
+                                    (s.clients && s.clients.some((c: any) => clientIds.includes(c.id))) ||
+                                    (s.attendees && s.attendees.some((aid: string) => clientIds.includes(aid)));
+
                                 if (isLimitlessOpen) return true;
-                                if (s.client_ids) return s.client_ids.some((cid: string) => clientIds.includes(cid));
-                                if (s.clients) return s.clients.some((c: any) => clientIds.includes(c.id));
-                                return clientIds.includes(s.clientId);
+                                return isMySession;
                             });
 
                             const firstSession = slotSessions[0];
@@ -308,9 +314,11 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                 
                                                 let isUserInSession = false;
                                                 if (isClient) {
-                                                    isUserInSession = (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
-                                                                      (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
-                                                                      clientIds.includes(displaySession.clientId);
+                                                    isUserInSession = 
+                                                        clientIds.includes(displaySession.clientId) || 
+                                                        (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
+                                                        (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
+                                                        (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid)));
                                                 }
 
                                                 let chipBg = '#000';
@@ -385,9 +393,11 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                 
                                                 let isUserInSession = false;
                                                 if (isClient) {
-                                                    isUserInSession = (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
-                                                                      (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
-                                                                      clientIds.includes(displaySession.clientId);
+                                                    isUserInSession = 
+                                                        clientIds.includes(displaySession.clientId) || 
+                                                        (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
+                                                        (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
+                                                        (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid)));
                                                 }
 
                                                 let chipBg = '#000';
