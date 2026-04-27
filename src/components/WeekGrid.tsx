@@ -313,9 +313,13 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     {displaySessions.length > 1 ? (
                                         <>
                                             {displaySessions.slice(0, 3).map((displaySession: any, idx: number) => {
-                                                const matchedService = services?.find((s: any) => s.name === displaySession.serviceType || s.name === displaySession.serviceName);
+                                                const matchedService = services?.find(s => 
+                                                    (s.name && displaySession.serviceType && s.name.toLowerCase().includes(displaySession.serviceType.toLowerCase())) || 
+                                                    (displaySession.serviceType && s.name && displaySession.serviceType.toLowerCase().includes(s.name.toLowerCase()))
+                                                );
                                                 const chipColor = matchedService?.color || '#4B5563';
-                                                console.log('Chip Debug:', { service: displaySession.serviceType || displaySession.serviceName, color: chipColor });
+                                                console.log('Available Services Array:', services);
+                                                console.log('Chip Match Attempt:', { searchingFor: displaySession.serviceType, matchedServiceFound: matchedService });
                                                 
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -390,9 +394,13 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         </>
                                     ) : (
                                         displaySessions.map((displaySession: any, idx: number) => {
-                                            const matchedService = services?.find((s: any) => s.name === displaySession.serviceType || s.name === displaySession.serviceName);
+                                            const matchedService = services?.find(s => 
+                                                (s.name && displaySession.serviceType && s.name.toLowerCase().includes(displaySession.serviceType.toLowerCase())) || 
+                                                (displaySession.serviceType && s.name && displaySession.serviceType.toLowerCase().includes(s.name.toLowerCase()))
+                                            );
                                             const chipColor = matchedService?.color || '#4B5563';
-                                            console.log('Chip Debug:', { service: displaySession.serviceType || displaySession.serviceName, color: chipColor });
+                                            console.log('Available Services Array:', services);
+                                            console.log('Chip Match Attempt:', { searchingFor: displaySession.serviceType, matchedServiceFound: matchedService });
                                             
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;

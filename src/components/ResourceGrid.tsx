@@ -164,9 +164,13 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         <div style={{ margin: 'auto', fontSize: '0.8rem', fontWeight: 800, color: '#999' }}>Booked</div>
                                     ) : (
                                         slotSessions.map((session: any, idx: number) => {
-                                            const matchedService = services?.find((s: any) => s.name === session.serviceType || s.name === session.serviceName);
+                                            const matchedService = services?.find(s => 
+                                                (s.name && session.serviceType && s.name.toLowerCase().includes(session.serviceType.toLowerCase())) || 
+                                                (session.serviceType && s.name && session.serviceType.toLowerCase().includes(s.name.toLowerCase()))
+                                            );
                                             const chipColor = matchedService?.color || '#4B5563';
-                                            console.log('Chip Debug:', { service: session.serviceType || session.serviceName, color: chipColor });
+                                            console.log('Available Services Array:', services);
+                                            console.log('Chip Match Attempt:', { searchingFor: session.serviceType, matchedServiceFound: matchedService });
                                             
                                             const isLimitlessOpen = session.serviceName?.toLowerCase().includes('limitless open') || session.serviceType?.toLowerCase().includes('limitless open');
                                             const attendeesCount = session.clients?.length || 1;
