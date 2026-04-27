@@ -112,7 +112,7 @@ export const CalendarView = () => {
         endDate: weekEndDate,
         includePast: true,
         pageSize: 200, // Enough to cover a busy week
-        trainerId: (isAdmin || isManager || isTrainer) && selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
+        trainerId: selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
                   (isTrainer && selectedTrainerId === 'my' ? profile?.trainerId : undefined)
     });
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');

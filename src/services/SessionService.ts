@@ -80,7 +80,11 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     }
 
     // 4. Role-based and Target-based Filtering
-    if (role === 'client') {
+    if (options.trainerId) {
+        // If a trainer is selected, everyone (including clients) sees that trainer's sessions
+        console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
+        filters.push(where('trainerId', '==', options.trainerId));
+    } else if (role === 'client') {
         const myClientId = options.clientId || userId;
         filters.push(or(
             where('clientIds', 'array-contains', myClientId),
@@ -93,9 +97,6 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
             filters.push(where('client_ids', 'array-contains', options.clientId));
-        } else if (options.trainerId) {
-            console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
-            filters.push(where('trainerId', '==', options.trainerId));
         }
     }
 
