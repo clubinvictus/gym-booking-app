@@ -129,10 +129,15 @@ export const fetchSessions = async (options: FetchSessionsOptions) => {
     const q = buildSessionsQuery(options);
     const snapshot = await getDocs(q);
     
-    const sessions = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    })) as Session[];
+    const sessions = snapshot.docs.map(doc => {
+        const data = doc.data() as Session;
+        return {
+            ...data,
+            id: doc.id,
+            // Explicitly ensure serviceType is passed, fallback to serviceName for fuzzy matching
+            serviceType: data.serviceType || data.serviceName
+        };
+    });
 
     const lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
 
@@ -153,10 +158,15 @@ export const subscribeSessions = (
     const q = buildSessionsQuery(options);
     
     return onSnapshot(q, (snapshot) => {
-        const sessions = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as Session[];
+        const sessions = snapshot.docs.map(doc => {
+            const data = doc.data() as Session;
+            return {
+                ...data,
+                id: doc.id,
+                // Explicitly ensure serviceType is passed, fallback to serviceName for fuzzy matching
+                serviceType: data.serviceType || data.serviceName
+            };
+        });
         
         const lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
         
