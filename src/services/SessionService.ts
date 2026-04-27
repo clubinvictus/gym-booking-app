@@ -84,8 +84,11 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
         const myClientId = options.clientId || userId;
         filters.push(or(
             where('clientIds', 'array-contains', myClientId),
+            where('client_ids', 'array-contains', myClientId),
+            where('clientId', '==', myClientId),
             where('serviceName', '==', 'Limitless Open'),
-            where('serviceName', '==', 'Limitless Open (Shared)')
+            where('serviceName', '==', 'Limitless Open (Shared)'),
+            where('serviceType', '==', 'Limitless Open')
         ));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {

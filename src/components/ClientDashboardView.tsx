@@ -54,6 +54,7 @@ export const ClientDashboardView = () => {
                                 s.clientIds?.includes(profile?.clientId) || 
                                 s.client_ids?.includes(profile?.clientId) || 
                                 s.uids?.includes(user?.uid) || 
+                                (s.attendees && s.attendees.includes(profile?.clientId)) ||
                                 (s.clients && s.clients.some((c: any) => c.id === profile?.clientId));
             return isMySession && sessionToMs(s) >= now;
         })
