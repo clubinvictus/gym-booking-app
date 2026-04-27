@@ -27,6 +27,7 @@ import { signOut } from 'firebase/auth';
 import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
 import { TermsModal } from './TermsModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface DashboardProps {
     view?: 'dashboard' | 'calendar' | 'team' | 'services' | 'clients' | 'activity' | 'settings';
@@ -51,6 +52,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
     // Check if client needs to accept terms
     const showTerms = profile?.role === 'client' && !profile?.termsAccepted;
+    const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
     useEffect(() => {
         const handleResize = () => {
@@ -510,10 +512,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         </div>
                     )}
                     <button
-                        onClick={async () => {
-                            await signOut(auth);
-                            navigate('/login');
-                        }}
+                        onClick={() => setIsLogoutModalOpen(true)}
                         style={{ background: 'transparent', border: 'none', padding: 0, width: '100%', textAlign: 'left', color: 'inherit', cursor: 'pointer' }}
                     >
                         <NavItem icon={<LogOut size={20} />} label="LOGOUT" isOpen={isSidebarOpen} />
@@ -651,6 +650,19 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 onAccepted={() => {
                     console.log('Terms accepted');
                 }} 
+            />
+
+            <ConfirmModal
+                isOpen={isLogoutModalOpen}
+                title="Confirm Logout"
+                message="Are you sure you want to log out of your account?"
+                confirmLabel="Log Out"
+                type="danger"
+                onConfirm={async () => {
+                    await signOut(auth);
+                    navigate('/login');
+                }}
+                onCancel={() => setIsLogoutModalOpen(false)}
             />
         </div>
     );
