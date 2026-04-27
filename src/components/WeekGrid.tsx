@@ -264,8 +264,15 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     (s.clients && s.clients.some((c: any) => clientIds.includes(c.id))) ||
                                     (s.attendees && s.attendees.some((aid: string) => clientIds.includes(aid)));
 
-                                if (isLimitlessOpen) return true;
-                                return isMySession;
+                                // If "My Calendar" view is selected, only show my sessions + limitless open
+                                if (selectedTrainerId === 'my') {
+                                    if (isLimitlessOpen) return true;
+                                    return isMySession;
+                                }
+
+                                // If a specific trainer is selected (or "All"), show ALL their sessions
+                                // The chip rendering logic below will handle masking "Booked" vs "Details"
+                                return true;
                             });
 
                             const firstSession = slotSessions[0];
@@ -345,7 +352,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         };
                                                     } else {
                                                         chipBg = '#000';
-                                                        chipText = 'Booked';
+                                                        chipText = isLimitlessOpen && attendeesCount >= 3 ? 'Full' : 'Booked';
                                                         chipCursor = 'not-allowed';
                                                         handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
                                                     }
@@ -426,7 +433,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         };
                                                     } else {
                                                         chipBg = '#000';
-                                                        chipTextPrimary = 'Booked';
+                                                        chipTextPrimary = isLimitlessOpen && attendeesCount >= 3 ? 'Full' : 'Booked';
                                                         chipTextSecondary = '';
                                                         chipCursor = 'not-allowed';
                                                         handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
