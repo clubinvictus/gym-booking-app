@@ -179,13 +179,11 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                             }
  
                                             if (isClient && !isUserInSession) {
-                                                let chipBg = '#000';
                                                 let chipText = 'Booked';
                                                 let chipCursor = 'not-allowed';
                                                 let handleClick = (e: any) => { e.stopPropagation(); };
  
                                                 if (isLimitlessOpen && attendeesCount < 3) {
-                                                    chipBg = chipColor;
                                                     chipText = `Limitless Open (${attendeesCount}/3) - Join`;
                                                     chipCursor = 'pointer';
                                                     handleClick = (e: any) => {
@@ -211,7 +209,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                                 height: '24px',
                                                                 padding: '2px 6px',
                                                                 borderRadius: '4px',
-                                                                backgroundColor: chipBg,
+                                                                backgroundColor: '#000',
                                                                 color: '#fff',
                                                                 fontSize: '0.75rem',
                                                                 fontWeight: 700,

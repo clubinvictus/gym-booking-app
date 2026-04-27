@@ -329,7 +329,6 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid)));
                                                 }
 
-                                                let chipBg = '#000';
                                                 let chipCursor = 'pointer';
                                                 let chipText = getSessionClientNames(displaySession);
                                                 let handleClick = (e: any) => {
@@ -339,7 +338,6 @@ export const WeekGrid: React.FC<GridProps> = ({
 
                                                 if (isClient && !isUserInSession) {
                                                     if (isLimitlessOpen && attendeesCount < 3) {
-                                                        chipBg = chipColor;
                                                         chipText = `Limitless Open (${attendeesCount}/3)`;
                                                         handleClick = (e: any) => {
                                                             e.stopPropagation();
@@ -352,7 +350,6 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                             });
                                                         };
                                                     } else {
-                                                        chipBg = '#000';
                                                         chipText = isLimitlessOpen && attendeesCount >= 3 ? 'Full' : 'Booked';
                                                         chipCursor = 'not-allowed';
                                                         handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
@@ -367,7 +364,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                             height: '24px',
                                                             padding: '2px 6px',
                                                             borderRadius: '4px',
-                                                            backgroundColor: chipBg,
+                                                            backgroundColor: '#000',
                                                             color: '#fff',
                                                             fontSize: '0.75rem',
                                                             fontWeight: 700,
@@ -445,7 +442,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         className="session-card"
                                                         onClick={handleClick}
                                                         style={{
-                                                            backgroundColor: isClient && !isUserInSession && !(isLimitlessOpen && attendeesCount < 3) ? '#000' : chipColor,
+                                                            backgroundColor: '#000',
                                                             borderRadius: '4px',
                                                             padding: '8px',
                                                             color: '#fff',
