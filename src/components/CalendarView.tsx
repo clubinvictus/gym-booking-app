@@ -294,7 +294,7 @@ export const CalendarView = () => {
                         gap: '12px',
                         width: window.innerWidth <= 768 ? '100%' : 'auto'
                     }}>
-                        {(isAdmin || isClient) && (
+                        {(isAdmin || isManager || isClient) && (
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: window.innerWidth <= 768 ? 1 : 'none' }}>
                                 {window.innerWidth > 768 && <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em', marginRight: '8px' }}>FILTER:</span>}
                                 <div style={{ position: 'relative', width: '100%' }}>
