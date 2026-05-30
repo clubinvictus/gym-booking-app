@@ -19,7 +19,16 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const functions = getFunctions(app, 'us-central1');
 export const googleProvider = new GoogleAuthProvider();
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+let analyticsInstance = null;
+if (typeof window !== 'undefined') {
+    try {
+        analyticsInstance = getAnalytics(app);
+    } catch (e) {
+        console.warn("Firebase Analytics initialization failed (likely blocked by ad-blocker or private browsing):", e);
+    }
+}
+export const analytics = analyticsInstance;
 
 // Set LOCAL persistence globally so users stay signed in across browser closes/PWA restarts.
 // This must be done here (at module init), not inside login handlers, because Firebase
