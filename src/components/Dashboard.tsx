@@ -97,7 +97,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
         startDate: monthStart,
         endDate:   monthEnd,
         includePast: true, // we handle filtering ourselves in the component
-        pageSize: 200
+        pageSize: 2000
     });
 
 

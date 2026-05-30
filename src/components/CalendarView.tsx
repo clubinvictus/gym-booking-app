@@ -120,7 +120,7 @@ export const CalendarView = () => {
         startDate: weekStartDate,
         endDate: weekEndDate,
         includePast: true,
-        pageSize: 200, // Enough to cover a busy week
+        pageSize: 500, // Enough to cover a busy week
         trainerId: selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
                   (isTrainer && selectedTrainerId === 'my' ? profile?.trainerId : undefined)
     });
@@ -341,19 +341,20 @@ export const CalendarView = () => {
                                         value={selectedTrainerId}
                                         onChange={(e) => setSelectedTrainerId(e.target.value)}
                                         style={{
-                                            height: isMobileView ? '48px' : '42px',
+                                            height: isMobileView ? '56px' : '42px',
                                             width: '100%',
-                                            padding: '0 36px 0 36px', // space for left icon and right arrow
+                                            padding: '0 40px 0 40px', // space for left icon and right arrow
                                             border: '2px solid #000',
                                             borderRadius: 0,
-                                            fontWeight: 800,
-                                            fontSize: '0.85rem',
+                                            fontWeight: 900,
+                                            fontSize: isMobileView ? '1rem' : '0.85rem',
                                             cursor: 'pointer',
                                             outline: 'none',
                                             background: '#fff',
                                             color: '#000',
                                             appearance: 'none',
-                                            WebkitAppearance: 'none'
+                                            WebkitAppearance: 'none',
+                                            boxShadow: '4px 4px 0px rgba(0,0,0,1)'
                                         }}
                                     >
                                         {!isClient && <option value="all">All Trainers / Filter...</option>}
