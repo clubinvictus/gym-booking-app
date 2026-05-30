@@ -38,7 +38,7 @@ export const WeekGrid: React.FC<GridProps> = ({
     onDayHeaderClick
 }) => {
     const isMobile = window.innerWidth <= 768;
-    const daysToShow = isMobile ? 3 : 7;
+    const daysToShow = isMobile ? 2 : 7;
     
     // Generate the visible days based on currentWeekStart
     const visibleDays = Array.from({ length: daysToShow }).map((_, i) => {

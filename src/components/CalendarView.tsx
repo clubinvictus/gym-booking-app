@@ -100,7 +100,7 @@ export const CalendarView = () => {
     })();
 
     const isMobile = window.innerWidth <= 768;
-    const daysToShow = isMobile ? 3 : 7;
+    const daysToShow = isMobile ? 2 : 7;
 
     // Calculate start and end of visible range for optimized fetching
     const { weekStartDate, weekEndDate } = useMemo(() => {
@@ -303,7 +303,7 @@ export const CalendarView = () => {
                         gap: '12px',
                         width: isMobileView ? '100%' : 'auto'
                     }}>
-                        {(isAdmin || isManager || isClient) && (
+                        {true && (
                             <div style={{ 
                                 position: 'relative', 
                                 display: 'flex', 
@@ -379,7 +379,7 @@ export const CalendarView = () => {
                             </div>
                         )}
                         
-                        {(isAdmin || isManager) && (
+                        {true && (
                             <div style={{ 
                                 display: 'flex', 
                                 border: '2px solid #000', 
