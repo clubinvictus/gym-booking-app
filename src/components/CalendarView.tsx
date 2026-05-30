@@ -71,7 +71,7 @@ export const CalendarView = () => {
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const confirm = useConfirm();
     const isAdmin = profile?.role === 'admin';
-    const isManager = profile?.role === 'manager';
+    // const isManager = profile?.role === 'manager';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
     
