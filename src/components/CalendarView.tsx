@@ -31,7 +31,7 @@ const getStartOfWeek = (d: Date) => {
 };
 
 export const CalendarView = () => {
-    const [selectedSlot, setSelectedSlot] = useState<{ day: number; time: string; date?: Date; trainerId?: string | null } | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<{ day: number; time: string; date?: Date; trainerId?: string | null; joinSessionId?: string; joinServiceName?: string; joinTrainerName?: string } | null>(null);
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [excludedTrainerId, setExcludedTrainerId] = useState<string | null>(null);
     const [offDayModalOpen, setOffDayModalOpen] = useState(false);

@@ -14,7 +14,7 @@ export interface GridProps {
     isClient: boolean;
     isTrainer: boolean;
     profile: any;
-    onSlotSelected: (slotData: { day: number; time: string; trainerId: string | null; date: Date; joinSessionId?: string }) => void;
+    onSlotSelected: (slotData: { day: number; time: string; trainerId: string | null; date: Date; joinSessionId?: string; joinServiceName?: string; joinTrainerName?: string }) => void;
     onSessionClick: (session: any) => void;
     onDayHeaderClick: (dayIndex: number) => void;
 }
@@ -350,7 +350,9 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                                 time: displaySession.time,
                                                                 trainerId: displaySession.trainerId,
                                                                 date: displaySession.date,
-                                                                joinSessionId: displaySession.id
+                                                                joinSessionId: displaySession.id,
+                                                                joinServiceName: displaySession.serviceName,
+                                                                joinTrainerName: displaySession.trainerName
                                                             });
                                                         };
                                                     } else {
@@ -433,7 +435,9 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                                 time: displaySession.time,
                                                                 trainerId: displaySession.trainerId,
                                                                 date: displaySession.date,
-                                                                joinSessionId: displaySession.id
+                                                                joinSessionId: displaySession.id,
+                                                                joinServiceName: displaySession.serviceName,
+                                                                joinTrainerName: displaySession.trainerName
                                                             });
                                                         };
                                                     } else {

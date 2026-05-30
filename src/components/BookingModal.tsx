@@ -10,7 +10,7 @@ import { useConfirm } from '../ConfirmContext';
 interface BookingModalProps {
     isOpen: boolean;
     onClose: () => void;
-    selectedSlot: { day: number; time: string; date?: Date; trainerId?: string | null; joinSessionId?: string } | null;
+    selectedSlot: { day: number; time: string; date?: Date; trainerId?: string | null; joinSessionId?: string; joinServiceName?: string; joinTrainerName?: string } | null;
     editingSession?: any;
     excludedTrainerId?: string | null;
     onBook: (data: any) => void;
@@ -109,13 +109,13 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
             // We don't reset service/trainer IF they were already set manually and the trainers array updated
             // But we DO reset them when a fresh slot is clicked
-            setSelectedService('');
+            setSelectedService(selectedSlot.joinServiceName || '');
             setIsRepeating(false);
             setRepeatFrequency('weekly');
 
-            const initialTrainer = selectedSlot?.trainerId
+            const initialTrainer = selectedSlot.joinTrainerName || (selectedSlot?.trainerId
                 ? (trainers.find(t => t.id === selectedSlot.trainerId)?.name || '')
-                : '';
+                : '');
             setSelectedTrainer(initialTrainer);
         }
     }, [isOpen, editingSession?.id, selectedSlot?.day, selectedSlot?.time, selectedSlot?.date, selectedSlot?.trainerId]);
@@ -292,7 +292,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
         try {
             // --- Trainer double-booking check ---
-            if (!editingSession && selectedTrainer) {
+            if (!editingSession && !selectedSlot?.joinSessionId && selectedTrainer) {
                 const trainer = trainers.find((t: any) => t.name === selectedTrainer);
                 if (trainer) {
                     // Admins/managers query sessions directly (always accurate, no stale data).
@@ -853,7 +853,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         }
     };
 
-    const isSubmitDisabled = (availableTrainers.length === 0 && !editingSession) || isSubmitting || isTierRestricted;
+    const isSubmitDisabled = (availableTrainers.length === 0 && !editingSession && !selectedSlot?.joinSessionId) || isSubmitting || isTierRestricted;
 
     return (
         <>
@@ -1011,6 +1011,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                 <select
                                     name="serviceName"
                                     required
+                                    disabled={!!selectedSlot?.joinSessionId}
                                     value={selectedService}
                                     onChange={(e) => setSelectedService(e.target.value)}
                                     style={{
@@ -1021,8 +1022,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         fontSize: '1rem',
                                         fontWeight: 600,
                                         appearance: 'none',
-                                        backgroundColor: '#fff',
-                                        color: '#000'
+                                        backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
+                                        color: '#000',
+                                        cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
                                     }}
                                 >
                                     <option value="">Select service</option>
@@ -1039,6 +1041,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                     <select
                                         name="day"
                                         value={selectedDay}
+                                        disabled={!!selectedSlot?.joinSessionId}
                                         onChange={(e) => {
                                             const val = parseInt(e.target.value);
                                             setSelectedDay(val);
@@ -1054,8 +1057,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             fontSize: '0.9rem',
                                             fontWeight: 600,
                                             appearance: 'none',
-                                            backgroundColor: '#fff',
-                                            color: '#000'
+                                            backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
+                                            color: '#000',
+                                            cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
                                         }}
                                     >
                                         {days.map((day, i) => {
@@ -1081,6 +1085,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                     <select
                                         name="time"
                                         value={selectedTime}
+                                        disabled={!!selectedSlot?.joinSessionId}
                                         onChange={(e) => setSelectedTime(e.target.value)}
                                         style={{
                                             width: '100%',
@@ -1090,8 +1095,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             fontSize: '0.9rem',
                                             fontWeight: 600,
                                             appearance: 'none',
-                                            backgroundColor: '#fff',
-                                            color: '#000'
+                                            backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
+                                            color: '#000',
+                                            cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
                                         }}
                                     >
                                         {timeSlots.map(t => {
@@ -1130,6 +1136,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                 <select
                                     name="trainerName"
                                     required
+                                    disabled={!!selectedSlot?.joinSessionId}
                                     value={selectedTrainer}
                                     onChange={(e) => setSelectedTrainer(e.target.value)}
                                     style={{
@@ -1140,8 +1147,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                         fontSize: '0.9rem',
                                         fontWeight: 600,
                                         appearance: 'none',
-                                        backgroundColor: (selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff',
-                                        color: '#000'
+                                        backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : ((selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff'),
+                                        color: '#000',
+                                        cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
                                     }}
                                 >
                                     <option value="">Select trainer</option>
@@ -1165,7 +1173,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             )}
                         </div>
 
-                        {!editingSession && (
+                        {!editingSession && !selectedSlot?.joinSessionId && (
                             <div>
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.9rem' }}>RECURRENCE</label>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', border: '2px solid #000' }}>

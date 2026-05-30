@@ -197,7 +197,9 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                             time: session.time,
                                                             trainerId: session.trainerId,
                                                             date: new Date(session.date || activeDate),
-                                                            joinSessionId: session.id
+                                                            joinSessionId: session.id,
+                                                            joinServiceName: session.serviceName,
+                                                            joinTrainerName: session.trainerName
                                                         });
                                                     };
                                                 }
