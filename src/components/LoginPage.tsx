@@ -9,7 +9,7 @@ import {
     updateProfile, 
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { SITE_ID } from '../constants';
 
@@ -108,7 +108,6 @@ export const LoginPage = () => {
                     clientId = clientQuerySnapshot.docs[0].id;
                 } else {
                     console.log('Creating new client record');
-                    const { addDoc } = await import('firebase/firestore');
                     const newClientRef = await addDoc(collection(db, 'clients'), {
                         name: clientName,
                         email: normalizedEmail,
