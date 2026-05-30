@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, ChevronDown, Filter } from 'lucide-react';
 import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
 import { OffDayModal } from './OffDayModal';
@@ -38,6 +38,15 @@ export const CalendarView = () => {
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
+    const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
+
+    React.useEffect(() => {
+        const handleResize = () => {
+            setIsMobileView(window.innerWidth <= 768);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Auto-refresh the week reference if the app is left open overnight
     React.useEffect(() => {
@@ -200,7 +209,7 @@ export const CalendarView = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
             <header style={{
-                padding: window.innerWidth <= 768 ? '16px 20px' : '20px 40px',
+                padding: isMobileView ? '16px 20px' : '20px 40px',
                 borderBottom: '2px solid #000',
                 display: 'flex',
                 flexDirection: 'column',
@@ -208,8 +217,8 @@ export const CalendarView = () => {
                 background: '#fff'
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <h1 style={{ fontSize: window.innerWidth <= 768 ? '1.8rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
-                    {window.innerWidth <= 768 && !isTrainer && (
+                    <h1 style={{ fontSize: isMobileView ? '1.8rem' : '1.6rem', fontWeight: 900, letterSpacing: '-0.02em', margin: 0 }}>SCHEDULE</h1>
+                    {isMobileView && !isTrainer && (
                         <button
                             onClick={handleBookButtonClick}
                             style={{
@@ -234,17 +243,17 @@ export const CalendarView = () => {
 
                 <div style={{
                     display: 'flex',
-                    flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                    flexDirection: isMobileView ? 'column' : 'row',
                     justifyContent: 'space-between',
-                    alignItems: window.innerWidth <= 768 ? 'stretch' : 'center',
-                    gap: window.innerWidth <= 768 ? '12px' : '16px'
+                    alignItems: isMobileView ? 'stretch' : 'center',
+                    gap: isMobileView ? '12px' : '16px'
                 }}>
                     <div style={{ 
                         display: 'flex', 
                         justifyContent: 'space-between', 
                         alignItems: 'center', 
                         gap: '16px',
-                        width: window.innerWidth <= 768 ? '100%' : 'auto'
+                        width: isMobileView ? '100%' : 'auto'
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button onClick={handlePrevWeek} className="button-secondary" style={{ padding: '6px 10px', height: '36px' }}><ChevronLeft size={18} /></button>
@@ -280,7 +289,7 @@ export const CalendarView = () => {
                         </div>
                         <span style={{ 
                             fontWeight: 800, 
-                            fontSize: window.innerWidth <= 768 ? '0.85rem' : '1.1rem', 
+                            fontSize: isMobileView ? '0.85rem' : '1.1rem', 
                             whiteSpace: 'nowrap' 
                         }}>
                             {formatWeekRange(currentWeekStart, daysToShow)}
@@ -292,19 +301,49 @@ export const CalendarView = () => {
                         alignItems: 'center', 
                         justifyContent: 'space-between',
                         gap: '12px',
-                        width: window.innerWidth <= 768 ? '100%' : 'auto'
+                        width: isMobileView ? '100%' : 'auto'
                     }}>
                         {(isAdmin || isManager || isClient) && (
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: window.innerWidth <= 768 ? 1 : 'none' }}>
-                                {window.innerWidth > 768 && <span style={{ fontWeight: 900, fontSize: '0.7rem', color: '#888', letterSpacing: '0.05em', marginRight: '8px' }}>FILTER:</span>}
+                            <div style={{ 
+                                position: 'relative', 
+                                display: 'flex', 
+                                flexDirection: isMobileView ? 'column' : 'row',
+                                alignItems: isMobileView ? 'stretch' : 'center', 
+                                flex: isMobileView ? 1 : 'none',
+                                width: isMobileView ? '100%' : 'auto'
+                            }}>
+                                <span style={{ 
+                                    fontWeight: 900, 
+                                    fontSize: '0.75rem', 
+                                    color: '#666', 
+                                    letterSpacing: '0.08em', 
+                                    marginRight: isMobileView ? '0' : '8px',
+                                    marginBottom: isMobileView ? '6px' : '0',
+                                    display: 'block'
+                                }}>
+                                    FILTER:
+                                </span>
                                 <div style={{ position: 'relative', width: '100%' }}>
+                                    {/* Left Icon (Filter) */}
+                                    <div style={{
+                                        position: 'absolute',
+                                        left: '12px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        pointerEvents: 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        color: '#000'
+                                    }}>
+                                        <Filter size={16} />
+                                    </div>
                                     <select
                                         value={selectedTrainerId}
                                         onChange={(e) => setSelectedTrainerId(e.target.value)}
                                         style={{
-                                            height: '42px',
+                                            height: isMobileView ? '48px' : '42px',
                                             width: '100%',
-                                            padding: '0 36px 0 12px',
+                                            padding: '0 36px 0 36px', // space for left icon and right arrow
                                             border: '2px solid #000',
                                             borderRadius: 0,
                                             fontWeight: 800,
@@ -330,9 +369,10 @@ export const CalendarView = () => {
                                         transform: 'translateY(-50%)',
                                         pointerEvents: 'none',
                                         display: 'flex',
-                                        alignItems: 'center'
+                                        alignItems: 'center',
+                                        color: '#000'
                                     }}>
-                                        <ChevronRight size={16} style={{ transform: 'rotate(90deg)' }} />
+                                        <ChevronDown size={18} />
                                     </div>
                                 </div>
                             </div>
@@ -345,7 +385,7 @@ export const CalendarView = () => {
                                 borderRadius: '4px', 
                                 overflow: 'hidden', 
                                 height: '42px',
-                                flex: window.innerWidth <= 768 ? 1 : 'none'
+                                flex: isMobileView ? 1 : 'none'
                             }}>
                                 <button
                                     onClick={() => setViewMode('week')}
@@ -381,7 +421,7 @@ export const CalendarView = () => {
                             </div>
                         )}
 
-                        {window.innerWidth > 768 && !isTrainer && (
+                        {!isMobileView && !isTrainer && (
                             <button
                                 onClick={handleBookButtonClick}
                                 style={{
