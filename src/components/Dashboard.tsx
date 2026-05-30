@@ -78,7 +78,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     // Fetch sessions for the selected month — always provide both startDate and endDate
     // so SessionService uses the date range path (not the endTime > now path).
     const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
     const monthEnd   = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+    monthEnd.setHours(23, 59, 59, 999);
     
     // For trainers: resolve their trainerId. The AuthContext may sync this async,
     // so we also check profile.id as a fallback (the Firestore users doc ID equals
@@ -206,9 +208,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 // Sessions are already filtered by role and siteId
                 const userSessions = sessions || [];
 
-                // Format selectedDate as YYYY-MM-DD string (matching the 'date' prefix in Firestore)
-                const selectedDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-
                 // Parse a time string like "06:00 AM" or "05:00 PM" into minutes since midnight
                 // so that AM/PM sessions sort correctly (not lexicographically).
                 const timeToMinutes = (timeStr: string): number => {
@@ -223,12 +222,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     } catch { return 9999; }
                 };
 
-                // Sessions store date as a full ISO string e.g. "2026-04-23T04:30:00.000Z"
-                // Extract just the YYYY-MM-DD portion for date matching.
+                // Sessions store date as a full ISO string or native Timestamp.
+                // We resolve to a local Date object to avoid UTC timezone drift.
                 const sessionsForDay = userSessions
                     .filter((s: any) => {
-                        if (!s?.date) return false;
-                        return String(s.date).substring(0, 10) === selectedDateISO;
+                        const d = s.startTime?.toDate ? s.startTime.toDate() : (s.date ? new Date(s.date) : null);
+                        if (!d) return false;
+                        return d.toDateString() === selectedDate.toDateString();
                     })
                     .sort((a: any, b: any) => timeToMinutes(a.time) - timeToMinutes(b.time));
 

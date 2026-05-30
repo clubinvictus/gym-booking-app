@@ -90,6 +90,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
     const getMonthRange = () => {
         const curr = new Date();
         const start = new Date(curr.getFullYear(), curr.getMonth(), 1);
+        start.setHours(0, 0, 0, 0);
         const end = new Date(curr.getFullYear(), curr.getMonth() + 1, 0);
         end.setHours(23, 59, 59, 999);
 

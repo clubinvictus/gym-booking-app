@@ -12,6 +12,7 @@ export default defineConfig({
         // Force the new service worker to activate immediately
         skipWaiting: true,
         clientsClaim: true,
+        cleanupOutdatedCaches: true,
         // CRITICAL: Do NOT intercept Firebase Auth reserved paths.
         // Without this, the SW serves index.html for /__/auth/handler,
         // causing a blank screen during Google sign-in.

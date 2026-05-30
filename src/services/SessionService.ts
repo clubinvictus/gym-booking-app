@@ -71,12 +71,10 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
 
     // 3. Date Range Filtering
     if (options.startDate) {
-        const startISO = options.startDate.toISOString().substring(0, 10);
-        filters.push(where('date', '>=', startISO));
+        filters.push(where('date', '>=', options.startDate.toISOString()));
     }
     if (options.endDate) {
-        const endISO = options.endDate.toISOString().substring(0, 10);
-        filters.push(where('date', '<=', endISO));
+        filters.push(where('date', '<=', options.endDate.toISOString()));
     }
 
     // 4. Role-based and Target-based Filtering
