@@ -85,13 +85,14 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     // so we also check profile.id as a fallback (the Firestore users doc ID equals
     // the trainers doc ID for trainer accounts created correctly).
     const resolvedTrainerId = isTrainer
-        ? (profile?.trainerId || profile?.id || undefined)
+        ? (profile?.trainerId || undefined)
         : undefined;
 
     // Using the centralized useSessions hook for standardized fetching
     const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
         userId: user?.uid || '',
+        clientId: isClient ? (profile?.clientId || undefined) : undefined,
         trainerId: resolvedTrainerId,
         startDate: monthStart,
         endDate:   monthEnd,
@@ -222,9 +223,17 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 // We resolve to a local Date object to avoid UTC timezone drift.
                 const sessionsForDay = userSessions
                     .filter((s: any) => {
-                        const d = s.startTime?.toDate ? s.startTime.toDate() : (s.date ? new Date(s.date) : null);
-                        if (!d) return false;
-                        return d.toDateString() === selectedDate.toDateString();
+                        // Support both Firestore Timestamp-based startTime and ISO date string
+                        const selectedDateISO = new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000).toISOString().substring(0, 10);
+                        let sessionDateISO: string | null = null;
+                        if (s.startTime?.toDate) {
+                            sessionDateISO = s.startTime.toDate().toISOString().substring(0, 10);
+                        } else if (s.startTime instanceof Date) {
+                            sessionDateISO = s.startTime.toISOString().substring(0, 10);
+                        } else if (s.date) {
+                            sessionDateISO = String(s.date).substring(0, 10);
+                        }
+                        return sessionDateISO === selectedDateISO;
                     })
                     .sort((a: any, b: any) => timeToMinutes(a.time) - timeToMinutes(b.time));
 

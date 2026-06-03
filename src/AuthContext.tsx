@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, getDocs, collection, query, where } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, getDoc, setDoc } from 'firebase/firestore';
 
 interface AuthContextType {
     user: User | null;
@@ -33,7 +33,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 });
 
                 // 2. Background Sync: Ensure profile has trainerId if they are a trainer
-                // This handles cases where the doc ID and UID are linked via email
                 try {
                     const q = query(collection(db, 'trainers'), where('email', '==', firebaseUser.email?.toLowerCase()));
                     const tSnap = await getDocs(q);
@@ -45,7 +44,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                         });
                     }
                 } catch (e) {
-                    console.warn('AuthProvider: Profile sync issue (might be permission related)', e);
+                    console.warn('AuthProvider: Trainer profile sync issue', e);
+                }
+
+                // 3. Background Sync: Link client profile on first login.
+                // If a clients/ document exists for this email but clientId isn't set
+                // on the users/ doc, wire them up so session queries work correctly.
+                try {
+                    const userSnap = await getDoc(profileRef);
+                    const userProfile = userSnap.data();
+
+                    if (!userProfile?.clientId && firebaseUser.email) {
+                        const cq = query(
+                            collection(db, 'clients'),
+                            where('email', '==', firebaseUser.email.toLowerCase())
+                        );
+                        const cSnap = await getDocs(cq);
+
+                        if (!cSnap.empty) {
+                            const clientDoc = cSnap.docs[0];
+                            const updates: any = { clientId: clientDoc.id };
+
+                            // If the user doc doesn't have a role yet, set it to client
+                            if (!userProfile?.role) updates.role = 'client';
+
+                            // If users doc doesn't exist yet, create it
+                            if (!userSnap.exists()) {
+                                await setDoc(profileRef, {
+                                    email: firebaseUser.email,
+                                    name: clientDoc.data().name || firebaseUser.displayName || '',
+                                    role: 'client',
+                                    clientId: clientDoc.id,
+                                    siteId: clientDoc.data().siteId || 'invictus-booking'
+                                });
+                            } else {
+                                await updateDoc(profileRef, updates);
+                            }
+                            console.log(`AuthProvider: Linked users/${firebaseUser.uid} → clients/${clientDoc.id}`);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('AuthProvider: Client profile link issue', e);
                 }
 
                 return () => profileUnsubscribe();

@@ -83,18 +83,27 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
         console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
         filters.push(where('trainerId', '==', options.trainerId));
     } else if (role === 'client') {
+        if (!options.clientId) {
+            console.warn(
+                'SessionService: client query is missing clientId — falling back to auth UID.\n' +
+                'Sessions may be invisible if they were booked using the clients-collection doc ID.\n' +
+                'Ensure users/[uid].clientId is set to the matching clients/[docId].'
+            );
+        }
         const myClientId = options.clientId || userId;
         filters.push(or(
             where('clientIds', 'array-contains', myClientId),
             where('client_ids', 'array-contains', myClientId),
             where('uids', 'array-contains', myClientId),
             where('clientId', '==', myClientId),
+            where('uids', 'array-contains', userId),  // for trial/legacy bookings using auth UID
             where('serviceName', '==', 'Limitless Open'),
             where('serviceName', '==', 'Limitless Open (Shared)'),
             where('serviceType', '==', 'Limitless Open')
         ));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
+            // Cover all legacy field names so no sessions are missed
             filters.push(or(
                 where('clientIds', 'array-contains', options.clientId),
                 where('client_ids', 'array-contains', options.clientId),

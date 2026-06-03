@@ -249,6 +249,88 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
     if (!isOpen || !selectedSlot) return null;
 
+    // ── JOIN FLOW ──────────────────────────────────────────────────────────────
+    if (selectedSlot.joinSessionId) {
+        const trainerName = trainers?.find((t: any) => t.id === selectedSlot.trainerId)?.name || 'Your Trainer';
+        const dateObj = selectedSlot.date instanceof Date ? selectedSlot.date : selectedSlot.date ? new Date(selectedSlot.date as any) : null;
+        const sessionDate = dateObj
+            ? dateObj.toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+            : days[selectedSlot.day];
+
+        const handleJoin = async () => {
+            if (isSubmitting) return;
+            setIsSubmitting(true);
+            try {
+                const clientObj = {
+                    id: profile?.clientId || user?.uid || null,
+                    name: profile?.name || user?.displayName || 'Client',
+                    email: profile?.email || null,
+                    uid: user?.uid || null,
+                    phone: profile?.phone || null
+                };
+                const sessionRef = doc(db, 'sessions', selectedSlot.joinSessionId!);
+                await updateDoc(sessionRef, {
+                    clients: arrayUnion(clientObj),
+                    clientIds: arrayUnion(clientObj.id),
+                    client_ids: arrayUnion(clientObj.id),
+                    uids: arrayUnion(clientObj.uid)
+                });
+                onBook({});
+                onClose();
+            } catch (err) {
+                console.error('Failed to join session:', err);
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
+
+        return (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+                <div style={{ width: '95%', maxWidth: '440px', padding: '32px', background: '#fff', border: '4px solid #000', position: 'relative' }}>
+                    <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <X size={24} />
+                    </button>
+
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: 900, marginBottom: '4px' }}>JOIN SESSION</h2>
+                    <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '24px' }}>You're joining an existing Limitless Open session</p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '20px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Briefcase size={16} />
+                            <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>Limitless Open</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <User size={16} />
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{trainerName}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <CalendarIcon size={16} />
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{sessionDate}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Clock size={16} />
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{selectedSlot.time}</span>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button onClick={onClose} style={{ flex: 1, height: '48px', background: '#fff', border: '2px solid #000', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer' }}>
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleJoin}
+                            disabled={isSubmitting}
+                            style={{ flex: 2, height: '48px', background: '#000', color: '#fff', border: '2px solid #000', fontWeight: 900, fontSize: '0.9rem', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}
+                        >
+                            {isSubmitting ? 'JOINING...' : 'CONFIRM JOIN'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     const handleConfirm = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isSubmitting) return;
@@ -508,25 +590,6 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 console.error('Failed to log activity:', err);
             }
         };
-
-        if (selectedSlot?.joinSessionId) {
-            const bookingData = getBookingData(baseDate, selectedDay);
-            const clientObj = bookingData.clients[0];
-            const sessionRef = doc(db, 'sessions', selectedSlot.joinSessionId);
-            
-            await updateDoc(sessionRef, {
-                clients: arrayUnion(clientObj),
-                clientIds: arrayUnion(clientObj.id),
-                client_ids: arrayUnion(clientObj.id),
-                uids: arrayUnion(clientObj.uid)
-            });
-            await logActivity('booked', bookingData);
-            
-            setIsSubmitting(false);
-            onBook({});
-            onClose();
-            return;
-        }
 
         if (editingSession) {
                 // Adjust baseDate to match possibly changed selectedDay
@@ -905,7 +968,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     <p className="text-muted" style={{ marginBottom: '24px', fontSize: '0.9rem' }}>{editingSession ? 'Update booking details' : 'Schedule a new visit to Invictus'}</p>
 
                     <form onSubmit={handleConfirm} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        {editingSession?.seriesId && (
+                        {editingSession?.seriesId && !isClient && (
                             <div style={{ padding: '16px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '8px' }}>
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.8rem', color: '#666' }}>EDITING RECURRING SERIES</label>
                                 <div style={{ display: 'flex', gap: '16px' }}>
@@ -975,8 +1038,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             zIndex: 20,
                                             boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                                         }}>
-                                            {clients.filter((c: any) => c.name.toLowerCase().includes(selectedClient.toLowerCase())).length > 0 ? (
-                                                clients.filter((c: any) => c.name.toLowerCase().includes(selectedClient.toLowerCase())).map((c: any) => (
+                                            {clients.filter((c: any) => c.name?.toLowerCase().includes(selectedClient.toLowerCase())).length > 0 ? (
+                                                clients.filter((c: any) => c.name?.toLowerCase().includes(selectedClient.toLowerCase())).map((c: any) => (
                                                     <div
                                                         key={c.id}
                                                         onClick={() => {

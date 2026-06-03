@@ -77,10 +77,12 @@ export const CalendarView = () => {
     
     const clientIds = useMemo(() => {
         if (!profile) return [];
-        if (profile.clientIds) return profile.clientIds;
-        if (profile.clientId) return [profile.clientId];
-        return [];
-    }, [profile]);
+        const ids = new Set<string>();
+        if (profile.clientIds) profile.clientIds.forEach((id: string) => ids.add(id));
+        if (profile.clientId) ids.add(profile.clientId);
+        if (user?.uid) ids.add(user.uid); // always include auth UID as fallback
+        return Array.from(ids);
+    }, [profile, user?.uid]);
 
     // Set default filter once profile loads
     React.useEffect(() => {
@@ -477,6 +479,7 @@ export const CalendarView = () => {
                     currentWeekStart={currentWeekStart}
                     selectedTrainerId={selectedTrainerId}
                     clientIds={clientIds}
+                    userId={user?.uid || ''}
                     limitDate={limitDate}
                     isAdmin={isAdmin}
                     isClient={isClient}
@@ -496,6 +499,7 @@ export const CalendarView = () => {
                     currentWeekStart={currentWeekStart}
                     selectedTrainerId={selectedTrainerId}
                     clientIds={clientIds}
+                    userId={user?.uid || ''}
                     limitDate={limitDate}
                     isAdmin={isAdmin}
                     isClient={isClient}

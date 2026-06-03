@@ -20,11 +20,13 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const [isDeleting, setIsDeleting] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [deleteScope, setDeleteScope] = useState<'single' | 'future'>('single');
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const isTrainer = profile?.role === 'trainer';
     const isAdmin = profile?.role === 'admin';
     const isManager = profile?.role === 'manager';
     const isStaff = isAdmin || isManager || isTrainer;
+    const isClient = profile?.role === 'client';
+    const isLimitlessOpen = session?.serviceName?.toLowerCase().includes('limitless open') || session?.serviceType?.toLowerCase().includes('limitless open');
     
     const [targetClientId, setTargetClientId] = useState<string | undefined>(undefined);
     const [isAddingClient, setIsAddingClient] = useState(false);
@@ -393,7 +395,10 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                 <div style={{ flex: 1 }}>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#999', textTransform: 'uppercase', marginBottom: '8px' }}>Clients</label>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {Array.isArray(session.clients) ? session.clients.map((c: any) => (
+                                        {Array.isArray(session.clients) ? (isClient && isLimitlessOpen
+                                            ? session.clients.filter((c: any) => c.id === (profile?.clientId || user?.uid) || c.uid === user?.uid)
+                                            : session.clients
+                                        ).map((c: any) => (
                                             <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f9f9f9', padding: '10px 14px', border: '1px solid #eee' }}>
                                                 <span style={{ fontSize: '1rem', fontWeight: 800 }}>{c.name}</span>
                                                 {/* 

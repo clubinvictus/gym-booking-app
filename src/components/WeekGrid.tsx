@@ -9,6 +9,7 @@ export interface GridProps {
     currentWeekStart: Date;
     selectedTrainerId: string;
     clientIds: string[];
+    userId: string;
     limitDate: Date;
     isAdmin: boolean;
     isClient: boolean;
@@ -28,6 +29,7 @@ export const WeekGrid: React.FC<GridProps> = ({
     currentWeekStart,
     selectedTrainerId,
     clientIds,
+    userId,
     limitDate,
     isAdmin,
     isClient,
@@ -219,13 +221,12 @@ export const WeekGrid: React.FC<GridProps> = ({
                                 if (s.startTime) {
                                     const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
                                     if (start.toDateString() !== slotDate.toDateString()) return false;
-                                    
-                                    const sessionTimeStr = start.toLocaleTimeString('en-US', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    }).replace(/\u202F/g, ' ');
-                                    if (sessionTimeStr !== time) return false;
+
+                                    // Compare numerically to avoid locale-sensitive string differences
+                                    // e.g. "6:00 AM" vs "06:00 AM" depending on browser/OS
+                                    const slotTime24 = convertTo24h(time); // e.g. "06:00"
+                                    const [slotH, slotM] = slotTime24.split(':').map(Number);
+                                    if (start.getHours() !== slotH || start.getMinutes() !== slotM) return false;
                                 } else {
                                     if (s.day !== dayIndex || s.time !== time) return false;
 
@@ -262,7 +263,8 @@ export const WeekGrid: React.FC<GridProps> = ({
                                     clientIds.includes(s.clientId) || 
                                     (s.client_ids && s.client_ids.some((cid: string) => clientIds.includes(cid))) ||
                                     (s.clients && s.clients.some((c: any) => clientIds.includes(c.id))) ||
-                                    (s.attendees && s.attendees.some((aid: string) => clientIds.includes(aid)));
+                                    (s.attendees && s.attendees.some((aid: string) => clientIds.includes(aid))) ||
+                                    (s.uids && s.uids.includes(userId));
 
                                 // If "My Calendar" view is selected, only show my sessions + limitless open
                                 if (selectedTrainerId === 'my') {
@@ -314,12 +316,10 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         <>
                                             {displaySessions.slice(0, 3).map((displaySession: any, idx: number) => {
                                                 const matchedService = services?.find(s => 
-                                                    (s.name && displaySession.serviceType && s.name.toLowerCase().includes(displaySession.serviceType.toLowerCase())) || 
-                                                    (displaySession.serviceType && s.name && displaySession.serviceType.toLowerCase().includes(s.name.toLowerCase()))
+                                                    (s.name && displaySession.serviceType && s.name?.toLowerCase().includes(displaySession.serviceType?.toLowerCase())) ||
+                                                    (displaySession.serviceType && s.name && displaySession.serviceType?.toLowerCase().includes(s.name?.toLowerCase()))
                                                 );
                                                 const chipColor = matchedService?.color || '#4B5563';
-                                                console.log('Available Services Array:', services);
-                                                console.log('Chip Match Attempt:', { searchingFor: displaySession.serviceType, matchedServiceFound: matchedService });
                                                 
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -330,7 +330,8 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         clientIds.includes(displaySession.clientId) || 
                                                         (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
                                                         (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
-                                                        (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid)));
+                                                        (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid))) ||
+                                                        (displaySession.uids && displaySession.uids.includes(userId));
                                                 }
 
                                                 let chipCursor = 'pointer';
@@ -340,7 +341,9 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                     onSessionClick(displaySession);
                                                 };
 
-                                                if (isClient && !isUserInSession) {
+                                                if (isClient && isLimitlessOpen && isUserInSession) {
+                                                    chipText = `Limitless Open (${attendeesCount}/3)`;
+                                                } else if (isClient && !isUserInSession) {
                                                     if (isLimitlessOpen && attendeesCount < 3) {
                                                         chipText = `Limitless Open (${attendeesCount}/3)`;
                                                         handleClick = (e: any) => {
@@ -358,7 +361,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                     } else {
                                                         chipText = isLimitlessOpen && attendeesCount >= 3 ? 'Full' : 'Booked';
                                                         chipCursor = 'not-allowed';
-                                                        handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
+                                                        handleClick = (e: any) => { e.stopPropagation(); };
                                                     }
                                                 }
 
@@ -401,8 +404,6 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                 (displaySession.serviceType && s.name && displaySession.serviceType.toLowerCase().includes(s.name.toLowerCase()))
                                             );
                                             const chipColor = matchedService?.color || '#4B5563';
-                                            console.log('Available Services Array:', services);
-                                            console.log('Chip Match Attempt:', { searchingFor: displaySession.serviceType, matchedServiceFound: matchedService });
                                             
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -413,7 +414,8 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         clientIds.includes(displaySession.clientId) || 
                                                         (displaySession.client_ids && displaySession.client_ids.some((cid: string) => clientIds.includes(cid))) ||
                                                         (displaySession.clients && displaySession.clients.some((c: any) => clientIds.includes(c.id))) ||
-                                                        (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid)));
+                                                        (displaySession.attendees && displaySession.attendees.some((aid: string) => clientIds.includes(aid))) ||
+                                                        (displaySession.uids && displaySession.uids.includes(userId));
                                                 }
 
                                                 let chipCursor = 'pointer';
@@ -424,7 +426,10 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                     onSessionClick(displaySession);
                                                 };
 
-                                                if (isClient && !isUserInSession) {
+                                                if (isClient && isLimitlessOpen && isUserInSession) {
+                                                    chipTextPrimary = `Limitless Open (${attendeesCount}/3)`;
+                                                    chipTextSecondary = 'Booked';
+                                                } else if (isClient && !isUserInSession) {
                                                     if (isLimitlessOpen && attendeesCount < 3) {
                                                         chipTextPrimary = `Limitless Open (${attendeesCount}/3)`;
                                                         chipTextSecondary = 'Click to Join';
@@ -444,7 +449,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                         chipTextPrimary = isLimitlessOpen && attendeesCount >= 3 ? 'Full' : 'Booked';
                                                         chipTextSecondary = '';
                                                         chipCursor = 'not-allowed';
-                                                        handleClick = (e: any) => { e.stopPropagation(); }; // unclickable
+                                                        handleClick = (e: any) => { e.stopPropagation(); };
                                                     }
                                                 }
 

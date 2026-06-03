@@ -9,6 +9,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
     currentWeekStart, // In Day view, we'll treat this as the 'active' day for now
     selectedTrainerId,
     clientIds,
+    userId,
     isClient,
     isTrainer,
     onSlotSelected,
@@ -103,13 +104,14 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                 if (s.startTime) {
                                     const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
                                     if (start.toDateString() !== activeDate.toDateString()) return false;
-                                    
-                                    const sessionTimeStr = start.toLocaleTimeString('en-US', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    }).replace(/\u202F/g, ' ');
-                                    if (sessionTimeStr !== time) return false;
+
+                                    // Compare numerically to avoid locale-sensitive string differences
+                                    // e.g. "6:00 AM" vs "06:00 AM" depending on browser/OS
+                                    const slotH = parseInt(time.split(':')[0], 10);
+                                    const slotM = parseInt(time.split(':')[1], 10);
+                                    const isPM = time.includes('PM');
+                                    const normalH = (isPM && slotH !== 12) ? slotH + 12 : (!isPM && slotH === 12) ? 0 : slotH;
+                                    if (start.getHours() !== normalH || start.getMinutes() !== slotM) return false;
                                 } else {
                                     // Legacy match
                                     if (s.time !== time) return false;
@@ -173,8 +175,6 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                 (session.serviceType && s.name && session.serviceType.toLowerCase().includes(s.name.toLowerCase()))
                                             );
                                             const chipColor = matchedService?.color || '#4B5563';
-                                            console.log('Available Services Array:', services);
-                                            console.log('Chip Match Attempt:', { searchingFor: session.serviceType, matchedServiceFound: matchedService });
                                             
                                             const isLimitlessOpen = session.serviceName?.toLowerCase().includes('limitless open') || session.serviceType?.toLowerCase().includes('limitless open');
                                             const attendeesCount = session.clients?.length || 1;
@@ -183,7 +183,8 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                             if (isClient) {
                                                 isUserInSession = (session.client_ids && session.client_ids.some((cid: string) => clientIds.includes(cid))) ||
                                                                   (session.clients && session.clients.some((c: any) => clientIds.includes(c.id))) ||
-                                                                  clientIds.includes(session.clientId);
+                                                                  clientIds.includes(session.clientId) ||
+                                                                  (session.uids && session.uids.includes(userId));
                                             }
  
                                             if (isClient && !isUserInSession) {
