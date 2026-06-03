@@ -250,7 +250,7 @@ export const CalendarView = () => {
                 }}>
                     <div style={{ 
                         display: 'flex', 
-                        justifyContent: 'space-between', 
+                        justifyContent: isMobileView ? 'center' : 'space-between', 
                         alignItems: 'center', 
                         gap: '16px',
                         width: isMobileView ? '100%' : 'auto'
@@ -290,7 +290,8 @@ export const CalendarView = () => {
                         <span style={{ 
                             fontWeight: 800, 
                             fontSize: isMobileView ? '0.85rem' : '1.1rem', 
-                            whiteSpace: 'nowrap' 
+                            whiteSpace: 'nowrap',
+                            display: isMobileView ? 'none' : 'block'
                         }}>
                             {formatWeekRange(currentWeekStart, daysToShow)}
                         </span>
@@ -307,8 +308,8 @@ export const CalendarView = () => {
                             <div style={{ 
                                 position: 'relative', 
                                 display: 'flex', 
-                                flexDirection: isMobileView ? 'column' : 'row',
-                                alignItems: isMobileView ? 'stretch' : 'center', 
+                                flexDirection: isMobileView ? 'row' : 'row',
+                                alignItems: 'center', 
                                 flex: isMobileView ? 1 : 'none',
                                 width: isMobileView ? '100%' : 'auto'
                             }}>
@@ -317,9 +318,8 @@ export const CalendarView = () => {
                                     fontSize: '0.75rem', 
                                     color: '#666', 
                                     letterSpacing: '0.08em', 
-                                    marginRight: isMobileView ? '0' : '8px',
-                                    marginBottom: isMobileView ? '6px' : '0',
-                                    display: 'block'
+                                    marginRight: '8px',
+                                    display: isMobileView ? 'none' : 'block'
                                 }}>
                                     FILTER:
                                 </span>
@@ -341,20 +341,20 @@ export const CalendarView = () => {
                                         value={selectedTrainerId}
                                         onChange={(e) => setSelectedTrainerId(e.target.value)}
                                         style={{
-                                            height: isMobileView ? '56px' : '42px',
+                                            height: '42px',
                                             width: '100%',
                                             padding: '0 40px 0 40px', // space for left icon and right arrow
                                             border: '2px solid #000',
                                             borderRadius: 0,
                                             fontWeight: 900,
-                                            fontSize: isMobileView ? '1rem' : '0.85rem',
+                                            fontSize: isMobileView ? '0.9rem' : '0.85rem',
                                             cursor: 'pointer',
                                             outline: 'none',
                                             background: '#fff',
                                             color: '#000',
                                             appearance: 'none',
                                             WebkitAppearance: 'none',
-                                            boxShadow: '4px 4px 0px rgba(0,0,0,1)'
+                                            boxShadow: 'none'
                                         }}
                                     >
                                         {!isClient && <option value="all">All Trainers / Filter...</option>}
@@ -383,7 +383,7 @@ export const CalendarView = () => {
                             <div style={{ 
                                 display: 'flex', 
                                 border: '2px solid #000', 
-                                borderRadius: '4px', 
+                                borderRadius: 0, 
                                 overflow: 'hidden', 
                                 height: '42px',
                                 flex: isMobileView ? 1 : 'none'
@@ -445,6 +445,26 @@ export const CalendarView = () => {
                         )}
                     </div>
                 </div>
+                {isMobileView && (
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        width: '100%',
+                        paddingTop: '8px',
+                        paddingBottom: '2px'
+                    }}>
+                        <span style={{ 
+                            fontWeight: 900, 
+                            fontSize: '0.95rem', 
+                            letterSpacing: '0.02em',
+                            color: '#000',
+                            textTransform: 'uppercase'
+                        }}>
+                            {formatWeekRange(currentWeekStart, daysToShow)}
+                        </span>
+                    </div>
+                )}
             </header>
 
             {viewMode === 'week' ? (

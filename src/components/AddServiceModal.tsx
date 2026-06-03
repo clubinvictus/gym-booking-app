@@ -40,7 +40,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
     const [assignedTrainerIds, setAssignedTrainerIds] = useState<string[]>([]);
     const [trainers, setTrainers] = useState<any[]>([]);
     const [maxCapacity, setMaxCapacity] = useState(1);
-    const [allowedTiers, setAllowedTiers] = useState<string[]>(['limitless', 'limitless_open']);
+    const [allowedTiers, setAllowedTiers] = useState<string[]>(['limitless', 'limitless_open', 'classic_gym']);
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -57,7 +57,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
             setDuration(editingService.duration?.toString() || '60');
             setColor(editingService.color || '#000000');
             setMaxCapacity(editingService.max_capacity || 1);
-            setAllowedTiers(editingService.allowed_tiers || ['limitless', 'limitless_open']);
+            setAllowedTiers(editingService.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym']);
             // Assuming we store assigned trainers on the service or check trainers' qualified services
             // Let's assume for now we'll handle assignment on the service document
             setAssignedTrainerIds(editingService.assigned_trainer_ids || []);
@@ -66,7 +66,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
             setDuration('60');
             setColor('#000000');
             setMaxCapacity(1);
-            setAllowedTiers(['limitless', 'limitless_open']);
+            setAllowedTiers(['limitless', 'limitless_open', 'classic_gym']);
             setAssignedTrainerIds([]);
         }
     }, [editingService, isOpen]);
@@ -310,6 +310,18 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                     style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                                 />
                                 <span style={{ fontWeight: 700 }}>Limitless Open</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={allowedTiers.includes('classic_gym')}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setAllowedTiers(prev => [...prev, 'classic_gym']);
+                                        else setAllowedTiers(prev => prev.filter(t => t !== 'classic_gym'));
+                                    }}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontWeight: 700 }}>Classic Gym</span>
                             </label>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', background: '#f5f5f5', padding: '4px', margin: '-4px' }}>
                                 <input

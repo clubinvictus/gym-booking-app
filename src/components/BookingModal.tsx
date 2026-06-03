@@ -230,14 +230,14 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const filteredServices = useMemo(() => {
         if (!isClient) return services;
         return services.filter(s => {
-            const allowed = s.allowed_tiers || ['limitless', 'limitless_open'];
+            const allowed = s.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym'];
             return allowed.includes(clientTier);
         });
     }, [services, isClient, clientTier]);
 
     const currentServiceName = selectedService || editingSession?.serviceName;
     const matchingService = services?.find((s: any) => s.name === currentServiceName);
-    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open'];
+    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym'];
 
     const isTierRestricted = !!(currentServiceName && currentClientName && !allowedTiersForService.includes(clientTier));
 

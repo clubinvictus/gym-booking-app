@@ -85,7 +85,8 @@ export const ServiceManagement = ({ onAddClick, onEditClick }: ServiceManagement
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
                                     {service.allowed_tiers.map((tier: string) => (
                                         <span key={tier} style={{
-                                            background: tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                            background: tier === 'limitless_open' ? '#f0cc00' : 
+                                                        tier === 'classic_gym' ? '#4caf50' : '#e0e0e0',
                                             color: '#000',
                                             padding: '4px 8px',
                                             fontSize: '0.7rem',

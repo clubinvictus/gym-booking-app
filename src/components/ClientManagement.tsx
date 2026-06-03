@@ -127,7 +127,8 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                                     <span className="text-muted" style={{ fontSize: '0.8rem' }}>Joined {client.joined}</span>
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <span style={{
-                                            background: client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                            background: client.membership_tier === 'limitless_open' ? '#f0cc00' : 
+                                                        client.membership_tier === 'classic_gym' ? '#4caf50' : '#e0e0e0',
                                             color: '#000',
                                             padding: '4px 10px',
                                             fontSize: '0.7rem',
@@ -178,7 +179,8 @@ export const ClientManagement = ({ onClientClick, onAddClick }: ClientManagement
                                     </td>
                                     <td style={{ padding: '16px 24px' }}>
                                         <span style={{
-                                            background: client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0',
+                                            background: client.membership_tier === 'limitless_open' ? '#f0cc00' : 
+                                                        client.membership_tier === 'classic_gym' ? '#4caf50' : '#e0e0e0',
                                             color: '#000',
                                             padding: '4px 10px',
                                             borderRadius: 0,

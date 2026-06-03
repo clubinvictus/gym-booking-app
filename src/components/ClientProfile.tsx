@@ -300,6 +300,7 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                             >
                                 <option value="limitless">Limitless (1-on-1)</option>
                                 <option value="limitless_open">Limitless Open (Shared)</option>
+                                <option value="classic_gym">Classic Gym</option>
                                 <option value="lead">Lead (Prospect)</option>
                             </select>
                             <div style={{ display: 'flex', gap: '8px' }}>
@@ -327,7 +328,8 @@ export const ClientProfile = ({ onBack, client }: ClientProfileProps) => {
                                 <h2 style={{ fontSize: '1.8rem', margin: 0 }}>{client.name}</h2>
                                 <span style={{
                                     background: client.membership_tier === 'lead' ? '#f5f5f5' : 
-                                               (client.membership_tier === 'limitless_open' ? '#f0cc00' : '#e0e0e0'),
+                                               (client.membership_tier === 'limitless_open' ? '#f0cc00' : 
+                                                client.membership_tier === 'classic_gym' ? '#4caf50' : '#e0e0e0'),
                                     color: client.membership_tier === 'lead' ? '#999' : '#000',
                                     padding: '4px 10px',
                                     borderRadius: 0,

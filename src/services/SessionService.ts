@@ -87,6 +87,7 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
         filters.push(or(
             where('clientIds', 'array-contains', myClientId),
             where('client_ids', 'array-contains', myClientId),
+            where('uids', 'array-contains', myClientId),
             where('clientId', '==', myClientId),
             where('serviceName', '==', 'Limitless Open'),
             where('serviceName', '==', 'Limitless Open (Shared)'),
@@ -94,7 +95,12 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
         ));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
-            filters.push(where('client_ids', 'array-contains', options.clientId));
+            filters.push(or(
+                where('clientIds', 'array-contains', options.clientId),
+                where('client_ids', 'array-contains', options.clientId),
+                where('uids', 'array-contains', options.clientId),
+                where('clientId', '==', options.clientId)
+            ));
         }
     }
 

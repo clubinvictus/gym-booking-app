@@ -8,10 +8,12 @@ import { SettingsView } from './SettingsView';
 import { useFirestore } from '../hooks/useFirestore';
 
 // New Components
+import { collection, doc, addDoc, deleteDoc } from 'firebase/firestore';
+import { db, auth } from '../firebase';
+import { ActivityLogView } from './ActivityLogView';
+import { SITE_ID } from '../constants';
 import { TrainerProfile } from './TrainerProfile';
 import { ClientProfile } from './ClientProfile';
-import { ClientDashboardView } from './ClientDashboardView';
-import { ActivityLogView } from './ActivityLogView';
 import { useSessions } from '../hooks/useSessions';
 import { SessionDetailModal } from './SessionDetailModal';
 import { TeamManagement } from './TeamManagement';
@@ -20,9 +22,6 @@ import { AddManagerModal } from './AddManagerModal';
 import { AddClientModal } from './AddClientModal';
 import { AddServiceModal } from './AddServiceModal';
 import { EditTrainerModal } from './EditTrainerModal';
-import { db, auth } from '../firebase';
-import { doc, deleteDoc, addDoc, collection } from 'firebase/firestore';
-import { SITE_ID } from '../constants';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
@@ -198,9 +197,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     />
                 );
             default:
-                if (isClient) {
-                    return <ClientDashboardView />;
-                }
 
                 const now = new Date();
                 const isSelectedToday = selectedDate.toDateString() === now.toDateString();
@@ -262,18 +258,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
                 });
 
-                const nextSessions = userSessions
-                    .filter((s: any) => {
-                        const d = s.date ? new Date(s.date) : (s.startTime?.toDate ? s.startTime.toDate() : null);
-                        return d && d > now;
-                    })
-                    .sort((a: any, b: any) => {
-                        const timeA = a.startTime?.toDate ? a.startTime.toDate().getTime() : new Date(`${a.date} ${a.time}`).getTime();
-                        const timeB = b.startTime?.toDate ? b.startTime.toDate().getTime() : new Date(`${b.date} ${b.time}`).getTime();
-                        return timeA - timeB;
-                    })
-                    .slice(0, 3);
-
                 return (
                     <div style={{ width: '100%' }}>
                         <header style={{
@@ -294,6 +278,21 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 }}>DASHBOARD</h1>
                                 <p className="text-muted" style={{ fontWeight: 500 }}>WELCOME BACK, {(profile?.name || 'User').toUpperCase()}! HERE'S YOUR SCHEDULE.</p>
                             </div>
+                            {isClient && (
+                                <button
+                                    onClick={() => navigate('/calendar')}
+                                    className="button-primary"
+                                    style={{
+                                        alignSelf: window.innerWidth <= 768 ? 'stretch' : 'flex-start',
+                                        padding: '12px 24px',
+                                        fontWeight: 800,
+                                        fontSize: '0.9rem',
+                                        letterSpacing: '0.05em'
+                                    }}
+                                >
+                                    + BOOK SESSION
+                                </button>
+                            )}
                         </header>
 
                         <div style={{
@@ -304,7 +303,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         }}>
                             <StatCard title="TODAY'S SESSIONS" value={todaySessionsCount.toString()} icon={<Calendar size={24} />} />
                             
-                            {isTrainer && (
+                            {(isTrainer || isClient) && (
                                 <>
                                     <StatCard title="SESSIONS THIS WEEK" value={sessionsThisWeek.length.toString()} icon={<Briefcase size={24} />} />
                                     <StatCard title="SESSIONS THIS MONTH" value={sessionsThisMonth.length.toString()} icon={<Briefcase size={24} />} />
@@ -319,7 +318,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             )}
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 1024 ? '1fr' : '2fr 1fr', gap: '24px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
                             <div className="card" style={{ padding: '32px' }}>
                                 <div style={{ 
                                     display: 'flex', 
@@ -385,23 +384,6 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 </div>
                             </div>
 
-                            {nextSessions.length > 0 && (
-                                <div className="card" style={{ padding: '32px' }}>
-                                    <h2 style={{ marginBottom: '24px', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase' }}>UPCOMING SESSIONS</h2>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {nextSessions.map((session: any) => (
-                                            <SessionItem
-                                                key={session.id}
-                                                clientName={session.clientName || session.clients?.[0]?.name || 'Unknown Client'}
-                                                trainerName={session.trainerName}
-                                                type={session.serviceName}
-                                                time={`${new Date(session.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} @ ${session.time}`}
-                                                onClick={() => setSelectedSession(session)}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
                 );

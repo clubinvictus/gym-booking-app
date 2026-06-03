@@ -32,12 +32,12 @@ export const ResourceGrid: React.FC<GridProps> = ({
     const activeDate = new Date(currentWeekStart);
 
     return (
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: window.innerWidth <= 768 ? '0 16px' : '0 40px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', padding: window.innerWidth <= 768 ? 0 : '0 40px' }}>
             <div 
                 className="no-scrollbar"
                 style={{
                 display: 'grid',
-                overflowX: 'auto',
+                overflow: 'visible',
                 overscrollBehaviorX: 'contain',
                 // First column is Time (80px), then 1fr for each active trainer
                 gridTemplateColumns: `80px repeat(${activeTrainers.length}, 1fr)`,
@@ -46,7 +46,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                 borderRight: '2px solid #000'
             }}>
                 {/* Top-Left Corner (Empty) */}
-                <div style={{ height: '60px', borderBottom: '2px solid #000', position: 'sticky', top: 0, zIndex: 10, background: '#fff' }}></div>
+                <div style={{ height: '60px', borderBottom: '2px solid #000', position: 'sticky', top: 0, left: 0, zIndex: 20, background: '#fff' }}></div>
                 
                 {/* X-Axis: Trainer Headers */}
                 {activeTrainers.map((trainer: any) => (
@@ -83,7 +83,11 @@ export const ResourceGrid: React.FC<GridProps> = ({
                             fontSize: '0.75rem',
                             fontWeight: 700,
                             color: '#999',
-                            borderRight: '2px solid #000'
+                            borderRight: '2px solid #000',
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 9,
+                            background: '#fff'
                         }}>
                             {time}
                         </div>

@@ -196,11 +196,13 @@ export const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) 
                         >
                             <option value="limitless">Limitless (1-on-1)</option>
                             <option value="limitless_open">Limitless Open (Shared)</option>
+                            <option value="classic_gym">Classic Gym</option>
                             <option value="lead">Lead (Prospect)</option>
                         </select>
                         <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '6px' }}>
                             {membershipTier === 'lead' ? 'New prospect or trial user.' : 
                              membershipTier === 'limitless' ? 'Standard premium membership.' : 
+                             membershipTier === 'classic_gym' ? 'Standard gym access membership.' : 
                              'Open tier membership with extended access.'}
                         </p>
                     </div>
