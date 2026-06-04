@@ -15,9 +15,12 @@ import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { SITE_ID } from '../constants';
 
 const formatWeekRange = (start: Date, daysToShow: number) => {
+    const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
+    if (daysToShow === 1) {
+        return `${start.toLocaleDateString('en-US', options)}, ${start.getFullYear()}`;
+    }
     const end = new Date(start);
     end.setDate(start.getDate() + daysToShow - 1);
-    const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
     return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}, ${start.getFullYear()}`;
 };
 
@@ -86,7 +89,7 @@ export const CalendarView = () => {
 
     // Set default filter once profile loads
     React.useEffect(() => {
-        if (profile?.role === 'client' && selectedTrainerId === 'all') {
+        if ((profile?.role === 'client' || profile?.role === 'trainer') && selectedTrainerId === 'all') {
             setSelectedTrainerId('my');
         }
     }, [profile, selectedTrainerId]);
@@ -95,14 +98,14 @@ export const CalendarView = () => {
     limitDate.setHours(23, 59, 59, 999);
     limitDate.setDate(limitDate.getDate() + 14);
 
+    const isMobile = window.innerWidth <= 768;
+    const daysToShow = viewMode === 'day' ? 1 : (isMobile ? 2 : 7);
+
     const isNextWeekBlocked = isClient && (() => {
         const nextWeekStart = new Date(currentWeekStart);
-        nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+        nextWeekStart.setDate(nextWeekStart.getDate() + daysToShow);
         return nextWeekStart > limitDate;
     })();
-
-    const isMobile = window.innerWidth <= 768;
-    const daysToShow = isMobile ? 2 : 7;
 
     // Calculate start and end of visible range for optimized fetching
     const { weekStartDate, weekEndDate } = useMemo(() => {
@@ -146,13 +149,35 @@ export const CalendarView = () => {
     };
 
     const handleToday = () => {
-        if (isMobile) {
+        if (viewMode === 'day') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            setCurrentWeekStart(today);
+        } else if (isMobile) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             setCurrentWeekStart(today);
         } else {
             setCurrentWeekStart(getStartOfWeek(new Date()));
         }
+    };
+
+    const handleSwitchToDay = () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(currentWeekStart.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
+        
+        if (today >= currentWeekStart && today <= weekEnd) {
+            setCurrentWeekStart(today);
+        }
+        setViewMode('day');
+    };
+
+    const handleSwitchToWeek = () => {
+        setCurrentWeekStart(getStartOfWeek(currentWeekStart));
+        setViewMode('week');
     };
 
     const handleDayHeaderClick = async (dayIndex: number) => {
@@ -306,7 +331,7 @@ export const CalendarView = () => {
                         gap: '12px',
                         width: isMobileView ? '100%' : 'auto'
                     }}>
-                        {true && (
+                        {!isTrainer && (
                             <div style={{ 
                                 position: 'relative', 
                                 display: 'flex', 
@@ -391,7 +416,7 @@ export const CalendarView = () => {
                                 flex: isMobileView ? 1 : 'none'
                             }}>
                                 <button
-                                    onClick={() => setViewMode('week')}
+                                    onClick={handleSwitchToWeek}
                                     style={{
                                         padding: '0 12px',
                                         background: viewMode === 'week' ? '#000' : '#fff',
@@ -406,7 +431,7 @@ export const CalendarView = () => {
                                     WEEK
                                 </button>
                                 <button
-                                    onClick={() => setViewMode('day')}
+                                    onClick={handleSwitchToDay}
                                     style={{
                                         padding: '0 12px',
                                         background: viewMode === 'day' ? '#000' : '#fff',

@@ -6,12 +6,14 @@ export const ResourceGrid: React.FC<GridProps> = ({
     trainers,
     services,
     busySlots,
+    offDays,
     currentWeekStart, // In Day view, we'll treat this as the 'active' day for now
     selectedTrainerId,
     clientIds,
     userId,
     isClient,
     isTrainer,
+    profile,
     onSlotSelected,
     onSessionClick,
 }) => {
@@ -22,10 +24,46 @@ export const ResourceGrid: React.FC<GridProps> = ({
         '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM'
     ];
 
+    const daysMap: { [key: number]: string } = {
+        0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday', 5: 'saturday', 6: 'sunday'
+    };
+
+    const convertTo24h = (timeStr: string) => {
+        if (!timeStr) return '';
+        if (timeStr.includes(':') && timeStr.length === 5) return timeStr;
+        const [time, modifier] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') hours = '00';
+        if (modifier === 'PM') hours = (parseInt(hours, 10) + 12).toString().padStart(2, '0');
+        else hours = hours.padStart(2, '0');
+        return `${hours}:${minutes}`;
+    };
+
+    const checkTrainerAvailable = (trainer: any, date: Date, time: string) => {
+        const dayIndex = (date.getDay() + 6) % 7;
+        const dayName = daysMap[dayIndex];
+        const slotTime = convertTo24h(time);
+        const dateStr = date.toISOString().split('T')[0];
+
+        const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
+        if (isOff) return false;
+
+        const daySchedule = trainer.availability?.[dayName];
+        if (!daySchedule || !daySchedule.active || !daySchedule.shifts) return false;
+
+        return daySchedule.shifts.some((shift: any) => {
+            const startTime = convertTo24h(shift.start);
+            const endTime = convertTo24h(shift.end);
+            return slotTime >= startTime && slotTime < endTime;
+        });
+    };
+
     // Filter active trainers based on selection
-    const activeTrainers = (selectedTrainerId === 'all' || selectedTrainerId === 'my')
-        ? trainers
-        : trainers.filter(t => t.id === selectedTrainerId);
+    const activeTrainers = isTrainer
+        ? trainers.filter(t => t.id === profile?.trainerId)
+        : (selectedTrainerId === 'all' || selectedTrainerId === 'my')
+            ? trainers
+            : trainers.filter(t => t.id === selectedTrainerId);
 
     // Date Constraint: The Resource grid focuses on a single day.
     // For now, we use currentWeekStart as the target Date. 
@@ -42,7 +80,9 @@ export const ResourceGrid: React.FC<GridProps> = ({
                 overscrollBehaviorX: 'contain',
                 // First column is Time (80px), then 1fr for each active trainer
                 gridTemplateColumns: `80px repeat(${activeTrainers.length}, 1fr)`,
-                minWidth: window.innerWidth <= 768 ? '800px' : '1000px',
+                minWidth: activeTrainers.length === 1 
+                    ? 'auto' 
+                    : (window.innerWidth <= 768 ? '800px' : '1000px'),
                 borderLeft: '2px solid #000',
                 borderRight: '2px solid #000'
             }}>
@@ -131,12 +171,16 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                 return bsDateObj.toDateString() === activeDate.toDateString();
                             });
 
+                            const isAvailable = checkTrainerAvailable(trainer, activeDate, time);
+                            const isUnavailableForClient = isClient && !isAvailable;
+                            const isCellUnavailable = isBusyByOthers || isUnavailableForClient;
+
                             // If cell is clicked, we pass dayIndex=0 since we are strictly looking at 'activeDate'
                             // The container's modal relies on dayIndex to map to the week. 
                             // Since activeDate is currentWeekStart, dayIndex is 0 relative to it.
                             const handleCellClick = () => {
                                 if (isTrainer) return; // Trainers can't book
-                                if (isBusyByOthers) return;
+                                if (isCellUnavailable) return;
                                 
                                 // To align with CalendarView's modal, we tell it we clicked day 0 (which maps to currentWeekStart)
                                 onSlotSelected({
@@ -159,15 +203,17 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         display: 'flex',
                                         flexDirection: 'column',
                                         gap: '4px',
-                                        cursor: (slotSessions.length > 0 || !isTrainer) ? 'pointer' : 'default',
-                                        backgroundColor: isBusyByOthers ? '#fafafa' : 'transparent',
-                                        backgroundImage: isBusyByOthers 
+                                        cursor: (slotSessions.length > 0 || (!isTrainer && !isCellUnavailable)) ? 'pointer' : 'default',
+                                        backgroundColor: isCellUnavailable ? '#fafafa' : 'transparent',
+                                        backgroundImage: isCellUnavailable 
                                             ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'
                                             : 'none',
                                     }}
                                 >
                                     {isBusyByOthers && slotSessions.length === 0 ? (
                                         <div style={{ margin: 'auto', fontSize: '0.8rem', fontWeight: 800, color: '#999' }}>Booked</div>
+                                    ) : isCellUnavailable && slotSessions.length === 0 ? (
+                                        null
                                     ) : (
                                         slotSessions.map((session: any, idx: number) => {
                                             const matchedService = services?.find(s => 

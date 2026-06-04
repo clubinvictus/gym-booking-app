@@ -81,9 +81,11 @@ export const WeekGrid: React.FC<GridProps> = ({
         const dayName = daysMap[dayIndex];
         const slotTime = convertTo24h(time);
 
-        const activeTrainers = (selectedTrainerId === 'all' || selectedTrainerId === 'my')
-            ? trainers
-            : trainers.filter(t => t.id === selectedTrainerId);
+        const activeTrainers = isTrainer
+            ? trainers.filter(t => t.id === profile?.trainerId)
+            : (selectedTrainerId === 'all' || selectedTrainerId === 'my')
+                ? trainers
+                : trainers.filter(t => t.id === selectedTrainerId);
 
         return activeTrainers.some(trainer => {
             const isOff = offDays.some((od: any) => od.trainerId === trainer.id && od.date === dateStr);
