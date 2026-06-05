@@ -74,7 +74,7 @@ export const CalendarView = () => {
     const [selectedTrainerId, setSelectedTrainerId] = useState<string>('all');
     const confirm = useConfirm();
     const isAdmin = profile?.role === 'admin';
-    // const isManager = profile?.role === 'manager';
+    const isManager = profile?.role === 'manager';
     const isTrainer = profile?.role === 'trainer';
     const isClient = profile?.role === 'client';
     
@@ -181,7 +181,7 @@ export const CalendarView = () => {
     };
 
     const handleDayHeaderClick = async (dayIndex: number) => {
-        if (!isAdmin || selectedTrainerId === 'all' || selectedTrainerId === 'my') return;
+        if (!(isAdmin || isManager) || selectedTrainerId === 'all' || selectedTrainerId === 'my') return;
 
         const date = new Date(currentWeekStart);
         date.setDate(date.getDate() + dayIndex);
@@ -506,7 +506,7 @@ export const CalendarView = () => {
                     clientIds={clientIds}
                     userId={user?.uid || ''}
                     limitDate={limitDate}
-                    isAdmin={isAdmin}
+                    isAdmin={isAdmin || isManager}
                     isClient={isClient}
                     isTrainer={isTrainer}
                     profile={profile}
@@ -526,7 +526,7 @@ export const CalendarView = () => {
                     clientIds={clientIds}
                     userId={user?.uid || ''}
                     limitDate={limitDate}
-                    isAdmin={isAdmin}
+                    isAdmin={isAdmin || isManager}
                     isClient={isClient}
                     isTrainer={isTrainer}
                     profile={profile}
