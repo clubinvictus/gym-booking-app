@@ -87,12 +87,15 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         }
 
         if (editingSession) {
-            setSelectedClient(editingSession.clientName);
-            setSelectedTrainer(editingSession.trainerName);
-            setSelectedService(editingSession.serviceName);
-            setSelectedTime(editingSession.time);
-            setSelectedDay(editingSession.day);
-            setSelectedDays([editingSession.day]);
+            const clientName = (editingSession.clients && Array.isArray(editingSession.clients))
+                ? editingSession.clients.map((c: any) => c.name).join(', ')
+                : (editingSession.clientName || '');
+            setSelectedClient(clientName);
+            setSelectedTrainer(editingSession.trainerName || '');
+            setSelectedService(editingSession.serviceName || '');
+            setSelectedTime(editingSession.time || '09:00 AM');
+            setSelectedDay(editingSession.day ?? 0);
+            setSelectedDays([editingSession.day ?? 0]);
         } else if (selectedSlot) {
             // Only reset if this is a DIFFERENT slot than what was previously being initialized
             // We use a internal key to track this to avoid over-triggering
@@ -360,7 +363,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             }
         }
 
-        if (!isClient && !clients.some((c: any) => c.name === selectedClient)) {
+        if (!isClient && !editingSession && !clients.some((c: any) => c.name === selectedClient)) {
             alert('Please select a valid client from the list.');
             setIsSubmitting(false);
             return;
@@ -542,13 +545,13 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             endDate.setMinutes(endDate.getMinutes() + 60);
 
             return {
-                clients: [clientObj],
-                clientIds: clientIdList, // legacy
-                client_ids: clientIdList, // new standard
-                uids: uidList, // ADDED: Mirror UID for secure rules lookup
-                clientId: clientObj.id || null, // legacy support root
-                clientName: clientObj.name || 'Unknown Client',
-                clientPhone: clientObj.phone || null,
+                clients: editingSession?.clients || [clientObj],
+                clientIds: editingSession?.clientIds || clientIdList, // legacy
+                client_ids: editingSession?.client_ids || clientIdList, // new standard
+                uids: editingSession?.uids || uidList, // ADDED: Mirror UID for secure rules lookup
+                clientId: editingSession?.clientId || clientObj.id || null, // legacy support root
+                clientName: editingSession?.clientName || clientObj.name || 'Unknown Client',
+                clientPhone: editingSession?.clientPhone || clientObj.phone || null,
                 trainerName: selectedTrainer,
                 trainerId: trainer?.id || null,
                 serviceName: selectedService || editingSession?.serviceName,
@@ -999,71 +1002,86 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         {!isClient && (
                             <div>
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>CLIENT</label>
-                                <div style={{ position: 'relative' }}>
-                                    <div style={{ position: 'absolute', left: '16px', top: '14px' }}><User size={18} className="text-muted" /></div>
-                                    <input
-                                        type="text"
-                                        name="clientName"
-                                        required={!isClient}
-                                        placeholder="Search for a client"
-                                        value={selectedClient}
-                                        onChange={(e) => {
-                                            setSelectedClient(e.target.value);
-                                            setShowClientDropdown(true);
-                                        }}
-                                        onFocus={() => setShowClientDropdown(true)}
-                                        onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
-                                        style={{
-                                            width: '100%',
-                                            padding: '12px 12px 12px 48px',
-                                            borderRadius: 0,
-                                            border: '2px solid #000',
-                                            fontSize: '1rem',
-                                            fontWeight: 600,
-                                            backgroundColor: '#fff'
-                                        }}
-                                        autoComplete="off"
-                                    />
-                                    {showClientDropdown && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            background: '#fff',
-                                            border: '2px solid #000',
-                                            borderTop: 'none',
-                                            maxHeight: '200px',
-                                            overflowY: 'auto',
-                                            zIndex: 20,
-                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                                        }}>
-                                            {clients.filter((c: any) => c.name?.toLowerCase().includes(selectedClient.toLowerCase())).length > 0 ? (
-                                                clients.filter((c: any) => c.name?.toLowerCase().includes(selectedClient.toLowerCase())).map((c: any) => (
-                                                    <div
-                                                        key={c.id}
-                                                        onClick={() => {
-                                                            setSelectedClient(c.name);
-                                                            setShowClientDropdown(false);
-                                                        }}
-                                                        style={{
-                                                            padding: '12px 16px',
-                                                            cursor: 'pointer',
-                                                            borderBottom: '1px solid #111',
-                                                            fontWeight: 600
-                                                        }}
-                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                                                    >
-                                                        {c.name}
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div style={{ padding: '12px 16px', color: '#666', fontStyle: 'italic', fontWeight: 600 }}>No clients found</div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                                {editingSession ? (
+                                    <div style={{
+                                        padding: '12px 16px',
+                                        border: '2px solid #000',
+                                        background: '#f5f5f5',
+                                        fontWeight: 700,
+                                        fontSize: '1rem',
+                                        color: '#000'
+                                    }}>
+                                        {(editingSession.clients && Array.isArray(editingSession.clients))
+                                            ? editingSession.clients.map((c: any) => c.name).join(', ')
+                                            : (editingSession.clientName || 'Unknown Client')}
+                                    </div>
+                                ) : (
+                                    <div style={{ position: 'relative' }}>
+                                        <div style={{ position: 'absolute', left: '16px', top: '14px' }}><User size={18} className="text-muted" /></div>
+                                        <input
+                                            type="text"
+                                            name="clientName"
+                                            required={!isClient}
+                                            placeholder="Search for a client"
+                                            value={selectedClient}
+                                            onChange={(e) => {
+                                                setSelectedClient(e.target.value);
+                                                setShowClientDropdown(true);
+                                            }}
+                                            onFocus={() => setShowClientDropdown(true)}
+                                            onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px 12px 12px 48px',
+                                                borderRadius: 0,
+                                                border: '2px solid #000',
+                                                fontSize: '1rem',
+                                                fontWeight: 600,
+                                                backgroundColor: '#fff'
+                                            }}
+                                            autoComplete="off"
+                                        />
+                                        {showClientDropdown && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '100%',
+                                                left: 0,
+                                                right: 0,
+                                                background: '#fff',
+                                                border: '2px solid #000',
+                                                borderTop: 'none',
+                                                maxHeight: '200px',
+                                                overflowY: 'auto',
+                                                zIndex: 20,
+                                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                            }}>
+                                                {clients.filter((c: any) => (c.name || '').toLowerCase().includes((selectedClient || '').toLowerCase())).length > 0 ? (
+                                                    clients.filter((c: any) => (c.name || '').toLowerCase().includes((selectedClient || '').toLowerCase())).map((c: any) => (
+                                                        <div
+                                                            key={c.id}
+                                                            onClick={() => {
+                                                                setSelectedClient(c.name);
+                                                                setShowClientDropdown(false);
+                                                            }}
+                                                            style={{
+                                                                padding: '12px 16px',
+                                                                cursor: 'pointer',
+                                                                borderBottom: '1px solid #111',
+                                                                fontWeight: 600
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                                                        >
+                                                            {c.name}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div style={{ padding: '12px 16px', color: '#666', fontStyle: 'italic', fontWeight: 600 }}>No clients found</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 
