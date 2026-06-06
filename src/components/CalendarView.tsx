@@ -4,6 +4,7 @@ import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
 import { OffDayModal } from './OffDayModal';
 import { ConfirmOffDayModal } from './ConfirmOffDayModal';
+import { OffDaysRangeModal } from './OffDaysRangeModal';
 import { WeekGrid } from './WeekGrid';
 import { ResourceGrid } from './ResourceGrid';
 import { useFirestore } from '../hooks/useFirestore';
@@ -39,6 +40,7 @@ export const CalendarView = () => {
     const [excludedTrainerId, setExcludedTrainerId] = useState<string | null>(null);
     const [offDayModalOpen, setOffDayModalOpen] = useState(false);
     const [offDayDate, setOffDayDate] = useState<Date | null>(null);
+    const [offDaysRangeOpen, setOffDaysRangeOpen] = useState(false);
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
     const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
@@ -314,6 +316,26 @@ export const CalendarView = () => {
                                 <ChevronRight size={18} />
                             </button>
                         </div>
+                        {(isAdmin || isManager) && (
+                            <button
+                                onClick={() => setOffDaysRangeOpen(true)}
+                                className="button-secondary"
+                                style={{
+                                    height: '36px',
+                                    padding: '0 16px',
+                                    fontWeight: 800,
+                                    fontSize: '0.75rem',
+                                    letterSpacing: '0.05em',
+                                    border: '2px solid #000',
+                                    borderRadius: 0,
+                                    background: '#fff',
+                                    color: '#000',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                MANAGE OFF-DAYS
+                            </button>
+                        )}
                         <span style={{ 
                             fontWeight: 800, 
                             fontSize: isMobileView ? '0.85rem' : '1.1rem', 
@@ -624,6 +646,24 @@ export const CalendarView = () => {
                 }}
                 onRefresh={() => {
                     // Firestore handles live updates via useFirestore
+                }}
+            />
+
+            <OffDaysRangeModal
+                isOpen={offDaysRangeOpen}
+                onClose={() => setOffDaysRangeOpen(false)}
+                trainers={trainers}
+                currentTrainerId={selectedTrainerId}
+                onReschedule={(session) => {
+                    setSelectedSession(session);
+                    setExcludedTrainerId(session.trainerId);
+                    setSelectedSlot({
+                        day: session.day,
+                        time: session.time,
+                        trainerId: session.trainerId,
+                        date: new Date(session.date)
+                    });
+                    setOffDaysRangeOpen(false);
                 }}
             />
         </div>
