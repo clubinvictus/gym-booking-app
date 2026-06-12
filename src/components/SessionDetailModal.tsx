@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, RefreshCw } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc, updateDoc } from 'firebase/firestore';
@@ -31,6 +31,20 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const [targetClientId, setTargetClientId] = useState<string | undefined>(undefined);
     const [isAddingClient, setIsAddingClient] = useState(false);
     const [newClientId, setNewClientId] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [addScope, setAddScope] = useState<'single' | 'future'>('single');
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Fetch data for capacity limits and client list
     const { data: services } = useFirestore<any>('services');
@@ -50,6 +64,9 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             setDeleteScope('single');
             setIsAddingClient(false);
             setNewClientId('');
+            setSearchQuery('');
+            setShowDropdown(false);
+            setAddScope('single');
         }
     }, [isOpen, session]);
 
@@ -166,37 +183,104 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             const clientToAdd = clients.find((c: any) => c.id === newClientId);
             if (!clientToAdd) throw new Error('Client not found');
 
-            const updatedClients = [...(session.clients || []), { id: clientToAdd.id, name: clientToAdd.name, email: clientToAdd.email || '', phone: clientToAdd.phone || '' }];
-            const newClientIds = Array.from(new Set(updatedClients.map(c => c.id))).filter(Boolean) as string[];
+            const clientObj = { 
+                id: clientToAdd.id, 
+                name: clientToAdd.name, 
+                email: clientToAdd.email || '', 
+                phone: clientToAdd.phone || '' 
+            };
 
-            await updateDoc(doc(db, 'sessions', session.id), {
-                clients: updatedClients,
-                clientIds: newClientIds,
-                client_ids: newClientIds,
-                clientId: newClientIds[0] || null
-            });
+            if (addScope === 'future' && session.seriesId) {
+                const q = query(
+                    collection(db, 'sessions'),
+                    where('seriesId', '==', session.seriesId)
+                );
+                const snapshot = await getDocs(q);
+                const batch = writeBatch(db);
+                let updatedAny = false;
 
-            // Log activity
-            await addDoc(collection(db, 'activity_logs'), {
-                action: 'booked',
-                isRecurring: false,
-                sessionDetails: {
-                    clientName: clientToAdd.name,
-                    trainerName: session.trainerName,
-                    serviceName: session.serviceName,
-                    date: session.date,
-                    time: session.time
-                },
-                performedBy: {
-                    uid: profile?.uid || 'unknown',
-                    name: profile?.name || 'Unknown User',
-                    role: profile?.role || 'unknown'
-                },
-                timestamp: new Date().toISOString(),
-                siteId: SITE_ID
-            });
+                snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => {
+                    const docData = docSnap.data();
+                    if (docData.date >= session.date) {
+                        const docClients = docData.clients || [];
+                        const isAlreadyBooked = docClients.some((c: any) => c.id === clientToAdd.id);
+                        
+                        if (!isAlreadyBooked && docClients.length < maxCapacity) {
+                            const updatedClients = [...docClients, clientObj];
+                            const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
+                            
+                            batch.update(docSnap.ref, {
+                                clients: updatedClients,
+                                clientIds: newClientIds,
+                                client_ids: newClientIds,
+                                clientId: newClientIds[0] || null
+                            });
+                            updatedAny = true;
+                        }
+                    }
+                });
 
-            alert('Client added to session successfully!');
+                if (updatedAny) {
+                    await batch.commit();
+                }
+
+                // Log activity for recurring booking
+                await addDoc(collection(db, 'activity_logs'), {
+                    action: 'booked',
+                    isRecurring: true,
+                    sessionDetails: {
+                        clientName: clientToAdd.name,
+                        trainerName: session.trainerName,
+                        serviceName: session.serviceName,
+                        date: session.date,
+                        time: session.time,
+                        recurringDetails: session.recurringDetails || null
+                    },
+                    performedBy: {
+                        uid: profile?.uid || 'unknown',
+                        name: profile?.name || 'Unknown User',
+                        role: profile?.role || 'unknown'
+                    },
+                    timestamp: new Date().toISOString(),
+                    siteId: SITE_ID
+                });
+
+                alert('Client added to future sessions successfully!');
+            } else {
+                // Single booking
+                const updatedClients = [...(session.clients || []), clientObj];
+                const newClientIds = Array.from(new Set(updatedClients.map(c => c.id))).filter(Boolean) as string[];
+
+                await updateDoc(doc(db, 'sessions', session.id), {
+                    clients: updatedClients,
+                    clientIds: newClientIds,
+                    client_ids: newClientIds,
+                    clientId: newClientIds[0] || null
+                });
+
+                // Log activity
+                await addDoc(collection(db, 'activity_logs'), {
+                    action: 'booked',
+                    isRecurring: false,
+                    sessionDetails: {
+                        clientName: clientToAdd.name,
+                        trainerName: session.trainerName,
+                        serviceName: session.serviceName,
+                        date: session.date,
+                        time: session.time
+                    },
+                    performedBy: {
+                        uid: profile?.uid || 'unknown',
+                        name: profile?.name || 'Unknown User',
+                        role: profile?.role || 'unknown'
+                    },
+                    timestamp: new Date().toISOString(),
+                    siteId: SITE_ID
+                });
+
+                alert('Client added to session successfully!');
+            }
+
             onClose();
         } catch (err) {
             console.error('Error adding client to session:', err);
@@ -345,22 +429,120 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                         {isAddingClient ? (
                             <div style={{ padding: '20px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '32px' }}>
                                 <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px' }}>Add Client to Session</h3>
-                                <div style={{ marginBottom: '20px' }}>
+                                
+                                <div style={{ marginBottom: '20px', position: 'relative' }} ref={dropdownRef}>
                                     <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.8rem', color: '#666' }}>SELECT CLIENT</label>
-                                    <select
-                                        value={newClientId}
-                                        onChange={(e) => setNewClientId(e.target.value)}
-                                        style={{ width: '100%', padding: '12px', border: '2px solid #000', fontSize: '1rem', fontWeight: 600 }}
-                                    >
-                                        <option value="">-- Choose a Client --</option>
-                                        {clients
-                                            .filter((c: any) => !session.clients?.some((sc: any) => sc.id === c.id)) // Filter out already booked clients
-                                            .sort((a: any, b: any) => a.name.localeCompare(b.name))
-                                            .map((c: any) => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
-                                            ))}
-                                    </select>
+                                    <input
+                                        type="text"
+                                        placeholder="Search and select client..."
+                                        value={searchQuery}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setSearchQuery(val);
+                                            setShowDropdown(true);
+                                            if (!val) {
+                                                setNewClientId('');
+                                            } else {
+                                                const selectedClient = clients.find((c: any) => c.id === newClientId);
+                                                if (selectedClient && selectedClient.name !== val) {
+                                                    setNewClientId('');
+                                                }
+                                            }
+                                        }}
+                                        onFocus={() => setShowDropdown(true)}
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '12px', 
+                                            border: '2px solid #000', 
+                                            fontSize: '1rem', 
+                                            fontWeight: 600,
+                                            boxSizing: 'border-box'
+                                        }}
+                                    />
+                                    {showDropdown && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            backgroundColor: '#fff',
+                                            border: '2px solid #000',
+                                            borderTop: 'none',
+                                            maxHeight: '200px',
+                                            overflowY: 'auto',
+                                            zIndex: 1000,
+                                            boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
+                                            boxSizing: 'border-box'
+                                        }}>
+                                            {clients
+                                                .filter((c: any) => !session.clients?.some((sc: any) => sc.id === c.id))
+                                                .filter((c: any) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                                .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                                                .length > 0 ? (
+                                                    clients
+                                                        .filter((c: any) => !session.clients?.some((sc: any) => sc.id === c.id))
+                                                        .filter((c: any) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                                        .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                                                        .map((c: any) => (
+                                                            <div
+                                                                key={c.id}
+                                                                onClick={() => {
+                                                                    setNewClientId(c.id);
+                                                                    setSearchQuery(c.name);
+                                                                    setShowDropdown(false);
+                                                                }}
+                                                                style={{
+                                                                    padding: '12px',
+                                                                    cursor: 'pointer',
+                                                                    borderBottom: '1px solid #eee',
+                                                                    fontWeight: 600,
+                                                                    fontSize: '0.95rem'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                {c.name}
+                                                            </div>
+                                                        ))
+                                                ) : (
+                                                    <div style={{ padding: '12px', color: '#999', fontStyle: 'italic', fontSize: '0.95rem' }}>
+                                                        No clients found
+                                                    </div>
+                                                )}
+                                        </div>
+                                    )}
                                 </div>
+
+                                {session.seriesId && (
+                                    <div style={{ padding: '16px', background: '#fff', border: '2px solid #000', marginBottom: '20px' }}>
+                                        <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.8rem', color: '#666' }}>ADD TO SCOPE</label>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700, cursor: 'pointer', fontSize: '1rem' }}>
+                                                <input
+                                                    type="radio"
+                                                    name="addScope"
+                                                    value="single"
+                                                    checked={addScope === 'single'}
+                                                    onChange={() => setAddScope('single')}
+                                                    style={{ width: '20px', height: '20px', accentColor: '#000' }}
+                                                />
+                                                Just this session
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 700, cursor: 'pointer', fontSize: '1rem' }}>
+                                                <input
+                                                    type="radio"
+                                                    name="addScope"
+                                                    value="future"
+                                                    checked={addScope === 'future'}
+                                                    onChange={() => setAddScope('future')}
+                                                    style={{ width: '20px', height: '20px', accentColor: '#000' }}
+                                                />
+                                                This and future sessions
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div style={{ display: 'flex', gap: '12px' }}>
                                     <button
                                         onClick={() => setIsAddingClient(false)}
