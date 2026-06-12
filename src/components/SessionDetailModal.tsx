@@ -7,6 +7,37 @@ import { useConfirm } from '../ConfirmContext';
 import { useFirestore } from '../hooks/useFirestore';
 import { SITE_ID } from '../constants';
 
+const getWeekdaysFromRecurringDetails = (details: string, currentSessionDay: number): { dayNum: number, name: string }[] => {
+    const daysMap = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    
+    if (!details) {
+        return [{ dayNum: currentSessionDay, name: dayNames[currentSessionDay] || 'Selected Day' }];
+    }
+
+    if (details.toLowerCase() === 'daily') {
+        return daysMap.map((_, idx) => ({ dayNum: idx, name: dayNames[idx] }));
+    }
+
+    if (details.startsWith('Weekly on ')) {
+        const daysPart = details.replace('Weekly on ', '');
+        const dayNamesList = daysPart.split(', ').map(d => d.trim().toLowerCase());
+        const result: { dayNum: number, name: string }[] = [];
+        
+        daysMap.forEach((name, idx) => {
+            if (dayNamesList.includes(name)) {
+                result.push({
+                    dayNum: idx,
+                    name: dayNames[idx]
+                });
+            }
+        });
+        return result;
+    }
+
+    return [{ dayNum: currentSessionDay, name: dayNames[currentSessionDay] || 'Selected Day' }];
+};
+
 interface SessionDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -35,6 +66,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
     const [showDropdown, setShowDropdown] = useState(false);
     const [addScope, setAddScope] = useState<'single' | 'future'>('single');
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -67,8 +99,19 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             setSearchQuery('');
             setShowDropdown(false);
             setAddScope('single');
+            
+            const initialDays = getWeekdaysFromRecurringDetails(session?.recurringDetails || '', session?.day || 0);
+            setSelectedWeekdays(initialDays.map(d => d.dayNum));
         }
     }, [isOpen, session]);
+
+    const toggleWeekday = (dayNum: number) => {
+        setSelectedWeekdays(prev => 
+            prev.includes(dayNum) 
+                ? prev.filter(d => d !== dayNum) 
+                : [...prev, dayNum]
+        );
+    };
 
     if (!isOpen || !session) return null;
 
@@ -201,7 +244,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
 
                 snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => {
                     const docData = docSnap.data();
-                    if (docData.date >= session.date) {
+                    if (docData.date >= session.date && selectedWeekdays.includes(docData.day)) {
                         const docClients = docData.clients || [];
                         const isAlreadyBooked = docClients.some((c: any) => c.id === clientToAdd.id);
                         
@@ -540,6 +583,25 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                                 This and future sessions
                                             </label>
                                         </div>
+
+                                        {addScope === 'future' && (
+                                            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #ccc' }}>
+                                                <label style={{ display: 'block', fontWeight: 800, marginBottom: '10px', fontSize: '0.8rem', color: '#666' }}>SELECT DAYS TO INCLUDE</label>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    {getWeekdaysFromRecurringDetails(session.recurringDetails, session.day).map((day) => (
+                                                        <label key={day.dayNum} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedWeekdays.includes(day.dayNum)}
+                                                                onChange={() => toggleWeekday(day.dayNum)}
+                                                                style={{ width: '18px', height: '18px', accentColor: '#000' }}
+                                                            />
+                                                            {day.name}
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -553,15 +615,15 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                     </button>
                                     <button
                                         onClick={confirmAddClient}
-                                        disabled={!newClientId || isProcessing}
+                                        disabled={!newClientId || isProcessing || (addScope === 'future' && session.seriesId && selectedWeekdays.length === 0)}
                                         style={{
                                             flex: 1,
                                             padding: '12px',
-                                            background: !newClientId || isProcessing ? '#ccc' : '#000',
+                                            background: !newClientId || isProcessing || (addScope === 'future' && session.seriesId && selectedWeekdays.length === 0) ? '#ccc' : '#000',
                                             color: '#fff',
                                             border: 'none',
                                             fontWeight: 800,
-                                            cursor: !newClientId || isProcessing ? 'not-allowed' : 'pointer'
+                                            cursor: !newClientId || isProcessing || (addScope === 'future' && session.seriesId && selectedWeekdays.length === 0) ? 'not-allowed' : 'pointer'
                                         }}
                                     >
                                         Confirm
