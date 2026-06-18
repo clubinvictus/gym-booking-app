@@ -179,7 +179,6 @@ export const ResourceGrid: React.FC<GridProps> = ({
                             // The container's modal relies on dayIndex to map to the week. 
                             // Since activeDate is currentWeekStart, dayIndex is 0 relative to it.
                             const handleCellClick = () => {
-                                if (isTrainer) return; // Trainers can't book
                                 if (isCellUnavailable) return;
                                 
                                 // To align with CalendarView's modal, we tell it we clicked day 0 (which maps to currentWeekStart)
@@ -203,7 +202,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         display: 'flex',
                                         flexDirection: 'column',
                                         gap: '4px',
-                                        cursor: (slotSessions.length > 0 || (!isTrainer && !isCellUnavailable)) ? 'pointer' : 'default',
+                                        cursor: (slotSessions.length > 0 || (!isCellUnavailable)) ? 'pointer' : 'default',
                                         backgroundColor: isCellUnavailable ? '#fafafa' : 'transparent',
                                         backgroundImage: isCellUnavailable 
                                             ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'

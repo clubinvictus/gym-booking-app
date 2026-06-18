@@ -137,7 +137,7 @@ export const WeekGrid: React.FC<GridProps> = ({
             if (isBusy) available = false;
         }
 
-        if (available && !isTrainer) {
+        if (available) {
             onSlotSelected({ day: dayIndex, time, trainerId: effectiveTrainerId, date: slotDate });
         }
     };
@@ -306,7 +306,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                         display: 'flex',
                                         flexDirection: 'column',
                                         gap: '4px',
-                                        cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable && !isTrainer ? 'pointer' : 'not-allowed'),
+                                        cursor: displaySessions.length > 0 ? (selectedTrainerId === 'all' ? 'pointer' : 'default') : (showAsAvailable ? 'pointer' : 'not-allowed'),
                                         backgroundColor: baseBackgroundColor,
                                         backgroundImage: displaySessions.length === 0 && !showAsAvailable && !isBusyByOthers
                                             ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'

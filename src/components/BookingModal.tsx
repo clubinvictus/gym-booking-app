@@ -33,6 +33,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const { user, profile } = useAuth();
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const isClient = profile?.role === 'client';
+    const isStaff = isAdmin || profile?.role === 'trainer';
 
     // The firestore rule for clients requires the email to match the auth token if not a manager.
     // Ensure we always have a filter value to avoid "list all" permission errors.
@@ -382,7 +383,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 if (trainer) {
                     // Admins/managers query sessions directly (always accurate, no stale data).
                     // Non-admins (clients, trainers) use trainer_busy_slots (no permission to read all sessions).
-                    const conflictCollection = (!isAdmin) ? 'trainer_busy_slots' : 'sessions';
+                    const conflictCollection = (!isStaff) ? 'trainer_busy_slots' : 'sessions';
                     const conflictField = 'trainerId';
                     const existingSessions = new Map<string, { serviceName: string, count: number, max: number, clients: any[] }>();
                     
@@ -735,7 +736,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     : new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
 
                 // For admin/managers, always use weekly
-                const effectiveFrequency = isAdmin ? 'weekly' : repeatFrequency;
+                const effectiveFrequency = isStaff ? 'weekly' : repeatFrequency;
 
                 console.log(`[BOOKING] Recurring: freq=${effectiveFrequency}, endDate=${endDate.toISOString()}, selectedDays=${JSON.stringify(selectedDays)}`);
 
@@ -1276,7 +1277,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                     {isRepeating && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                {isAdmin ? (
+                                                {isStaff ? (
                                                     // Admin/Manager View — simplified: weekly + 2 years, auto
                                                     <div style={{ background: '#f5f5f5', padding: '12px', border: '1px solid #ddd' }}>
                                                         <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#333' }}>
@@ -1293,7 +1294,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                                 )}
                                             </div>
 
-                                            {(isAdmin || repeatFrequency === 'weekly') && (
+                                            {(isStaff || repeatFrequency === 'weekly') && (
                                                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                                                     {days.map((day, i) => (
                                                         <button
