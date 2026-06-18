@@ -179,7 +179,8 @@ export const ResourceGrid: React.FC<GridProps> = ({
                             // The container's modal relies on dayIndex to map to the week. 
                             // Since activeDate is currentWeekStart, dayIndex is 0 relative to it.
                             const handleCellClick = () => {
-                                if (isCellUnavailable) return;
+                                const hasBlockedSession = slotSessions.some((s: any) => s.status === 'Blocked');
+                                if (isCellUnavailable || (isClient && (hasBlockedSession || slotSessions.length > 0))) return;
                                 
                                 // To align with CalendarView's modal, we tell it we clicked day 0 (which maps to currentWeekStart)
                                 onSlotSelected({
@@ -189,6 +190,8 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                     date: activeDate
                                 });
                             };
+
+                            const hasBlockedSession = slotSessions.some((s: any) => s.status === 'Blocked');
 
                             return (
                                 <div
@@ -202,9 +205,13 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                         display: 'flex',
                                         flexDirection: 'column',
                                         gap: '4px',
-                                        cursor: (slotSessions.length > 0 || (!isCellUnavailable)) ? 'pointer' : 'default',
-                                        backgroundColor: isCellUnavailable ? '#fafafa' : 'transparent',
-                                        backgroundImage: isCellUnavailable 
+                                        cursor: hasBlockedSession
+                                            ? (isClient ? 'not-allowed' : 'pointer')
+                                            : (slotSessions.length > 0)
+                                                ? (isClient ? 'default' : 'pointer')
+                                                : ((!isCellUnavailable) ? 'pointer' : 'default'),
+                                        backgroundColor: (isCellUnavailable || (isClient && hasBlockedSession)) ? '#fafafa' : 'transparent',
+                                        backgroundImage: (isCellUnavailable || (isClient && hasBlockedSession))
                                             ? 'repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px)'
                                             : 'none',
                                     }}
@@ -219,7 +226,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                 (s.name && session.serviceType && s.name.toLowerCase().includes(session.serviceType.toLowerCase())) || 
                                                 (session.serviceType && s.name && session.serviceType.toLowerCase().includes(s.name.toLowerCase()))
                                             );
-                                            const chipColor = matchedService?.color || '#4B5563';
+                                            const chipColor = session.status === 'Blocked' ? '#6B7280' : (matchedService?.color || '#4B5563');
                                             
                                             const isLimitlessOpen = session.serviceName?.toLowerCase().includes('limitless open') || session.serviceType?.toLowerCase().includes('limitless open');
                                             const attendeesCount = session.clients?.length || 1;
@@ -233,11 +240,11 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                             }
  
                                             if (isClient && !isUserInSession) {
-                                                let chipText = 'Booked';
+                                                let chipText = session.status === 'Blocked' ? 'Unavailable' : 'Booked';
                                                 let chipCursor = 'not-allowed';
                                                 let handleClick = (e: any) => { e.stopPropagation(); };
  
-                                                if (isLimitlessOpen && attendeesCount < 3) {
+                                                if (session.status !== 'Blocked' && isLimitlessOpen && attendeesCount < 3) {
                                                     chipText = `Limitless Open (${attendeesCount}/3) - Join`;
                                                     chipCursor = 'pointer';
                                                     handleClick = (e: any) => {
@@ -284,10 +291,12 @@ export const ResourceGrid: React.FC<GridProps> = ({
                                                 );
                                             }
 
-                                            // Handle multiple clients in a single group session for trainers/admins or if user is in session
-                                            const displayClients = session.clients && Array.isArray(session.clients) 
-                                                ? session.clients 
-                                                : [{ name: session.clientName || 'Unknown' }];
+                                             // Handle multiple clients in a single group session for trainers/admins or if user is in session
+                                             const displayClients = session.status === 'Blocked'
+                                                 ? [{ name: 'BLOCKED' }]
+                                                 : (session.clients && Array.isArray(session.clients) 
+                                                     ? session.clients 
+                                                     : [{ name: session.clientName || 'Unknown' }]);
                                                 
                                             const visibleClients = displayClients.slice(0, 3);
                                             const extraCount = displayClients.length - 3;

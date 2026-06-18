@@ -34,6 +34,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const isClient = profile?.role === 'client';
     const isStaff = isAdmin || profile?.role === 'trainer';
+    const [bookingType, setBookingType] = useState<'client' | 'block'>('client');
 
     // The firestore rule for clients requires the email to match the auth token if not a manager.
     // Ensure we always have a filter value to avoid "list all" permission errors.
@@ -84,6 +85,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     useEffect(() => {
         if (!isOpen) {
             setIsSubmitting(false);
+            setBookingType('client');
             return;
         }
 
@@ -364,7 +366,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             }
         }
 
-        if (!isClient && !editingSession && !clients.some((c: any) => c.name === selectedClient)) {
+        if (bookingType === 'client' && !isClient && !editingSession && !clients.some((c: any) => c.name === selectedClient)) {
             alert('Please select a valid client from the list.');
             setIsSubmitting(false);
             return;
@@ -523,13 +525,15 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             const trainer = trainers.find(t => t.name === selectedTrainer);
             const service = services.find(s => s.name === (selectedService || editingSession?.serviceName));
 
-            const clientObj = {
-                id: isClient ? (profile?.clientId || user?.uid || null) : (client?.id || null),
-                name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName || 'Unknown Client'),
-                email: isClient ? (profile?.email || null) : (client?.email || null),
-                uid: isClient ? (user?.uid || null) : (client?.uid || null),
-                phone: isClient ? (profile?.phone || null) : (client?.phone || null)
-            };
+            const clientObj = bookingType === 'block'
+                ? { id: 'blocked', name: 'Blocked', email: '', uid: 'blocked', phone: '' }
+                : {
+                    id: isClient ? (profile?.clientId || user?.uid || null) : (client?.id || null),
+                    name: isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName || 'Unknown Client'),
+                    email: isClient ? (profile?.email || null) : (client?.email || null),
+                    uid: isClient ? (user?.uid || null) : (client?.uid || null),
+                    phone: isClient ? (profile?.phone || null) : (client?.phone || null)
+                };
 
             const clientIdList = [clientObj.id].filter(Boolean) as string[];
             const uidList = [clientObj.uid].filter(Boolean) as string[];
@@ -555,14 +559,14 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 clientPhone: editingSession?.clientPhone || clientObj.phone || null,
                 trainerName: selectedTrainer,
                 trainerId: trainer?.id || null,
-                serviceName: selectedService || editingSession?.serviceName,
-                serviceId: service?.id || null,
+                serviceName: bookingType === 'block' ? 'Blocked Slot' : (selectedService || editingSession?.serviceName),
+                serviceId: bookingType === 'block' ? 'blocked' : (service?.id || null),
                 startTime: Timestamp.fromDate(startDate), // NEW: Native Timestamp
                 endTime: Timestamp.fromDate(endDate),     // NEW: Native Timestamp
                 time: selectedTime,
                 day: dayIdx,
                 date: date.toISOString(),
-                status: 'Scheduled',
+                status: bookingType === 'block' ? 'Blocked' : 'Scheduled',
                 siteId: SITE_ID,
                 createdAt: new Date().toISOString(),
                 createdBy: profile?.name || 'Unknown User'
@@ -972,6 +976,40 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     <p className="text-muted" style={{ marginBottom: '24px', fontSize: '0.9rem' }}>{editingSession ? 'Update booking details' : 'Schedule a new visit to Invictus'}</p>
 
                     <form onSubmit={handleConfirm} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {isStaff && !editingSession && (
+                            <div style={{ display: 'flex', gap: '16px', background: '#f5f5f5', padding: '8px', border: '2px solid #000', marginBottom: '8px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setBookingType('client')}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px',
+                                        background: bookingType === 'client' ? '#000' : 'transparent',
+                                        color: bookingType === 'client' ? '#fff' : '#000',
+                                        border: 'none',
+                                        fontWeight: 800,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Client Booking
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBookingType('block')}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px',
+                                        background: bookingType === 'block' ? '#000' : 'transparent',
+                                        color: bookingType === 'block' ? '#fff' : '#000',
+                                        border: 'none',
+                                        fontWeight: 800,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Block Slot
+                                </button>
+                            </div>
+                        )}
                         {editingSession?.seriesId && !isClient && (
                             <div style={{ padding: '16px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '8px' }}>
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.8rem', color: '#666' }}>EDITING RECURRING SERIES</label>
@@ -1000,7 +1038,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             </div>
                         )}
 
-                        {!isClient && (
+                        {!isClient && bookingType === 'client' && (
                             <div>
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>CLIENT</label>
                                 {editingSession ? (
@@ -1086,34 +1124,36 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             </div>
                         )}
 
-                        <div>
-                            <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>SERVICE</label>
-                            <div style={{ position: 'relative' }}>
-                                <div style={{ position: 'absolute', left: '16px', top: '14px' }}><CalendarIcon size={18} className="text-muted" /></div>
-                                <select
-                                    name="serviceName"
-                                    required
-                                    disabled={!!selectedSlot?.joinSessionId}
-                                    value={selectedService}
-                                    onChange={(e) => setSelectedService(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '12px 12px 12px 48px',
-                                        borderRadius: 0,
-                                        border: '2px solid #000',
-                                        fontSize: '1rem',
-                                        fontWeight: 600,
-                                        appearance: 'none',
-                                        backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
-                                        color: '#000',
-                                        cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
-                                    }}
-                                >
-                                    <option value="">Select service</option>
-                                    {filteredServices.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                                </select>
+                        {bookingType === 'client' && (
+                            <div>
+                                <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>SERVICE</label>
+                                <div style={{ position: 'relative' }}>
+                                    <div style={{ position: 'absolute', left: '16px', top: '14px' }}><CalendarIcon size={18} className="text-muted" /></div>
+                                    <select
+                                        name="serviceName"
+                                        required
+                                        disabled={!!selectedSlot?.joinSessionId}
+                                        value={selectedService}
+                                        onChange={(e) => setSelectedService(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px 12px 12px 48px',
+                                            borderRadius: 0,
+                                            border: '2px solid #000',
+                                            fontSize: '1rem',
+                                            fontWeight: 600,
+                                            appearance: 'none',
+                                            backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
+                                            color: '#000',
+                                            cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        <option value="">Select service</option>
+                                        {filteredServices.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                    </select>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                             <div>
@@ -1394,7 +1434,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                     cursor: isSubmitDisabled ? (isSubmitting ? 'wait' : 'not-allowed') : 'pointer'
                                 }}
                             >
-                                {isSubmitting ? 'Processing...' : `Confirm ${editingSession ? 'Changes' : 'Booking'}`}
+                                {isSubmitting 
+                                    ? 'Processing...' 
+                                    : (bookingType === 'block' ? 'Block Slot' : `Confirm ${editingSession ? 'Changes' : 'Booking'}`)}
                             </button>
                         </div>
                     </form>

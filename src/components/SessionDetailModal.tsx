@@ -122,7 +122,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             try {
                 const removedClient = session.clients?.find((c: any) => c.id === removedClientId);
                 await addDoc(collection(db, 'activity_logs'), {
-                    action: 'cancelled',
+                    action: session?.status === 'Blocked' ? 'unblocked' : 'cancelled',
                     isRecurring,
                     sessionDetails: {
                         clientName: removedClientId ? (removedClient?.name || 'Unknown') : (session.clients?.[0]?.name || session.clientName),
@@ -373,9 +373,13 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
 
                 {isDeleting ? (
                     <div>
-                        <h2 style={{ fontSize: '1.8rem', marginBottom: '8px', color: '#ff4444' }}>Delete Options</h2>
+                        <h2 style={{ fontSize: '1.8rem', marginBottom: '8px', color: '#ff4444' }}>
+                            {session?.status === 'Blocked' ? 'Unblock Slot' : 'Delete Options'}
+                        </h2>
                         <p className="text-muted" style={{ marginBottom: '24px' }}>
-                            {session.seriesId ? 'Please select how you want to delete this recurring appointment.' : 'Are you sure you want to delete this session?'}
+                            {session?.status === 'Blocked'
+                                ? 'Are you sure you want to unblock this slot?'
+                                : (session.seriesId ? 'Please select how you want to delete this recurring appointment.' : 'Are you sure you want to delete this session?')}
                         </p>
 
                         {session.seriesId && (
@@ -419,12 +423,14 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                             <button
                                 onClick={async () => {
                                     const confirmed = await confirm({
-                                        title: 'Delete Session?',
-                                        message: deleteScope === 'future' 
-                                            ? 'Are you sure you want to delete this and all future sessions in the series? This action cannot be undone.'
-                                            : 'Are you sure you want to delete this session? This action cannot be undone.',
-                                        confirmLabel: 'Yes, Delete',
-                                        type: 'danger'
+                                        title: session?.status === 'Blocked' ? 'Unblock Slot?' : 'Delete Session?',
+                                        message: session?.status === 'Blocked'
+                                            ? 'Are you sure you want to unblock this slot? This will make it available for bookings again.'
+                                            : (deleteScope === 'future' 
+                                                ? 'Are you sure you want to delete this and all future sessions in the series? This action cannot be undone.'
+                                                : 'Are you sure you want to delete this session? This action cannot be undone.'),
+                                        confirmLabel: session?.status === 'Blocked' ? 'Yes, Unblock' : 'Yes, Delete',
+                                        type: session?.status === 'Blocked' ? 'warning' : 'danger'
                                     });
 
                                     if (confirmed) {
@@ -445,7 +451,7 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                     gap: '10px'
                                 }}
                             >
-                                DELETE
+                                {session?.status === 'Blocked' ? 'UNBLOCK' : 'DELETE'}
                             </button>
                         </div>
                     </div>
@@ -468,6 +474,23 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                             )}
                         </div>
                         <p className="text-muted" style={{ marginBottom: '32px' }}>Review or modify this booking</p>
+
+                        {session?.status === 'Blocked' && (
+                            <div style={{
+                                padding: '16px',
+                                background: '#fce8e6',
+                                border: '2px solid #c5221f',
+                                color: '#c5221f',
+                                fontWeight: 800,
+                                fontSize: '0.95rem',
+                                marginBottom: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px'
+                            }}>
+                                This slot is BLOCKED. Clients cannot book this slot.
+                            </div>
+                        )}
 
                         {isAddingClient ? (
                             <div style={{ padding: '20px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '32px' }}>
@@ -747,35 +770,63 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                         </div>
                         )}
 
-                        {!isAddingClient && !isTrainer && (
+                        {!isAddingClient && (
                             <div style={{ display: 'flex', gap: '16px' }}>
-                                <button
-                                    onClick={() => onReschedule(session)}
-                                    className="button-secondary"
-                                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', height: '54px' }}
-                                >
-                                    <Edit2 size={18} />
-                                    RESCHEDULE
-                                </button>
-                                <button
-                                    onClick={() => setIsDeleting(true)}
-                                    style={{
-                                        flex: 1,
-                                        height: '54px',
-                                        background: '#ff4444',
-                                        color: '#fff',
-                                        border: 'none',
-                                        fontWeight: 800,
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '10px'
-                                    }}
-                                >
-                                    <Trash2 size={18} />
-                                    DELETE
-                                </button>
+                                {session?.status === 'Blocked' ? (
+                                    isStaff && (
+                                        <button
+                                            onClick={() => setIsDeleting(true)}
+                                            style={{
+                                                flex: 1,
+                                                height: '54px',
+                                                background: '#000',
+                                                color: '#fff',
+                                                border: 'none',
+                                                fontWeight: 800,
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '10px'
+                                            }}
+                                        >
+                                            <Trash2 size={18} />
+                                            UNBLOCK SLOT
+                                        </button>
+                                    )
+                                ) : (
+                                    !isTrainer && (
+                                        <>
+                                            <button
+                                                onClick={() => onReschedule(session)}
+                                                className="button-secondary"
+                                                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', height: '54px' }}
+                                            >
+                                                <Edit2 size={18} />
+                                                RESCHEDULE
+                                            </button>
+                                            <button
+                                                onClick={() => setIsDeleting(true)}
+                                                style={{
+                                                    flex: 1,
+                                                    height: '54px',
+                                                    background: '#ff4444',
+                                                    color: '#fff',
+                                                    border: 'none',
+                                                    fontWeight: 800,
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '10px'
+                                                }}
+                                            >
+                                                <Trash2 size={18} />
+                                                DELETE
+                                            </button>
+                                        </>
+                                    )
+                                )}
                             </div>
                         )}
                     </>

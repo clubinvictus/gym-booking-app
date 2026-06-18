@@ -321,7 +321,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                     (s.name && displaySession.serviceType && s.name?.toLowerCase().includes(displaySession.serviceType?.toLowerCase())) ||
                                                     (displaySession.serviceType && s.name && displaySession.serviceType?.toLowerCase().includes(s.name?.toLowerCase()))
                                                 );
-                                                const chipColor = matchedService?.color || '#4B5563';
+                                                const chipColor = displaySession.status === 'Blocked' ? '#6B7280' : (matchedService?.color || '#4B5563');
                                                 
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -343,7 +343,15 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                     onSessionClick(displaySession);
                                                 };
 
-                                                if (isClient && isLimitlessOpen && isUserInSession) {
+                                                if (displaySession.status === 'Blocked') {
+                                                    if (isClient) {
+                                                        chipText = 'Unavailable';
+                                                        chipCursor = 'not-allowed';
+                                                        handleClick = (e: any) => { e.stopPropagation(); };
+                                                    } else {
+                                                        chipText = 'BLOCKED';
+                                                    }
+                                                } else if (isClient && isLimitlessOpen && isUserInSession) {
                                                     chipText = `Limitless Open (${attendeesCount}/3)`;
                                                 } else if (isClient && !isUserInSession) {
                                                     if (isLimitlessOpen && attendeesCount < 3) {
@@ -405,7 +413,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                 (s.name && displaySession.serviceType && s.name.toLowerCase().includes(displaySession.serviceType.toLowerCase())) || 
                                                 (displaySession.serviceType && s.name && displaySession.serviceType.toLowerCase().includes(s.name.toLowerCase()))
                                             );
-                                            const chipColor = matchedService?.color || '#4B5563';
+                                            const chipColor = displaySession.status === 'Blocked' ? '#6B7280' : (matchedService?.color || '#4B5563');
                                             
                                                 const isLimitlessOpen = displaySession.serviceName?.toLowerCase().includes('limitless open') || displaySession.serviceType?.toLowerCase().includes('limitless open');
                                                 const attendeesCount = displaySession.clients?.length || 1;
@@ -428,7 +436,17 @@ export const WeekGrid: React.FC<GridProps> = ({
                                                     onSessionClick(displaySession);
                                                 };
 
-                                                if (isClient && isLimitlessOpen && isUserInSession) {
+                                                if (displaySession.status === 'Blocked') {
+                                                    if (isClient) {
+                                                        chipTextPrimary = 'Unavailable';
+                                                        chipTextSecondary = '';
+                                                        chipCursor = 'not-allowed';
+                                                        handleClick = (e: any) => { e.stopPropagation(); };
+                                                    } else {
+                                                        chipTextPrimary = 'BLOCKED';
+                                                        chipTextSecondary = '';
+                                                    }
+                                                } else if (isClient && isLimitlessOpen && isUserInSession) {
                                                     chipTextPrimary = `Limitless Open (${attendeesCount}/3)`;
                                                     chipTextSecondary = 'Booked';
                                                 } else if (isClient && !isUserInSession) {
