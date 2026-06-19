@@ -172,8 +172,7 @@ export const ResourceGrid: React.FC<GridProps> = ({
                             });
 
                             const isAvailable = checkTrainerAvailable(trainer, activeDate, time);
-                            const isUnavailableForClient = isClient && !isAvailable;
-                            const isCellUnavailable = isBusyByOthers || isUnavailableForClient;
+                            const isCellUnavailable = isBusyByOthers || !isAvailable;
 
                             // If cell is clicked, we pass dayIndex=0 since we are strictly looking at 'activeDate'
                             // The container's modal relies on dayIndex to map to the week. 

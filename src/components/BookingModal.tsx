@@ -31,9 +31,22 @@ const daysMap: { [key: number]: string } = {
 export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, excludedTrainerId, onBook }: BookingModalProps) => {
     const confirm = useConfirm();
     const { user, profile } = useAuth();
-    const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
-    const isClient = profile?.role === 'client';
-    const isStaff = isAdmin || profile?.role === 'trainer';
+    const isAdmin = profile?.role?.toLowerCase() === 'admin' || profile?.role?.toLowerCase() === 'manager';
+    const isClient = profile?.role?.toLowerCase() === 'client';
+    const isStaff = isAdmin || profile?.role?.toLowerCase() === 'trainer';
+    const isTrainerOnly = !isAdmin && profile?.role?.toLowerCase() === 'trainer';
+
+    console.log('[BookingModal] Diagnostic:', {
+        uid: user?.uid,
+        email: user?.email,
+        role: profile?.role,
+        isStaff,
+        isAdmin,
+        isClient,
+        editingSession: !!editingSession,
+        hasProfile: !!profile
+    });
+
     const [bookingType, setBookingType] = useState<'client' | 'block'>('client');
 
     // The firestore rule for clients requires the email to match the auth token if not a manager.
@@ -119,12 +132,15 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             setIsRepeating(false);
             setRepeatFrequency('weekly');
 
-            const initialTrainer = selectedSlot.joinTrainerName || (selectedSlot?.trainerId
+            let initialTrainer = selectedSlot.joinTrainerName || (selectedSlot?.trainerId
                 ? (trainers.find(t => t.id === selectedSlot.trainerId)?.name || '')
                 : '');
+            if (isTrainerOnly && !initialTrainer) {
+                initialTrainer = trainers.find((t: any) => t.id === profile?.trainerId)?.name || profile?.name || '';
+            }
             setSelectedTrainer(initialTrainer);
         }
-    }, [isOpen, editingSession?.id, selectedSlot?.day, selectedSlot?.time, selectedSlot?.date, selectedSlot?.trainerId]);
+    }, [isOpen, editingSession?.id, selectedSlot?.day, selectedSlot?.time, selectedSlot?.date, selectedSlot?.trainerId, isTrainerOnly, profile?.trainerId, profile?.name]);
 
 
     const toggleDay = (dayIdx: number) => {
@@ -248,10 +264,15 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const isTierRestricted = !!(currentServiceName && currentClientName && !allowedTiersForService.includes(clientTier));
 
     useEffect(() => {
-        if (selectedTrainer && !availableTrainers.find(t => t.name === selectedTrainer)) {
+        if (isTrainerOnly) {
+            const tName = trainers.find((t: any) => t.id === profile?.trainerId)?.name || profile?.name || '';
+            if (tName && selectedTrainer !== tName) {
+                setSelectedTrainer(tName);
+            }
+        } else if (selectedTrainer && !availableTrainers.find(t => t.name === selectedTrainer)) {
             setSelectedTrainer('');
         }
-    }, [selectedService, selectedDay, selectedTime, availableTrainers, selectedTrainer]);
+    }, [selectedService, selectedDay, selectedTime, availableTrainers, selectedTrainer, isTrainerOnly, trainers, profile?.trainerId, profile?.name]);
 
     if (!isOpen || !selectedSlot) return null;
 
@@ -924,7 +945,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         }
     };
 
-    const isSubmitDisabled = (availableTrainers.length === 0 && !editingSession && !selectedSlot?.joinSessionId) || isSubmitting || isTierRestricted;
+    const isSubmitDisabled = (!editingSession && !selectedSlot?.joinSessionId && (availableTrainers.length === 0 || (isTrainerOnly && selectedTrainer && !availableTrainers.some(t => t.name === selectedTrainer)))) || isSubmitting || isTierRestricted;
 
     return (
         <>
@@ -1251,49 +1272,67 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             </div>
                         </div>
 
-                        <div>
-                            <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>TRAINER</label>
-                            <div style={{ position: 'relative' }}>
-                                <div style={{ position: 'absolute', left: '16px', top: '14px' }}><Briefcase size={18} className="text-muted" /></div>
-                                <select
-                                    name="trainerName"
-                                    required
-                                    disabled={!!selectedSlot?.joinSessionId}
-                                    value={selectedTrainer}
-                                    onChange={(e) => setSelectedTrainer(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '12px 12px 12px 48px',
-                                        borderRadius: 0,
-                                        border: '2px solid #000',
-                                        fontSize: '0.9rem',
-                                        fontWeight: 600,
-                                        appearance: 'none',
-                                        backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : ((selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff'),
-                                        color: '#000',
-                                        cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
-                                    }}
-                                >
-                                    <option value="">Select trainer</option>
-                                    {availableTrainers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                                </select>
-                            </div>
-                            {selectedService && availableTrainers.length === 0 && (
-                                <div style={{
-                                    padding: '16px',
-                                    background: '#fff5f5',
-                                    border: '2px solid #ff4444',
-                                    marginTop: '8px'
-                                }}>
-                                    <p style={{ fontSize: '0.85rem', color: '#ff4444', fontWeight: 800, margin: 0 }}>
-                                        No trainers available for this service at the selected time.
-                                    </p>
-                                    <p style={{ fontSize: '0.75rem', color: '#ff4444', fontWeight: 600, marginTop: '4px' }}>
-                                        Please try a different time slot or day from the options above.
-                                    </p>
+                        {!isTrainerOnly && (
+                            <div>
+                                <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>TRAINER</label>
+                                <div style={{ position: 'relative' }}>
+                                    <div style={{ position: 'absolute', left: '16px', top: '14px' }}><Briefcase size={18} className="text-muted" /></div>
+                                    <select
+                                        name="trainerName"
+                                        required
+                                        disabled={!!selectedSlot?.joinSessionId}
+                                        value={selectedTrainer}
+                                        onChange={(e) => setSelectedTrainer(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px 12px 12px 48px',
+                                            borderRadius: 0,
+                                            border: '2px solid #000',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 600,
+                                            appearance: 'none',
+                                            backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : ((selectedService && availableTrainers.length === 0) ? '#fff5f5' : '#fff'),
+                                            color: '#000',
+                                            cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        <option value="">Select trainer</option>
+                                        {availableTrainers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                    </select>
                                 </div>
-                            )}
-                        </div>
+                                {selectedService && availableTrainers.length === 0 && (
+                                    <div style={{
+                                        padding: '16px',
+                                        background: '#fff5f5',
+                                        border: '2px solid #ff4444',
+                                        marginTop: '8px'
+                                    }}>
+                                        <p style={{ fontSize: '0.85rem', color: '#ff4444', fontWeight: 800, margin: 0 }}>
+                                            No trainers available for this service at the selected time.
+                                        </p>
+                                        <p style={{ fontSize: '0.75rem', color: '#ff4444', fontWeight: 600, marginTop: '4px' }}>
+                                            Please try a different time slot or day from the options above.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {isTrainerOnly && !editingSession && !selectedSlot?.joinSessionId && selectedTrainer && !availableTrainers.some(t => t.name === selectedTrainer) && (
+                            <div style={{
+                                padding: '16px',
+                                background: '#fff5f5',
+                                border: '2px solid #ff4444',
+                                marginTop: '8px'
+                            }}>
+                                <p style={{ fontSize: '0.85rem', color: '#ff4444', fontWeight: 800, margin: 0 }}>
+                                    You are not available at the selected time.
+                                </p>
+                                <p style={{ fontSize: '0.75rem', color: '#ff4444', fontWeight: 600, marginTop: '4px' }}>
+                                    Please try a different time slot or update your availability.
+                                </p>
+                            </div>
+                        )}
 
                         {!editingSession && !selectedSlot?.joinSessionId && (
                             <div>

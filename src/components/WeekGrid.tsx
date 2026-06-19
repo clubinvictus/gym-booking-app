@@ -284,7 +284,7 @@ export const WeekGrid: React.FC<GridProps> = ({
                             const hasRoom = firstSession && activeService && (firstSession.clients?.length || 1) < (activeService.max_capacity || 1);
 
                             const available = isTrainerAvailable(dayIndex, dateStr, time) && !isPastLimit && (slotSessions.length === 0 || hasRoom) && !isBusyByOthers;
-                            const showAsAvailable = selectedTrainerId === 'all' || selectedTrainerId === 'my' || available;
+                            const showAsAvailable = selectedTrainerId === 'all' || (selectedTrainerId === 'my' && isClient) || available;
 
                             let baseBackgroundColor = showAsAvailable ? 'transparent' : '#fafafa';
                             if (isToday && showAsAvailable) {

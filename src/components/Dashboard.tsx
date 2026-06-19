@@ -374,16 +374,25 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    {filteredSessions.length > 0 ? filteredSessions.map((session: any) => (
-                                        <SessionItem
-                                            key={session.id}
-                                            clientName={session.clientName || session.clients?.[0]?.name || 'Unknown Client'}
-                                            trainerName={session.trainerName}
-                                            type={session.serviceName}
-                                            time={session.time}
-                                            onClick={() => setSelectedSession(session)}
-                                        />
-                                    )) : (
+                                    {filteredSessions.length > 0 ? filteredSessions.map((session: any) => {
+                                        const displayTitle = isClient 
+                                            ? session.serviceName 
+                                            : (session.clients && Array.isArray(session.clients) ? session.clients.map((c: any) => c.name).join(', ') : (session.clientName || 'Unknown Client'));
+                                        const displayType = isClient 
+                                            ? (session.clients?.length > 1 ? 'Group Session' : 'Session')
+                                            : session.serviceName;
+
+                                        return (
+                                            <SessionItem
+                                                key={session.id}
+                                                clientName={displayTitle}
+                                                trainerName={session.trainerName}
+                                                type={displayType}
+                                                time={session.time}
+                                                onClick={() => setSelectedSession(session)}
+                                            />
+                                        );
+                                    }) : (
                                         <div style={{ padding: '40px', textAlign: 'center', background: '#f9f9f9', border: '2px dashed #000' }}>
                                             <p style={{ fontWeight: 800, color: '#000', fontSize: '1rem', textTransform: 'uppercase' }}>
                                                 {isSelectedToday ? 'No more sessions for today. Enjoy your day!' : 'No sessions scheduled for this date.'}

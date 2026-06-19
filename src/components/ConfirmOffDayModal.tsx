@@ -174,9 +174,9 @@ export const ConfirmOffDayModal = ({
                 alert(`Successfully cleared off-day status for ${docsToDelete} day(s).`);
                 onClose();
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating off-days:', error);
-            alert('An error occurred while managing off-days.');
+            alert(`An error occurred while managing off-days: ${error.message || error}`);
         } finally {
             setIsSaving(false);
         }
