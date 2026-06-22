@@ -553,6 +553,16 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             computedDayIdx = selectedDay;
         }
 
+        if (isClient) {
+            const maxAllowedDate = getClientMaxDate();
+            maxAllowedDate.setHours(23, 59, 59, 999);
+            if (baseDate > maxAllowedDate) {
+                alert('Clients can only book up to 2 weeks in advance.');
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
         const getBookingData = (date: Date, dayIdx: number) => {
             const client = clients.find(c => c.name === selectedClient);
             const trainer = trainers.find(t => t.name === selectedTrainer);
@@ -1200,6 +1210,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             type="date"
                                             value={overrideDateStr}
                                             onChange={(e) => setOverrideDateStr(e.target.value)}
+                                            min={isClient ? new Date().toISOString().split('T')[0] : undefined}
+                                            max={isClient ? getClientMaxDate().toISOString().split('T')[0] : undefined}
                                             style={{
                                                 width: '100%',
                                                 padding: '12px 12px 12px 48px',
