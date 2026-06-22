@@ -437,7 +437,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 padding: '24px 16px',
                 position: 'relative',
                 flexShrink: 0,
-                height: '100vh',      /* Fixed sidebar height */
+                height: '100dvh',      /* Fixed sidebar height */
                 overflowY: 'auto',    /* Scroll if menu grows */
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px', padding: '0 8px' }}>
