@@ -402,6 +402,86 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         }
 
         try {
+            // --- Client Daily Service Limit Check ---
+            if (bookingType === 'client') {
+                const currentClient = clients.find((c: any) => c.name === selectedClient);
+                const currentClientId = isClient ? (profile?.clientId || user?.uid) : (editingSession?.clientId || currentClient?.id || null);
+                const currentServiceName = selectedService || editingSession?.serviceName;
+                
+                if (currentClientId && currentServiceName) {
+                    try {
+                        let targetDate: Date;
+                        if (editingSession && overrideDateStr) {
+                            targetDate = new Date(overrideDateStr + 'T12:00:00'); 
+                        } else {
+                            targetDate = editingSession?.date
+                                ? new Date(editingSession.date)
+                                : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
+                            
+                            if (!editingSession && !isRepeating) {
+                                const currentDay = targetDate.getDay();
+                                const tDay = (selectedDay + 1) % 7;
+                                const diff = tDay - currentDay;
+                                targetDate.setDate(targetDate.getDate() + (diff < 0 ? diff + 7 : diff));
+                            }
+                        }
+
+                        const todayStart = new Date();
+                        todayStart.setHours(0, 0, 0, 0);
+                        
+                        const clientSnap = await getDocs(query(
+                            collection(db, 'sessions'),
+                            where('client_ids', 'array-contains', currentClientId),
+                            where('siteId', '==', SITE_ID),
+                            where('date', '>=', todayStart.toISOString())
+                        ));
+                        
+                        const clientDailyServices = new Map<string, Set<string>>();
+                        clientSnap.forEach(d => {
+                            const s = d.data();
+                            if (editingSession && d.id === editingSession.id) return;
+                            if (s.status === 'Cancelled') return;
+                            
+                            const dateKey = new Date(s.date).toDateString();
+                            if (!clientDailyServices.has(dateKey)) {
+                                clientDailyServices.set(dateKey, new Set());
+                            }
+                            clientDailyServices.get(dateKey)!.add(s.serviceName);
+                        });
+
+                        if (isRepeating && !editingSession) {
+                            const endDate = isClient ? getClientMaxDate() : new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
+                            for (const dayIdx of selectedDays) {
+                                let currentDate = new Date(targetDate);
+                                const currentDay = currentDate.getDay();
+                                const tDay = (dayIdx + 1) % 7;
+                                let diff = tDay - currentDay;
+                                if (diff < 0) diff += 7;
+                                currentDate.setDate(currentDate.getDate() + diff);
+                                if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+
+                                while (currentDate < endDate) {
+                                    if (clientDailyServices.get(currentDate.toDateString())?.has(currentServiceName)) {
+                                        alert(`You already have a ${currentServiceName} booking on ${currentDate.toLocaleDateString()}. Services can only be booked once per day.`);
+                                        setIsSubmitting(false);
+                                        return;
+                                    }
+                                    currentDate.setDate(currentDate.getDate() + 7);
+                                }
+                            }
+                        } else {
+                            if (clientDailyServices.get(targetDate.toDateString())?.has(currentServiceName)) {
+                                alert(`You already have a ${currentServiceName} booking on ${targetDate.toLocaleDateString()}. Services can only be booked once per day.`);
+                                setIsSubmitting(false);
+                                return;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Client sessions query failed:", err);
+                    }
+                }
+            }
+
             // --- Trainer double-booking check ---
             if (!editingSession && !selectedSlot?.joinSessionId && selectedTrainer) {
                 const trainer = trainers.find((t: any) => t.name === selectedTrainer);
