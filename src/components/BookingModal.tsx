@@ -71,6 +71,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const [isRepeating, setIsRepeating] = useState(false);
     const [repeatFrequency, setRepeatFrequency] = useState<'daily' | 'weekly'>('weekly');
     const [selectedDays, setSelectedDays] = useState<number[]>([]);
+    const [overrideDateStr, setOverrideDateStr] = useState('');
 
     const [editMode, setEditMode] = useState<'single' | 'future'>('single');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -112,6 +113,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             setSelectedTime(editingSession.time || '09:00 AM');
             setSelectedDay(editingSession.day ?? 0);
             setSelectedDays([editingSession.day ?? 0]);
+            setOverrideDateStr(editingSession.date ? editingSession.date.substring(0, 10) : '');
         } else if (selectedSlot) {
             // Only reset if this is a DIFFERENT slot than what was previously being initialized
             // We use a internal key to track this to avoid over-triggering
@@ -537,9 +539,19 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             return;
         }
 
-        const baseDate = editingSession?.date
-            ? new Date(editingSession.date)
-            : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
+        let baseDate: Date;
+        let computedDayIdx: number;
+
+        if (editingSession && overrideDateStr) {
+            baseDate = new Date(overrideDateStr + 'T12:00:00'); // parse at noon to avoid timezone issues
+            const jsDay = baseDate.getDay();
+            computedDayIdx = jsDay === 0 ? 6 : jsDay - 1;
+        } else {
+            baseDate = editingSession?.date
+                ? new Date(editingSession.date)
+                : (selectedSlot?.date ? new Date(selectedSlot.date) : new Date());
+            computedDayIdx = selectedDay;
+        }
 
         const getBookingData = (date: Date, dayIdx: number) => {
             const client = clients.find(c => c.name === selectedClient);
@@ -621,18 +633,12 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         };
 
         if (editingSession) {
-                // Adjust baseDate to match possibly changed selectedDay
-                const currentDay = baseDate.getDay();
-                const targetDay = (selectedDay + 1) % 7;
-                const diff = targetDay - currentDay;
-                baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
-
                 if (editMode === 'future' && editingSession.seriesId) {
                     const endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
                     const todayStart = new Date();
                     todayStart.setHours(0, 0, 0, 0);
 
-                    const effectiveDays = selectedDays.length > 0 ? selectedDays : [selectedDay];
+                    const effectiveDays = selectedDays.length > 0 ? selectedDays : [computedDayIdx];
                     const sortedDays = [...effectiveDays].sort((a, b) => a - b);
                     const dayNames = sortedDays.map(d => {
                         const name = daysMap[d];
@@ -731,9 +737,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         }
                     }
                     if (opCount > 0) await sessionBatch.commit();
-                    await logActivity('rescheduled', getBookingData(baseDate, selectedDay), newRecurringDetails);
+                    await logActivity('rescheduled', getBookingData(baseDate, computedDayIdx), newRecurringDetails);
                 } else {
-                    const updatedData = getBookingData(baseDate, selectedDay);
+                    const updatedData = getBookingData(baseDate, computedDayIdx);
                     await updateDoc(doc(db, 'sessions', editingSession.id), updatedData);
                     await logActivity('rescheduled', updatedData);
                 }
@@ -1153,8 +1159,8 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                     <select
                                         name="serviceName"
                                         required
-                                        disabled={!!selectedSlot?.joinSessionId}
-                                        value={selectedService}
+                                        disabled={!!selectedSlot?.joinSessionId || !!editingSession}
+                                        value={selectedService || editingSession?.serviceName || ''}
                                         onChange={(e) => setSelectedService(e.target.value)}
                                         style={{
                                             width: '100%',
@@ -1164,13 +1170,19 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                             fontSize: '1rem',
                                             fontWeight: 600,
                                             appearance: 'none',
-                                            backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
+                                            backgroundColor: (selectedSlot?.joinSessionId || editingSession) ? '#f5f5f5' : '#fff',
                                             color: '#000',
-                                            cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
+                                            cursor: (selectedSlot?.joinSessionId || editingSession) ? 'not-allowed' : 'pointer'
                                         }}
                                     >
-                                        <option value="">Select service</option>
-                                        {filteredServices.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        {editingSession ? (
+                                            <option value={editingSession.serviceName}>{editingSession.serviceName}</option>
+                                        ) : (
+                                            <>
+                                                <option value="">Select service</option>
+                                                {filteredServices.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                            </>
+                                        )}
                                     </select>
                                 </div>
                             </div>
@@ -1178,47 +1190,68 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                             <div>
-                                <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>{isRepeating && repeatFrequency === 'weekly' ? 'START DAY' : 'DAY'}</label>
+                                <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.9rem' }}>
+                                    {editingSession ? 'DATE' : (isRepeating && repeatFrequency === 'weekly' ? 'START DAY' : 'DAY')}
+                                </label>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ position: 'absolute', left: '16px', top: '14px' }}><CalendarIcon size={18} className="text-muted" /></div>
-                                    <select
-                                        name="day"
-                                        value={selectedDay}
-                                        disabled={!!selectedSlot?.joinSessionId}
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value);
-                                            setSelectedDay(val);
-                                            if (!isRepeating || repeatFrequency !== 'weekly') {
-                                                setSelectedDays([val]);
-                                            }
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            padding: '12px 12px 12px 48px',
-                                            borderRadius: 0,
-                                            border: '2px solid #000',
-                                            fontSize: '0.9rem',
-                                            fontWeight: 600,
-                                            appearance: 'none',
-                                            backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
-                                            color: '#000',
-                                            cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
-                                        }}
-                                    >
-                                        {days.map((day, i) => {
-                                            // Render logic: find what Date this day index represents relative to selected week
-                                            const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
-                                            const currentDay = baseDate.getDay();
-                                            const targetDay = (i + 1) % 7;
-                                            const diff = targetDay - currentDay;
-                                            baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
-                                            
-                                            const dateStr = baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                                            return (
-                                                <option key={day} value={i}>{day} ({dateStr})</option>
-                                            );
-                                        })}
-                                    </select>
+                                    {editingSession ? (
+                                        <input
+                                            type="date"
+                                            value={overrideDateStr}
+                                            onChange={(e) => setOverrideDateStr(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px 12px 12px 48px',
+                                                borderRadius: 0,
+                                                border: '2px solid #000',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 600,
+                                                backgroundColor: '#fff',
+                                                color: '#000',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                    ) : (
+                                        <select
+                                            name="day"
+                                            value={selectedDay}
+                                            disabled={!!selectedSlot?.joinSessionId}
+                                            onChange={(e) => {
+                                                const val = parseInt(e.target.value);
+                                                setSelectedDay(val);
+                                                if (!isRepeating || repeatFrequency !== 'weekly') {
+                                                    setSelectedDays([val]);
+                                                }
+                                            }}
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px 12px 12px 48px',
+                                                borderRadius: 0,
+                                                border: '2px solid #000',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 600,
+                                                appearance: 'none',
+                                                backgroundColor: selectedSlot?.joinSessionId ? '#f5f5f5' : '#fff',
+                                                color: '#000',
+                                                cursor: selectedSlot?.joinSessionId ? 'not-allowed' : 'pointer'
+                                            }}
+                                        >
+                                            {days.map((day, i) => {
+                                                // Render logic: find what Date this day index represents relative to selected week
+                                                const baseDate = selectedSlot?.date ? new Date(selectedSlot.date) : new Date();
+                                                const currentDay = baseDate.getDay();
+                                                const targetDay = (i + 1) % 7;
+                                                const diff = targetDay - currentDay;
+                                                baseDate.setDate(baseDate.getDate() + (diff < 0 ? diff + 7 : diff));
+                                                
+                                                const dateStr = baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                                return (
+                                                    <option key={day} value={i}>{day} ({dateStr})</option>
+                                                );
+                                            })}
+                                        </select>
+                                    )}
                                 </div>
                             </div>
                             <div>
