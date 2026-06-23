@@ -730,8 +730,8 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     onClose={() => setSelectedSession(null)}
                     onDelete={() => setSelectedSession(null)}
                     onReschedule={() => {
+                        navigate('/calendar', { state: { rescheduleSession: selectedSession } });
                         setSelectedSession(null);
-                        navigate('/calendar');
                     }}
                 />
             )}

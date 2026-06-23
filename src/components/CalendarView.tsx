@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, ChevronDown, Filter } from 'lucide-react';
 import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -36,6 +37,24 @@ export const CalendarView = () => {
     const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
     const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
     const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768);
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Check for reschedule session passed from another view (e.g., Dashboard)
+    React.useEffect(() => {
+        if (location.state?.rescheduleSession) {
+            const session = location.state.rescheduleSession;
+            setSelectedSession(session);
+            setSelectedSlot({
+                day: session.day,
+                time: session.time,
+                trainerId: session.trainerId,
+                date: session.date ? new Date(session.date) : new Date()
+            });
+            // Clear the state so it doesn't reopen on refresh/back
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location.state, navigate, location.pathname]);
 
     React.useEffect(() => {
         const handleResize = () => {
