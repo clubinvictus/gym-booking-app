@@ -1127,7 +1127,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                                 </button>
                             </div>
                         )}
-                        {editingSession?.seriesId && !isClient && (
+                        {editingSession?.seriesId && (
                             <div style={{ padding: '16px', background: '#f5f5f5', border: '2px solid #000', marginBottom: '8px' }}>
                                 <label style={{ display: 'block', fontWeight: 800, marginBottom: '12px', fontSize: '0.8rem', color: '#666' }}>EDITING RECURRING SERIES</label>
                                 <div style={{ display: 'flex', gap: '16px' }}>
