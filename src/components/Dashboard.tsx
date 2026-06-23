@@ -452,6 +452,15 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                                     ? (session.clients?.length > 1 ? 'Group Session' : 'Session')
                                                     : session.serviceName;
 
+                                                let displayDate = '';
+                                                if (session.startTime?.toDate) {
+                                                    displayDate = session.startTime.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                                                } else if (session.startTime instanceof Date) {
+                                                    displayDate = session.startTime.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                                                } else if (session.date) {
+                                                    displayDate = new Date(session.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                                                }
+
                                                 return (
                                                     <SessionItem
                                                         key={session.id}
@@ -459,6 +468,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                                         trainerName={session.trainerName}
                                                         type={displayType}
                                                         time={session.time}
+                                                        date={displayDate}
                                                         onClick={() => setSelectedSession(session)}
                                                     />
                                                 );
@@ -783,7 +793,7 @@ function StatCard({ title, value, icon }: { title: string, value: string, icon: 
     );
 }
 
-function SessionItem({ clientName, trainerName, type, time, onClick }: { clientName: string, trainerName?: string, type: string, time: string, onClick?: () => void }) {
+function SessionItem({ clientName, trainerName, type, time, date, onClick }: { clientName: string, trainerName?: string, type: string, time: string, date?: string, onClick?: () => void }) {
     return (
         <div
             onClick={onClick}
@@ -817,7 +827,10 @@ function SessionItem({ clientName, trainerName, type, time, onClick }: { clientN
                 )}
                 <p className="text-muted" style={{ fontSize: '0.8rem', margin: 0 }}>{type}</p>
             </div>
-            <div style={{ fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap', paddingLeft: '16px' }}>{time}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingLeft: '16px', justifyContent: 'center' }}>
+                <div style={{ fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap' }}>{time}</div>
+                {date && <div style={{ fontSize: '0.85rem', color: '#555', fontWeight: 800, whiteSpace: 'nowrap', marginTop: '2px' }}>{date}</div>}
+            </div>
         </div>
     );
 }
