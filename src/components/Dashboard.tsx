@@ -27,6 +27,7 @@ import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
 import { TermsModal } from './TermsModal';
 import { ConfirmModal } from './ConfirmModal';
+import { BookingModal } from './BookingModal';
 
 interface DashboardProps {
     view?: 'dashboard' | 'calendar' | 'team' | 'services' | 'clients' | 'activity' | 'settings';
@@ -44,6 +45,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [selectedService, setSelectedService] = useState<any>(null);
     const [settingsTab, setSettingsTab] = useState('general');
     const [selectedSession, setSelectedSession] = useState<any>(null);
+    const [bookingSlot, setBookingSlot] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [clientStartDate, setClientStartDate] = useState(new Date());
     const [clientEndDate, setClientEndDate] = useState(() => {
@@ -326,7 +328,20 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                             </div>
                             {isClient && (
                                 <button
-                                    onClick={() => navigate('/calendar')}
+                                    onClick={() => {
+                                        const targetDate = new Date();
+                                        targetDate.setHours(targetDate.getHours() + 1, 0, 0, 0); // next hour
+                                        const jsDay = targetDate.getDay();
+                                        const customDay = jsDay === 0 ? 6 : jsDay - 1;
+                                        const timeString = targetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(/\s*(AM|PM)\s*/i, ' $1').trim().toUpperCase();
+
+                                        setBookingSlot({
+                                            day: customDay,
+                                            time: timeString,
+                                            trainerId: null,
+                                            date: targetDate
+                                        });
+                                    }}
                                     className="button-primary"
                                     style={{
                                         alignSelf: window.innerWidth <= 768 ? 'stretch' : 'flex-start',
@@ -735,6 +750,16 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                     }}
                 />
             )}
+
+            <BookingModal
+                isOpen={!!bookingSlot}
+                onClose={() => setBookingSlot(null)}
+                selectedSlot={bookingSlot}
+                onBook={(data: any) => {
+                    console.log('Session booked from dashboard:', data);
+                    setBookingSlot(null);
+                }}
+            />
 
             <TermsModal 
                 isOpen={showTerms} 
