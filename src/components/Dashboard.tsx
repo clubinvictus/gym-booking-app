@@ -45,6 +45,13 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     const [settingsTab, setSettingsTab] = useState('general');
     const [selectedSession, setSelectedSession] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [clientStartDate, setClientStartDate] = useState(new Date());
+    const [clientEndDate, setClientEndDate] = useState(() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        return d;
+    });
+    const [clientVisibleCount, setClientVisibleCount] = useState(10);
     const { user, profile } = useAuth();
     const navigate = useNavigate();
     const confirm = useConfirm();
@@ -76,9 +83,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
     
     // Fetch sessions for the selected month — always provide both startDate and endDate
     // so SessionService uses the date range path (not the endTime > now path).
-    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    const monthStart = isClient ? new Date(clientStartDate) : new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
     monthStart.setHours(0, 0, 0, 0);
-    const monthEnd   = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+    const monthEnd = isClient ? new Date(clientEndDate) : new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
     monthEnd.setHours(23, 59, 59, 999);
     
     // For trainers: resolve their trainerId. The AuthContext may sync this async,
@@ -237,6 +244,8 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 // We resolve to a local Date object to avoid UTC timezone drift.
                 const sessionsForDay = userSessions
                     .filter((s: any) => {
+                        if (isClient) return true; // Clients show all sessions in the selected date range
+
                         // Support both Firestore Timestamp-based startTime and ISO date string
                         const selectedDateISO = new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000).toISOString().substring(0, 10);
                         let sessionDateISO: string | null = null;
@@ -249,11 +258,25 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                         }
                         return sessionDateISO === selectedDateISO;
                     })
-                    .sort((a: any, b: any) => timeToMinutes(a.time) - timeToMinutes(b.time));
+                    .sort((a: any, b: any) => {
+                        if (isClient) {
+                            let dateA = a.date;
+                            let dateB = b.date;
+                            if (a.startTime?.toDate) dateA = a.startTime.toDate().toISOString().substring(0, 10);
+                            else if (a.startTime instanceof Date) dateA = a.startTime.toISOString().substring(0, 10);
+                            
+                            if (b.startTime?.toDate) dateB = b.startTime.toDate().toISOString().substring(0, 10);
+                            else if (b.startTime instanceof Date) dateB = b.startTime.toISOString().substring(0, 10);
+
+                            const dateCompare = String(dateA).localeCompare(String(dateB));
+                            if (dateCompare !== 0) return dateCompare;
+                        }
+                        return timeToMinutes(a.time) - timeToMinutes(b.time);
+                    });
 
                 // For today: hide sessions that have already started/passed.
                 // For any other date: show all sessions in chronological order.
-                const filteredSessions = isSelectedToday
+                const filteredSessions = isSelectedToday && !isClient
                     ? sessionsForDay.filter((s: any) => timeToMinutes(s.time) >= (now.getHours() * 60 + now.getMinutes()))
                     : sessionsForDay;
 
@@ -351,65 +374,109 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                                     marginBottom: '32px',
                                     gap: '16px'
                                 }}>
-                                    <input
-                                        type="date"
-                                        value={selectedDate ? new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000).toISOString().split('T')[0] : ''}
-                                        onChange={(e) => setSelectedDate(new Date(e.target.value))}
-                                        style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f3f4f6', color: 'black' }}
-                                    />
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button 
-                                            onClick={() => {
-                                                const prev = new Date(selectedDate);
-                                                prev.setDate(prev.getDate() - 1);
-                                                setSelectedDate(prev);
-                                            }}
-                                            style={{ background: '#000', color: '#fff', border: 'none', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        >
-                                            <ChevronLeft size={20} />
-                                        </button>
-                                        <button 
-                                            onClick={() => setSelectedDate(new Date())}
-                                            style={{ background: '#000', color: '#fff', border: 'none', padding: '8px 16px', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}
-                                        >
-                                            Today
-                                        </button>
-                                        <button 
-                                            onClick={() => {
-                                                const next = new Date(selectedDate);
-                                                next.setDate(next.getDate() + 1);
-                                                setSelectedDate(next);
-                                            }}
-                                            style={{ background: '#000', color: '#fff', border: 'none', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        >
-                                            <ChevronRight size={20} />
-                                        </button>
-                                    </div>
+                                    {isClient ? (
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <label style={{ fontSize: '0.75rem', fontWeight: 800 }}>START DATE</label>
+                                                <input
+                                                    type="date"
+                                                    value={new Date(clientStartDate.getTime() - clientStartDate.getTimezoneOffset() * 60000).toISOString().split('T')[0]}
+                                                    onChange={(e) => {
+                                                        setClientStartDate(new Date(e.target.value));
+                                                        setClientVisibleCount(10);
+                                                    }}
+                                                    style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f3f4f6', color: 'black' }}
+                                                />
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <label style={{ fontSize: '0.75rem', fontWeight: 800 }}>END DATE</label>
+                                                <input
+                                                    type="date"
+                                                    value={new Date(clientEndDate.getTime() - clientEndDate.getTimezoneOffset() * 60000).toISOString().split('T')[0]}
+                                                    onChange={(e) => {
+                                                        setClientEndDate(new Date(e.target.value));
+                                                        setClientVisibleCount(10);
+                                                    }}
+                                                    style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f3f4f6', color: 'black' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <input
+                                                type="date"
+                                                value={selectedDate ? new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000).toISOString().split('T')[0] : ''}
+                                                onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                                                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#f3f4f6', color: 'black' }}
+                                            />
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button 
+                                                    onClick={() => {
+                                                        const prev = new Date(selectedDate);
+                                                        prev.setDate(prev.getDate() - 1);
+                                                        setSelectedDate(prev);
+                                                    }}
+                                                    style={{ background: '#000', color: '#fff', border: 'none', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                >
+                                                    <ChevronLeft size={20} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => setSelectedDate(new Date())}
+                                                    style={{ background: '#000', color: '#fff', border: 'none', padding: '8px 16px', cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase' }}
+                                                >
+                                                    Today
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        const next = new Date(selectedDate);
+                                                        next.setDate(next.getDate() + 1);
+                                                        setSelectedDate(next);
+                                                    }}
+                                                    style={{ background: '#000', color: '#fff', border: 'none', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                >
+                                                    <ChevronRight size={20} />
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    {filteredSessions.length > 0 ? filteredSessions.map((session: any) => {
-                                        const displayTitle = isClient 
-                                            ? session.serviceName 
-                                            : (session.clients && Array.isArray(session.clients) ? session.clients.map((c: any) => c.name).join(', ') : (session.clientName || 'Unknown Client'));
-                                        const displayType = isClient 
-                                            ? (session.clients?.length > 1 ? 'Group Session' : 'Session')
-                                            : session.serviceName;
+                                    {filteredSessions.length > 0 ? (
+                                        <>
+                                            {(isClient ? filteredSessions.slice(0, clientVisibleCount) : filteredSessions).map((session: any) => {
+                                                const displayTitle = isClient 
+                                                    ? session.serviceName 
+                                                    : (session.clients && Array.isArray(session.clients) ? session.clients.map((c: any) => c.name).join(', ') : (session.clientName || 'Unknown Client'));
+                                                const displayType = isClient 
+                                                    ? (session.clients?.length > 1 ? 'Group Session' : 'Session')
+                                                    : session.serviceName;
 
-                                        return (
-                                            <SessionItem
-                                                key={session.id}
-                                                clientName={displayTitle}
-                                                trainerName={session.trainerName}
-                                                type={displayType}
-                                                time={session.time}
-                                                onClick={() => setSelectedSession(session)}
-                                            />
-                                        );
-                                    }) : (
+                                                return (
+                                                    <SessionItem
+                                                        key={session.id}
+                                                        clientName={displayTitle}
+                                                        trainerName={session.trainerName}
+                                                        type={displayType}
+                                                        time={session.time}
+                                                        onClick={() => setSelectedSession(session)}
+                                                    />
+                                                );
+                                            })}
+                                            {isClient && filteredSessions.length > clientVisibleCount && (
+                                                <button 
+                                                    onClick={() => setClientVisibleCount(prev => prev + 10)}
+                                                    className="button-secondary"
+                                                    style={{ marginTop: '16px', padding: '12px', fontWeight: 800, textTransform: 'uppercase', width: '100%', border: '2px solid #000' }}
+                                                >
+                                                    LOAD MORE
+                                                </button>
+                                            )}
+                                        </>
+                                    ) : (
                                         <div style={{ padding: '40px', textAlign: 'center', background: '#f9f9f9', border: '2px dashed #000' }}>
                                             <p style={{ fontWeight: 800, color: '#000', fontSize: '1rem', textTransform: 'uppercase' }}>
-                                                {isSelectedToday ? 'No more sessions for today. Enjoy your day!' : 'No sessions scheduled for this date.'}
+                                                {isClient ? 'No sessions scheduled in this date range.' : (isSelectedToday ? 'No more sessions for today. Enjoy your day!' : 'No sessions scheduled for this date.')}
                                             </p>
                                         </div>
                                     )}
