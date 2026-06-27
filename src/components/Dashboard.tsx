@@ -105,8 +105,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
         trainerId: resolvedTrainerId,
         startDate: monthStart,
         endDate:   monthEnd,
-        includePast: true, // we handle filtering ourselves in the component
-        pageSize: 2000
+        includePast: true,
+        pageSize: 2000,
+        fetchMode: isClient ? 'my-bookings' : 'all'
     });
 
 

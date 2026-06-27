@@ -300,9 +300,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 const sessionRef = doc(db, 'sessions', selectedSlot.joinSessionId!);
                 await updateDoc(sessionRef, {
                     clients: arrayUnion(clientObj),
-                    clientIds: arrayUnion(clientObj.id),
-                    client_ids: arrayUnion(clientObj.id),
-                    uids: arrayUnion(clientObj.uid)
+                    clientIds: arrayUnion(clientObj.id)
                 });
                 onBook({});
                 onClose();
@@ -431,7 +429,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                         
                         const clientSnap = await getDocs(query(
                             collection(db, 'sessions'),
-                            where('client_ids', 'array-contains', currentClientId),
+                            where('clientIds', 'array-contains', currentClientId),
                             where('siteId', '==', SITE_ID),
                             where('date', '>=', todayStart.toISOString())
                         ));
@@ -659,7 +657,6 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                 };
 
             const clientIdList = [clientObj.id].filter(Boolean) as string[];
-            const uidList = [clientObj.uid].filter(Boolean) as string[];
 
             // --- STANDARDIZED TIMESTAMPS ---
             const startDate = new Date(date);
@@ -674,10 +671,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
             return {
                 clients: editingSession?.clients || [clientObj],
-                clientIds: editingSession?.clientIds || clientIdList, // legacy
-                client_ids: editingSession?.client_ids || clientIdList, // new standard
-                uids: editingSession?.uids || uidList, // ADDED: Mirror UID for secure rules lookup
-                clientId: editingSession?.clientId || clientObj.id || null, // legacy support root
+                clientIds: editingSession?.clientIds || clientIdList,
                 clientName: editingSession?.clientName || clientObj.name || 'Unknown Client',
                 clientPhone: editingSession?.clientPhone || clientObj.phone || null,
                 trainerName: selectedTrainer,
@@ -777,9 +771,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                         return {
                             clientName: editingSession.clientName,
-                            clientId: editingSession.clientId,
-                            clientIds: currentClientIds, // legacy
-                            client_ids: currentClientIds, // new standard
+                            clientIds: currentClientIds,
                             clients: editingSession.clients || [{ id: editingSession.clientId, name: editingSession.clientName }],
                             trainerName: selectedTrainer,
                             trainerId: trainer?.id || editingSession.trainerId,
@@ -916,7 +908,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                             if (!existing.clients.some((c: any) => c.id === clientObj.id)) {
                                 sessionBatch.update(doc(db, 'sessions', existing.id), {
                                     clients: [...existing.clients, clientObj],
-                                    client_ids: Array.from(new Set([...existing.clients.map((c: any) => c.id), clientObj.id])).filter(Boolean)
+                                    clientIds: Array.from(new Set([...existing.clients.map((c: any) => c.id), clientObj.id])).filter(Boolean)
                                 });
                                 opCount++;
                             }
@@ -1018,9 +1010,7 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                     await updateDoc(sessionDoc.ref, {
                         clients: newClients,
-                        clientIds: newClientIds, // legacy
-                        client_ids: newClientIds, // new standard
-                        clientId: newClientIds[0] // maintain first client as legacy root field
+                        clientIds: newClientIds
                     });
                     await logActivity('booked', bookingData);
                 } else {

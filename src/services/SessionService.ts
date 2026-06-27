@@ -9,7 +9,6 @@ import {
     Timestamp,
     onSnapshot,
     DocumentSnapshot,
-    or,
     and
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -27,6 +26,7 @@ export interface FetchSessionsOptions {
     includePast?: boolean; // If true, omits the endTime > now filter
     clientId?: string;    // Used by Admins to filter for a specific client
     trainerId?: string;   // Used by Admins to filter for a specific trainer
+    fetchMode?: 'my-bookings' | 'trainer-schedule' | 'all'; // Explicit mode to avoid role-guessing
 }
 
 export interface Session {
@@ -78,11 +78,13 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
     }
 
     // 4. Role-based and Target-based Filtering
-    if (options.trainerId) {
+    if (options.fetchMode === 'trainer-schedule' || options.trainerId) {
         // If a trainer is selected, everyone (including clients) sees that trainer's sessions
-        console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
-        filters.push(where('trainerId', '==', options.trainerId));
-    } else if (role === 'client') {
+        if (options.trainerId) {
+            console.log(`SessionService: [Filtering] trainerId='${options.trainerId}'`);
+            filters.push(where('trainerId', '==', options.trainerId));
+        }
+    } else if (options.fetchMode === 'my-bookings' || (role === 'client' && !options.trainerId)) {
         if (!options.clientId) {
             console.warn(
                 'SessionService: client query is missing clientId — falling back to auth UID.\n' +
@@ -91,25 +93,13 @@ export const buildSessionsQuery = (options: FetchSessionsOptions) => {
             );
         }
         const myClientId = options.clientId || userId;
-        filters.push(or(
-            where('clientIds', 'array-contains', myClientId),
-            where('client_ids', 'array-contains', myClientId),
-            where('uids', 'array-contains', myClientId),
-            where('clientId', '==', myClientId),
-            where('uids', 'array-contains', userId),  // for trial/legacy bookings using auth UID
-            where('serviceName', '==', 'Limitless Open'),
-            where('serviceName', '==', 'Limitless Open (Shared)'),
-            where('serviceType', '==', 'Limitless Open')
-        ));
+        // Migration complete: strictly check canonical clientIds array.
+        // Limitless Open global filters removed so clients only see sessions they booked.
+        filters.push(where('clientIds', 'array-contains', myClientId));
     } else if (role === 'trainer' || role === 'admin' || role === 'manager') {
         if (options.clientId) {
-            // Cover all legacy field names so no sessions are missed
-            filters.push(or(
-                where('clientIds', 'array-contains', options.clientId),
-                where('client_ids', 'array-contains', options.clientId),
-                where('uids', 'array-contains', options.clientId),
-                where('clientId', '==', options.clientId)
-            ));
+            // Strictly check canonical clientIds array
+            filters.push(where('clientIds', 'array-contains', options.clientId));
         }
     }
 

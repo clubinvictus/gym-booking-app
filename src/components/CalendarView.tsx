@@ -129,6 +129,15 @@ export const CalendarView = () => {
         return { weekStartDate: start, weekEndDate: end };
     }, [currentWeekStart, daysToShow]);
 
+    const resolvedTrainerId = selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
+                  (isTrainer && selectedTrainerId === 'my' ? profile?.trainerId : undefined);
+                  
+    const determineFetchMode = () => {
+        if (resolvedTrainerId) return 'trainer-schedule';
+        if (profile?.role === 'client') return 'my-bookings';
+        return 'all';
+    };
+
     // Use centralized session hook with range filtering
     const { sessions } = useSessions({
         role: profile?.role as any || 'admin',
@@ -138,8 +147,8 @@ export const CalendarView = () => {
         endDate: weekEndDate,
         includePast: true,
         pageSize: 500, // Enough to cover a busy week
-        trainerId: selectedTrainerId !== 'all' && selectedTrainerId !== 'my' ? selectedTrainerId : 
-                  (isTrainer && selectedTrainerId === 'my' ? profile?.trainerId : undefined)
+        trainerId: resolvedTrainerId,
+        fetchMode: determineFetchMode()
     });
     const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
     const { data: trainers } = useFirestore<any>('trainers');
