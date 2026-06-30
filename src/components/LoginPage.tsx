@@ -9,7 +9,7 @@ import {
     updateProfile, 
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { SITE_ID } from '../constants';
 
@@ -101,36 +101,35 @@ export const LoginPage = () => {
                 // Check if admin already created a client record for this email
                 const clientsRef = collection(db, 'clients');
                 const clientQ = query(clientsRef, where('email', '==', normalizedEmail));
-                const clientQuerySnapshot = await getDocs(clientQ);
+                let clientQuerySnapshot = await getDocs(clientQ);
+                
+                // Fallback to exact case if lowercase fails
+                if (clientQuerySnapshot.empty && user.email) {
+                    const fallbackQ = query(clientsRef, where('email', '==', user.email));
+                    clientQuerySnapshot = await getDocs(fallbackQ);
+                }
 
                 if (!clientQuerySnapshot.empty) {
                     console.log('Linking to existing client record');
                     clientId = clientQuerySnapshot.docs[0].id;
-                } else {
-                    console.log('Creating new client record');
-                    const newClientRef = await addDoc(collection(db, 'clients'), {
-                        name: clientName,
+                    
+                    // Create the user profile with the linked clientId
+                    await setDoc(doc(db, 'users', user.uid), {
                         email: normalizedEmail,
-                        phone: '', 
+                        role: 'client',
+                        name: clientName,
+                        clientId: clientId,
+                        phone: clientQuerySnapshot.docs[0].data().phone || '',
                         membership_tier: 'limitless',
-                        joined: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                        status: 'Active',
-                        siteId: SITE_ID,
-                        createdAt: new Date().toISOString()
+                        siteId: SITE_ID
                     });
-                    clientId = newClientRef.id;
+                } else {
+                    console.log('Access denied: Email not registered');
+                    await auth.signOut();
+                    setError('Access Denied: Your email is not registered. Please ask an admin to add you first.');
+                    setLoading(false);
+                    return;
                 }
-
-                // Create the user profile with the linked clientId
-                await setDoc(doc(db, 'users', user.uid), {
-                    email: normalizedEmail,
-                    role: 'client',
-                    name: clientName,
-                    clientId: clientId,
-                    phone: clientQuerySnapshot.empty ? '' : (clientQuerySnapshot.docs[0].data().phone || ''),
-                    membership_tier: 'limitless',
-                    siteId: SITE_ID
-                });
             }
             navigate('/dashboard');
         } catch (err) {
