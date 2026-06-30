@@ -212,22 +212,7 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
                 const now = new Date();
                 const isSelectedToday = selectedDate.toDateString() === now.toDateString();
 
-                // Sessions are already filtered by role and siteId from the server,
-                // but clients receive ALL Limitless Open sessions globally so they can join them in CalendarView.
-                // For the Dashboard, we strictly filter to ONLY sessions they are booked into.
-                const userSessions = (sessions || []).filter((s: any) => {
-                    if (!isClient) return true;
-                    const hasProfileClientId = !!profile?.clientId;
-                    const hasUserUid = !!user?.uid;
-                    return (
-                        (hasProfileClientId && s.clientId === profile?.clientId) || 
-                        (hasProfileClientId && s.clientIds?.includes(profile?.clientId)) || 
-                        (hasProfileClientId && s.client_ids?.includes(profile?.clientId)) || 
-                        (hasUserUid && s.uids?.includes(user?.uid)) || 
-                        (hasProfileClientId && s.attendees && s.attendees.includes(profile?.clientId)) ||
-                        (hasProfileClientId && s.clients && s.clients.some((c: any) => c.id === profile?.clientId))
-                    );
-                });
+                const userSessions = sessions || [];
 
                 // Parse a time string like "06:00 AM" or "05:00 PM" into minutes since midnight
                 // so that AM/PM sessions sort correctly (not lexicographically).

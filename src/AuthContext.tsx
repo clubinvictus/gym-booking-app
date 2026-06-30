@@ -55,11 +55,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     const userProfile = userSnap.data();
 
                     if (!userProfile?.clientId && firebaseUser.email) {
-                        const cq = query(
+                        const cq1 = query(
                             collection(db, 'clients'),
                             where('email', '==', firebaseUser.email.toLowerCase())
                         );
-                        const cSnap = await getDocs(cq);
+                        let cSnap = await getDocs(cq1);
+
+                        // If not found by lowercase, try exact case just in case the admin typed it with capitals
+                        if (cSnap.empty) {
+                            const cq2 = query(
+                                collection(db, 'clients'),
+                                where('email', '==', firebaseUser.email)
+                            );
+                            cSnap = await getDocs(cq2);
+                        }
 
                         if (!cSnap.empty) {
                             const clientDoc = cSnap.docs[0];
