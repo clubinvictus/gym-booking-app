@@ -7,7 +7,13 @@ export const ActivityLogView = () => {
     const { data: trainers } = useFirestore<any>('trainers');
 
     const today = new Date().toISOString().split('T')[0];
-    const [selectedDate, setSelectedDate] = useState<string>(today);
+    const getDaysAgo = (days: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - days);
+        return d.toISOString().split('T')[0];
+    };
+    const [startDate, setStartDate] = useState<string>(getDaysAgo(7));
+    const [endDate, setEndDate] = useState<string>(today);
     const [selectedTrainer, setSelectedTrainer] = useState<string>('All');
     const [clientSearch, setClientSearch] = useState<string>('');
 
@@ -23,10 +29,11 @@ export const ActivityLogView = () => {
         if (!logs) return [];
         return logs
             .filter((log: any) => {
-                // Date filter
-                if (selectedDate) {
+                // Date range filter
+                if (startDate || endDate) {
                     const logDate = toDate(log.timestamp).toISOString().split('T')[0];
-                    if (logDate !== selectedDate) return false;
+                    if (startDate && logDate < startDate) return false;
+                    if (endDate && logDate > endDate) return false;
                 }
 
                 // Trainer filter
@@ -44,7 +51,7 @@ export const ActivityLogView = () => {
                 return true;
             })
             .sort((a: any, b: any) => toDate(b.timestamp).getTime() - toDate(a.timestamp).getTime());
-    }, [logs, selectedDate, selectedTrainer, clientSearch]);
+    }, [logs, startDate, endDate, selectedTrainer, clientSearch]);
 
     if (loading) {
         return (
@@ -80,15 +87,19 @@ export const ActivityLogView = () => {
         });
     };
 
-    const handleQuickFilter = (type: 'today' | 'yesterday' | 'clear') => {
+    const handleQuickFilter = (type: 'today' | 'last7' | 'last30' | 'clear') => {
         if (type === 'today') {
-            setSelectedDate(today);
-        } else if (type === 'yesterday') {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            setSelectedDate(yesterday.toISOString().split('T')[0]);
+            setStartDate(today);
+            setEndDate(today);
+        } else if (type === 'last7') {
+            setStartDate(getDaysAgo(7));
+            setEndDate(today);
+        } else if (type === 'last30') {
+            setStartDate(getDaysAgo(30));
+            setEndDate(today);
         } else {
-            setSelectedDate('');
+            setStartDate('');
+            setEndDate('');
             setSelectedTrainer('All');
             setClientSearch('');
         }
@@ -104,14 +115,34 @@ export const ActivityLogView = () => {
             {/* Filter Bar */}
             <div className="card" style={{ padding: '24px', marginBottom: '32px', border: '4px solid #000' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-end' }}>
-                    <div style={{ flex: '1 1 200px' }}>
-                        <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', marginBottom: '8px', textTransform: 'uppercase' }}>Filter by Date</label>
+                    <div style={{ flex: '1 1 150px' }}>
+                        <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', marginBottom: '8px', textTransform: 'uppercase' }}>Start Date</label>
                         <div style={{ position: 'relative' }}>
                             <Calendar size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} className="text-muted" />
                             <input
                                 type="date"
-                                value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px 12px 10px 36px',
+                                    border: '2px solid #000',
+                                    borderRadius: 0,
+                                    fontSize: '0.9rem',
+                                    fontWeight: 600
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    <div style={{ flex: '1 1 150px' }}>
+                        <label style={{ display: 'block', fontWeight: 800, fontSize: '0.75rem', marginBottom: '8px', textTransform: 'uppercase' }}>End Date</label>
+                        <div style={{ position: 'relative' }}>
+                            <Calendar size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} className="text-muted" />
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
                                 style={{
                                     width: '100%',
                                     padding: '10px 12px 10px 36px',
@@ -172,10 +203,11 @@ export const ActivityLogView = () => {
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #eee' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #eee', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button onClick={() => handleQuickFilter('today')} className="button-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Today</button>
-                        <button onClick={() => handleQuickFilter('yesterday')} className="button-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Yesterday</button>
+                        <button onClick={() => handleQuickFilter('last7')} className="button-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Last 7 Days</button>
+                        <button onClick={() => handleQuickFilter('last30')} className="button-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Last 30 Days</button>
                     </div>
                     <button
                         onClick={() => handleQuickFilter('clear')}
