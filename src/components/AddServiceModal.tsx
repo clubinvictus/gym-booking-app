@@ -41,6 +41,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
     const [trainers, setTrainers] = useState<any[]>([]);
     const [maxCapacity, setMaxCapacity] = useState(1);
     const [allowedTiers, setAllowedTiers] = useState<string[]>(['limitless', 'limitless_open', 'classic_gym']);
+    const [isTrial, setIsTrial] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -58,9 +59,8 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
             setColor(editingService.color || '#000000');
             setMaxCapacity(editingService.max_capacity || 1);
             setAllowedTiers(editingService.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym']);
-            // Assuming we store assigned trainers on the service or check trainers' qualified services
-            // Let's assume for now we'll handle assignment on the service document
             setAssignedTrainerIds(editingService.assigned_trainer_ids || []);
+            setIsTrial(editingService.isTrial || editingService.name?.toLowerCase().includes('trial') || editingService.allowed_tiers?.includes('lead') || false);
         } else {
             setName('');
             setDuration('60');
@@ -68,6 +68,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
             setMaxCapacity(1);
             setAllowedTiers(['limitless', 'limitless_open', 'classic_gym']);
             setAssignedTrainerIds([]);
+            setIsTrial(false);
         }
     }, [editingService, isOpen]);
     if (!isOpen) return null;
@@ -88,6 +89,7 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                 max_capacity: maxCapacity,
                 allowed_tiers: allowedTiers,
                 assigned_trainer_ids: assignedTrainerIds,
+                isTrial,
                 siteId: SITE_ID
             };
 
@@ -336,6 +338,18 @@ export const AddServiceModal = ({ isOpen, onClose, onAdd, editingService }: AddS
                                 <span style={{ fontWeight: 700 }}>Lead (Trial Prospect)</span>
                             </label>
                         </div>
+                    </div>
+
+                    <div style={{ marginTop: '16px', padding: '12px', background: '#f8f9fa', border: '2px solid #000' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={isTrial}
+                                onChange={(e) => setIsTrial(e.target.checked)}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>SET AS TRIAL SERVICE (/book-trial page)</span>
+                        </label>
                     </div>
                 </div>
 

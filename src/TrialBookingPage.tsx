@@ -79,23 +79,26 @@ export const TrialBookingPage = () => {
         const fetchData = async () => {
             try {
                 // Fetch service info
-                const qService = query(
+                const qAllServices = query(
                     collection(db, 'services'),
-                    where('siteId', '==', SITE_ID),
-                    where('isTrial', '==', true)
+                    where('siteId', '==', SITE_ID)
                 );
-                const serviceSnap = await getDocs(qService);
+                const allServicesSnap = await getDocs(qAllServices);
+                let targetDoc = allServicesSnap.docs.find(d => d.data().isTrial === true || d.data().allowed_tiers?.includes('lead'));
+                if (!targetDoc) {
+                    targetDoc = allServicesSnap.docs.find(d => d.data().name?.toLowerCase().includes('trial'));
+                }
                 
-                if (serviceSnap.empty) {
+                if (!targetDoc) {
                     setError('Trial service not configured for this site.');
                     return;
                 }
 
-                const s = { id: serviceSnap.docs[0].id, ...(serviceSnap.docs[0].data() as any) };
+                const s = { id: targetDoc.id, ...(targetDoc.data() as any) };
                 setTrialService(s);
 
                 // Fetch trainers assigned to the trial service
-                const trainerIds = s.assigned_trainer_ids || [];
+                const trainerIds = s.assigned_trainer_ids || s.assignedTrainerIds || [];
                 if (trainerIds.length === 0) {
                     setError('No trainers assigned to the Trial service.');
                     return;
