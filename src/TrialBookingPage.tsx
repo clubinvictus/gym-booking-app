@@ -97,15 +97,9 @@ export const TrialBookingPage = () => {
                 const s = { id: targetDoc.id, ...(targetDoc.data() as any) };
                 setTrialService(s);
 
-                // Fetch trainers assigned to the trial service
-                const trainerIds = s.assigned_trainer_ids || s.assignedTrainerIds || [];
-                if (trainerIds.length === 0) {
-                    setError('No trainers assigned to the Trial service.');
-                    return;
-                }
-
-                const trainersSnap = await getDocs(query(collection(db, 'trainers'), where('__name__', 'in', trainerIds.slice(0, 10))));
-                setTrainers(trainersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                // Fetch trainers for the site
+                const trainersSnap = await getDocs(query(collection(db, 'trainers'), where('siteId', '==', SITE_ID)));
+                setTrainers(trainersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((t: any) => t.status !== 'Inactive'));
 
                 // Use real-time listeners for dynamic availability data
                 unsubSessions = onSnapshot(query(collection(db, 'sessions'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
@@ -146,7 +140,50 @@ export const TrialBookingPage = () => {
         const dateISO = date.toISOString();
         const available: any[] = [];
 
+        const assignedIds = trialService.assigned_trainer_ids || trialService.assignedTrainerIds || [];
+
         for (const trainer of trainers) {
+            // 1. SMART FILTER: Check Trial Permissions
+            const isAssigned = assignedIds.includes(trainer.id);
+            const hasTrialSpecialty = trainer.specialties?.some((sp: string) => 
+                sp === trialService.name || sp.toLowerCase().includes('trial')
+            );
+            if (!isAssigned && !hasTrialSpecialty) continue;
+
+            // 2. SMART FILTER: Check Working Schedule (availability)
+            const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayName = daysMap[date.getDay()];
+            const daySchedule = trainer.availability?.[dayName];
+            if (!daySchedule || !daySchedule.active) continue;
+
+            const convertTo24h = (tStr: string) => {
+                if (!tStr) return '';
+                if (tStr.includes('AM') || tStr.includes('PM')) {
+                    const [t, m] = tStr.split(' ');
+                    let [h, min] = t.split(':');
+                    if (h === '12') h = '00';
+                    if (m === 'PM') h = String(parseInt(h, 10) + 12).padStart(2, '0');
+                    return `${h.padStart(2, '0')}:${min}`;
+                }
+                return tStr;
+            };
+
+            const slotTime = convertTo24h(time);
+            let isWorking = false;
+            if (daySchedule.shifts && Array.isArray(daySchedule.shifts)) {
+                isWorking = daySchedule.shifts.some((shift: any) => {
+                    const start = convertTo24h(shift.start);
+                    const end = convertTo24h(shift.end);
+                    return slotTime >= start && slotTime < end;
+                });
+            } else if (daySchedule.start && daySchedule.end) {
+                const start = convertTo24h(daySchedule.start);
+                const end = convertTo24h(daySchedule.end);
+                isWorking = slotTime >= start && slotTime < end;
+            }
+            if (!isWorking) continue;
+
+            // 3. Check Off Days
             const isOff = offDays.some(od => od.trainerId === trainer.id && od.date === dateStr);
             if (isOff) continue;
 

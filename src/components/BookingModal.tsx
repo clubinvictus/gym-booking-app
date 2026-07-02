@@ -241,11 +241,17 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         return false;
     };
 
-    const availableTrainers = trainers.filter(t =>
-        (selectedService ? (t.specialties?.includes(selectedService)) : true) &&
-        isAvailable(t) &&
-        (excludedTrainerId ? t.id !== excludedTrainerId : true)
-    );
+    const availableTrainers = trainers.filter(t => {
+        if (!isAvailable(t)) return false;
+        if (excludedTrainerId && t.id === excludedTrainerId) return false;
+        if (selectedService) {
+            const hasSpecialty = t.specialties?.includes(selectedService) || 
+                                 (matchingService?.isTrial && t.specialties?.some((sp: string) => sp.toLowerCase().includes('trial')));
+            const isAssigned = matchingService?.assigned_trainer_ids?.includes(t.id) || matchingService?.assignedTrainerIds?.includes(t.id);
+            return hasSpecialty || isAssigned;
+        }
+        return true;
+    });
 
     const currentClientName = isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName);
     const matchingClient = clients?.find((c: any) => c.name === currentClientName);
