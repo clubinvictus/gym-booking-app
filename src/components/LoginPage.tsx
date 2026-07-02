@@ -6,18 +6,15 @@ import {
     signInWithPopup,
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
-    updateProfile, 
     sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { SITE_ID } from '../constants';
 
 export const LoginPage = () => {
-    const [isSignIn, setIsSignIn] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [resetSent, setResetSent] = useState(false);
@@ -45,7 +42,7 @@ export const LoginPage = () => {
                 await setDoc(doc(db, 'users', user.uid), {
                     email: normalizedEmail,
                     role: 'admin',
-                    name: user.displayName || fullName || 'Admin',
+                    name: user.displayName || 'Admin',
                     phone: adminQuerySnapshot.docs[0].data().phone || '',
                     siteId: adminQuerySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
@@ -64,7 +61,7 @@ export const LoginPage = () => {
                     email: normalizedEmail,
                     role: 'manager',
                     managerId: managerQuerySnapshot.docs[0].id,
-                    name: user.displayName || fullName || managerQuerySnapshot.docs[0].data().name,
+                    name: user.displayName || managerQuerySnapshot.docs[0].data().name,
                     phone: managerQuerySnapshot.docs[0].data().phone || '',
                     siteId: managerQuerySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
@@ -83,7 +80,7 @@ export const LoginPage = () => {
                     email: normalizedEmail,
                     role: 'trainer',
                     trainerId: querySnapshot.docs[0].id,
-                    name: user.displayName || fullName || querySnapshot.docs[0].data().name,
+                    name: user.displayName || querySnapshot.docs[0].data().name,
                     phone: querySnapshot.docs[0].data().phone || '',
                     siteId: querySnapshot.docs[0].data().siteId || SITE_ID
                 }, { merge: true });
@@ -95,7 +92,7 @@ export const LoginPage = () => {
             // 4. Default to Client
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (!userDoc.exists()) {
-                const clientName = user.displayName || fullName || 'New Client';
+                const clientName = user.displayName || 'New Client';
                 let clientId = '';
 
                 // Check if admin already created a client record for this email
@@ -166,14 +163,8 @@ export const LoginPage = () => {
         setError(null);
 
         try {
-            if (isSignIn) {
-                const result = await signInWithEmailAndPassword(auth, email, password);
-                await determineRoleAndRedirect(result.user);
-            } else {
-                const result = await createUserWithEmailAndPassword(auth, email, password);
-                await updateProfile(result.user, { displayName: fullName });
-                await determineRoleAndRedirect(result.user);
-            }
+            const result = await signInWithEmailAndPassword(auth, email, password);
+            await determineRoleAndRedirect(result.user);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -181,14 +172,25 @@ export const LoginPage = () => {
         }
     };
 
-    const toggleMode = () => {
-        setIsSignIn(!isSignIn);
-        setShowPassword(false);
+    const checkIfEmailApproved = async (emailStr: string) => {
+        const norm = emailStr.toLowerCase().trim();
+        const collections = ['clients', 'trainers', 'managers', 'admins'];
+        for (const colName of collections) {
+            const colRef = collection(db, colName);
+            const qNorm = query(colRef, where('email', '==', norm));
+            const snapNorm = await getDocs(qNorm);
+            if (!snapNorm.empty) return true;
+
+            const qExact = query(colRef, where('email', '==', emailStr.trim()));
+            const snapExact = await getDocs(qExact);
+            if (!snapExact.empty) return true;
+        }
+        return false;
     };
 
     const handleForgotPassword = async () => {
         if (!email) {
-            setError("Please enter your email address first.");
+            setError("Please enter your email address in the field below first.");
             return;
         }
 
@@ -200,7 +202,28 @@ export const LoginPage = () => {
             await sendPasswordResetEmail(auth, email);
             setResetSent(true);
         } catch (err: any) {
-            setError(err.message);
+            if (
+                err.code === 'auth/user-not-found' || 
+                err.code === 'auth/invalid-credential' || 
+                (err.message && err.message.toLowerCase().includes('not found'))
+            ) {
+                try {
+                    const isApproved = await checkIfEmailApproved(email);
+                    if (!isApproved) {
+                        setError('Access Denied: Your email is not registered in the system. Please ask an admin to add you first.');
+                    } else {
+                        const randomPass = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10) + "!A1a";
+                        await createUserWithEmailAndPassword(auth, email, randomPass);
+                        await sendPasswordResetEmail(auth, email);
+                        await auth.signOut();
+                        setResetSent(true);
+                    }
+                } catch (subErr: any) {
+                    setError(subErr.message || 'Failed to initialize account.');
+                }
+            } else {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -254,47 +277,6 @@ export const LoginPage = () => {
                     <span style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '0 12px', color: '#999', fontSize: '0.8rem' }}>OR</span>
                 </div>
 
-                <div style={{
-                    display: 'flex',
-                    background: '#f0f0f0',
-                    padding: '4px',
-                    borderRadius: '6px',
-                    marginBottom: '32px'
-                }}>
-                    <button
-                        onClick={toggleMode}
-                        style={{
-                            flex: 1,
-                            padding: '10px',
-                            border: 'none',
-                            borderRadius: '4px',
-                            background: isSignIn ? '#000' : 'transparent',
-                            color: isSignIn ? '#fff' : '#000',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            fontSize: '0.9rem'
-                        }}
-                    >
-                        SIGN IN
-                    </button>
-                    <button
-                        onClick={toggleMode}
-                        style={{
-                            flex: 1,
-                            padding: '10px',
-                            border: 'none',
-                            borderRadius: '4px',
-                            background: !isSignIn ? '#000' : 'transparent',
-                            color: !isSignIn ? '#fff' : '#000',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            fontSize: '0.9rem'
-                        }}
-                    >
-                        SIGN UP
-                    </button>
-                </div>
-
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {error && (
                         <div style={{ padding: '12px', background: '#fff1f1', border: '2px solid #ff4444', color: '#ff4444', fontWeight: 800, fontSize: '0.8rem' }}>
@@ -304,28 +286,7 @@ export const LoginPage = () => {
 
                     {resetSent && (
                         <div style={{ padding: '12px', background: '#e6fffa', border: '2px solid #000', color: '#000', fontWeight: 800, fontSize: '0.85rem' }}>
-                            Password reset email sent! Check your inbox.
-                        </div>
-                    )}
-
-                    {!isSignIn && (
-                        <div>
-                            <label style={{ display: 'block', fontWeight: 800, marginBottom: '8px', fontSize: '0.85rem' }}>FULL NAME</label>
-                            <input
-                                type="text"
-                                required
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '12px',
-                                    border: '2px solid #000',
-                                    borderRadius: '6px',
-                                    fontSize: '1rem',
-                                    fontWeight: 600
-                                }}
-                                placeholder="John Doe"
-                            />
+                            Password setup / reset email sent! Please check your inbox.
                         </div>
                     )}
 
@@ -387,28 +348,32 @@ export const LoginPage = () => {
                                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
-                        {isSignIn && (
-                            <button
-                                type="button"
-                                onClick={handleForgotPassword}
-                                style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: '#666',
-                                    fontSize: '0.8rem',
-                                    marginTop: '8px',
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                    textDecoration: 'underline'
-                                }}
-                            >
-                                Forgot your password? Reset it here.
-                            </button>
-                        )}
                     </div>
-                    <button type="submit" disabled={loading} className="button-primary" style={{ marginTop: '12px', height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                        {loading ? 'PROCESSING...' : (isSignIn ? <><LogIn size={20} /> SIGN IN</> : <><UserPlus size={20} /> CREATE ACCOUNT</>)}
+
+                    <button type="submit" disabled={loading} className="button-primary" style={{ marginTop: '4px', height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        {loading ? 'PROCESSING...' : <><LogIn size={20} /> SIGN IN</>}
                     </button>
+
+                    <div style={{ marginTop: '8px', padding: '16px', background: '#f8f9fa', border: '1px solid #ddd', borderRadius: '6px', textAlign: 'center' }}>
+                        <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#555', fontWeight: 600 }}>
+                            First time logging in without Google? Or forgot password?
+                        </p>
+                        <button
+                            type="button"
+                            onClick={handleForgotPassword}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#000',
+                                fontSize: '0.85rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                textDecoration: 'underline'
+                            }}
+                        >
+                            Click here to set or reset your password
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
