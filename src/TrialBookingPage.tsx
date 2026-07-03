@@ -151,7 +151,7 @@ export const TrialBookingPage = () => {
             if (!isAssigned && !hasTrialSpecialty) continue;
 
             // 2. SMART FILTER: Check Working Schedule (availability)
-            const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
             const dayName = daysMap[date.getDay()];
             const daySchedule = trainer.availability?.[dayName];
             if (!daySchedule || !daySchedule.active) continue;
