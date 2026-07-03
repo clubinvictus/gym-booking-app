@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     User, 
     ChevronLeft, 
@@ -132,43 +132,89 @@ export const TrialBookingPage = () => {
         };
     }, []);
 
-    // Calendar Helper
-    const getSlotAvailability = (date: Date, time: string) => {
+    // Pre-calculate lookup maps and eligible trainers in useMemo to avoid massive O(n^2) calculations on re-render
+    const eligibleTrainers = useMemo(() => {
         if (!trialService) return [];
-        
-        const dateStr = date.toISOString().split('T')[0];
-        const dateISO = date.toISOString();
-        const available: any[] = [];
-
         const assignedIds = trialService.assigned_trainer_ids || trialService.assignedTrainerIds || [];
-
-        for (const trainer of trainers) {
-            // 1. SMART FILTER: Check Trial Permissions
+        return trainers.filter(trainer => {
             const isAssigned = assignedIds.includes(trainer.id);
             const hasTrialSpecialty = trainer.specialties?.some((sp: string) => 
                 sp === trialService.name || sp.toLowerCase().includes('trial')
             );
-            if (!isAssigned && !hasTrialSpecialty) continue;
+            return isAssigned || hasTrialSpecialty;
+        });
+    }, [trainers, trialService]);
 
-            // 2. SMART FILTER: Check Working Schedule (availability)
-            const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            const dayName = daysMap[date.getDay()];
+    const offDaysMap = useMemo(() => {
+        const set = new Set<string>();
+        offDays.forEach(od => {
+            if (od.trainerId && od.date) set.add(`${od.trainerId}_${od.date}`);
+        });
+        return set;
+    }, [offDays]);
+
+    const busySlotsMap = useMemo(() => {
+        const set = new Set<string>();
+        busySlots.forEach(bs => {
+            if (bs.trainerId && bs.time && bs.date) {
+                const dStr = bs.date.split('T')[0];
+                set.add(`${bs.trainerId}_${dStr}_${bs.time}`);
+            }
+        });
+        return set;
+    }, [busySlots]);
+
+    const parsedSessions = useMemo(() => {
+        return sessions.map(s => {
+            let dateStr = '';
+            let timeStr = s.time || '';
+            if (s.startTime) {
+                const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
+                dateStr = start.toDateString();
+                const h = String(start.getHours()).padStart(2, '0');
+                const m = String(start.getMinutes()).padStart(2, '0');
+                timeStr = `${h}:${m}`;
+            } else if (s.date) {
+                const start = new Date(s.date);
+                dateStr = start.toDateString();
+            }
+            return {
+                trainerId: s.trainerId,
+                serviceId: s.serviceId,
+                clientCount: s.clients?.length || 1,
+                dateStr,
+                timeStr
+            };
+        });
+    }, [sessions]);
+
+    const convertTo24h = useCallback((tStr: string) => {
+        if (!tStr) return '';
+        if (tStr.includes('AM') || tStr.includes('PM')) {
+            const [t, m] = tStr.split(' ');
+            let [h, min] = t.split(':');
+            if (h === '12') h = '00';
+            if (m === 'PM') h = String(parseInt(h, 10) + 12).padStart(2, '0');
+            return `${h.padStart(2, '0')}:${min}`;
+        }
+        return tStr;
+    }, []);
+
+    // Calendar Helper
+    const getSlotAvailability = useCallback((date: Date, time: string) => {
+        if (!trialService || eligibleTrainers.length === 0) return [];
+        
+        const dateStr = date.toISOString().split('T')[0];
+        const dateToDateStr = date.toDateString();
+        const available: any[] = [];
+        const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayName = daysMap[date.getDay()];
+        const slotTime = convertTo24h(time);
+
+        for (const trainer of eligibleTrainers) {
             const daySchedule = trainer.availability?.[dayName];
             if (!daySchedule || !daySchedule.active) continue;
 
-            const convertTo24h = (tStr: string) => {
-                if (!tStr) return '';
-                if (tStr.includes('AM') || tStr.includes('PM')) {
-                    const [t, m] = tStr.split(' ');
-                    let [h, min] = t.split(':');
-                    if (h === '12') h = '00';
-                    if (m === 'PM') h = String(parseInt(h, 10) + 12).padStart(2, '0');
-                    return `${h.padStart(2, '0')}:${min}`;
-                }
-                return tStr;
-            };
-
-            const slotTime = convertTo24h(time);
             let isWorking = false;
             if (daySchedule.shifts && Array.isArray(daySchedule.shifts)) {
                 isWorking = daySchedule.shifts.some((shift: any) => {
@@ -183,44 +229,37 @@ export const TrialBookingPage = () => {
             }
             if (!isWorking) continue;
 
-            // 3. Check Off Days
-            const isOff = offDays.some(od => od.trainerId === trainer.id && od.date === dateStr);
-            if (isOff) continue;
+            if (offDaysMap.has(`${trainer.id}_${dateStr}`)) continue;
+            if (busySlotsMap.has(`${trainer.id}_${dateStr}_${time}`)) continue;
 
-            const existingSessions = sessions.filter(s => {
-                if (s.trainerId !== trainer.id) return false;
-                if (s.startTime) {
-                    const start = s.startTime.toDate ? s.startTime.toDate() : new Date(s.startTime);
-                    const sessionTimeStr = start.toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true
-                    }).replace(/\u202F/g, ' ');
-                    return start.toDateString() === date.toDateString() && sessionTimeStr === time;
-                }
-                return s.time === time && s.date === dateISO;
-            });
-            
+            // Check existing sessions
+            const existing = parsedSessions.filter(s => s.trainerId === trainer.id && s.dateStr === dateToDateStr && s.timeStr === time);
             let hasConflict = false;
-            if (existingSessions.length > 0) {
-                const session = existingSessions[0];
+            if (existing.length > 0) {
+                const session = existing[0];
                 const maxCap = trialService.max_capacity || 1;
-                const currentCount = session.clients?.length || 1;
-                
-                // Reject if full, or if the existing session is a different service type
-                if (currentCount >= maxCap || session.serviceId !== trialService.id) {
+                if (session.clientCount >= maxCap || session.serviceId !== trialService.id) {
                     hasConflict = true;
                 }
             }
             if (hasConflict) continue;
 
-            const isBusy = busySlots.some(bs => bs.trainerId === trainer.id && bs.time === time && bs.date === dateISO);
-            if (isBusy) continue;
-
             available.push({ id: trainer.id, name: trainer.name });
         }
         return available;
-    };
+    }, [trialService, eligibleTrainers, offDaysMap, busySlotsMap, parsedSessions, convertTo24h]);
+
+    const gridAvailability = useMemo(() => {
+        const map: { [key: string]: any[] } = {};
+        for (let i = 0; i < daysToShow; i++) {
+            const date = new Date(currentWeekStart);
+            date.setDate(date.getDate() + i);
+            for (const time of TIME_SLOTS) {
+                map[`${i}-${time}`] = getSlotAvailability(date, time);
+            }
+        }
+        return map;
+    }, [currentWeekStart, daysToShow, getSlotAvailability]);
 
     const handleSlotClick = (date: Date, time: string, availableTrainers: any[]) => {
         if (availableTrainers.length === 0) return;
@@ -395,7 +434,7 @@ export const TrialBookingPage = () => {
                                                 slotDateTime.setHours(hours, minutes, 0, 0);
                                                 
                                                 const isPast = slotDateTime < new Date();
-                                                const availableTrainers = getSlotAvailability(date, time);
+                                                const availableTrainers = gridAvailability[`${i}-${time}`] || [];
                                                 const isAvailable = availableTrainers.length > 0 && !isPast;
 
                                                 return (
