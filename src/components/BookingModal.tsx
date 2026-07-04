@@ -241,17 +241,9 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         return false;
     };
 
-    const availableTrainers = trainers.filter(t => {
-        if (!isAvailable(t)) return false;
-        if (excludedTrainerId && t.id === excludedTrainerId) return false;
-        if (selectedService) {
-            const hasSpecialty = t.specialties?.includes(selectedService) || 
-                                 (matchingService?.isTrial && t.specialties?.some((sp: string) => sp.toLowerCase().includes('trial')));
-            const isAssigned = matchingService?.assigned_trainer_ids?.includes(t.id) || matchingService?.assignedTrainerIds?.includes(t.id);
-            return hasSpecialty || isAssigned;
-        }
-        return true;
-    });
+    const currentServiceName = selectedService || editingSession?.serviceName;
+    const matchingService = services?.find((s: any) => s.name === currentServiceName);
+    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym'];
 
     const currentClientName = isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName);
     const matchingClient = clients?.find((c: any) => c.name === currentClientName);
@@ -265,11 +257,19 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         });
     }, [services, isClient, clientTier]);
 
-    const currentServiceName = selectedService || editingSession?.serviceName;
-    const matchingService = services?.find((s: any) => s.name === currentServiceName);
-    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym'];
-
     const isTierRestricted = !!(currentServiceName && currentClientName && !allowedTiersForService.includes(clientTier));
+
+    const availableTrainers = trainers.filter(t => {
+        if (!isAvailable(t)) return false;
+        if (excludedTrainerId && t.id === excludedTrainerId) return false;
+        if (selectedService) {
+            const hasSpecialty = t.specialties?.includes(selectedService) || 
+                                 (matchingService?.isTrial && t.specialties?.some((sp: string) => sp.toLowerCase().includes('trial')));
+            const isAssigned = matchingService?.assigned_trainer_ids?.includes(t.id) || matchingService?.assignedTrainerIds?.includes(t.id);
+            return hasSpecialty || isAssigned;
+        }
+        return true;
+    });
 
     useEffect(() => {
         if (isTrainerOnly) {
