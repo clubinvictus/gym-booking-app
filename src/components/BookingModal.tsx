@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon } from 'lucide-react';
-import { db } from '../firebase';
-import { addDoc, collection, doc, updateDoc, writeBatch, getDocs, query, where, Timestamp, arrayUnion } from 'firebase/firestore';
+import { db, functions } from '../firebase';
+import { addDoc, collection, doc, updateDoc, getDocs, query, where, Timestamp, arrayUnion } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '../AuthContext';
 import { SITE_ID } from '../constants';
 import { useFirestore } from '../hooks/useFirestore';
@@ -718,10 +719,6 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
         if (editingSession) {
                 if (editMode === 'future' && editingSession.seriesId) {
-                    const endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
-                    const todayStart = new Date();
-                    todayStart.setHours(0, 0, 0, 0);
-
                     const effectiveDays = selectedDays.length > 0 ? selectedDays : [computedDayIdx];
                     const sortedDays = [...effectiveDays].sort((a, b) => a - b);
                     const dayNames = sortedDays.map(d => {
@@ -730,96 +727,29 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     });
                     const newRecurringDetails = `Weekly on ${dayNames.join(', ')}`;
 
-                    // Step 1: Delete all future sessions in this series
-                    const deleteSnap = await getDocs(
-                        query(
-                            collection(db, 'sessions'),
-                            where('seriesId', '==', editingSession.seriesId),
-                            where('date', '>=', editingSession.date),
-                            where('siteId', '==', SITE_ID)
-                        )
-                    );
-                    let deleteBatch = writeBatch(db);
-                    let delCount = 0;
-                    deleteSnap.forEach((docSnap) => {
-                        deleteBatch.delete(docSnap.ref);
-                        delCount++;
-                        if (delCount >= 450) {
-                            deleteBatch.commit();
-                            deleteBatch = writeBatch(db);
-                            delCount = 0;
-                        }
-                    });
-                    if (delCount > 0) await deleteBatch.commit();
-
-                    // Step 2: Recreate from start date with new days
                     const trainer = trainers.find((t: any) => t.name === selectedTrainer);
                     const service = services.find((s: any) => s.name === (selectedService || editingSession?.serviceName));
-                    const newSeriesData = (date: Date, dayIdx: number) => {
-                        const currentClientIds = [editingSession.clientId].filter(Boolean) as string[];
-                        
-                        // --- STANDARDIZED TIMESTAMPS ---
-                        const startDate = new Date(date);
-                        const [timePart, modifier] = selectedTime.split(' ');
-                        let [hours, minutes] = timePart.split(':').map(Number);
-                        if (modifier === 'PM' && hours !== 12) hours += 12;
-                        if (modifier === 'AM' && hours === 12) hours = 0;
-                        startDate.setHours(hours, minutes, 0, 0);
 
-                        const endDate = new Date(startDate);
-                        endDate.setMinutes(endDate.getMinutes() + 60);
-
-                        return {
-                            clientName: editingSession.clientName,
-                            clientIds: currentClientIds,
-                            clients: editingSession.clients || [{ id: editingSession.clientId, name: editingSession.clientName }],
-                            trainerName: selectedTrainer,
-                            trainerId: trainer?.id || editingSession.trainerId,
-                            serviceName: selectedService || editingSession.serviceName,
-                            serviceId: service?.id || editingSession.serviceId,
-                            startTime: Timestamp.fromDate(startDate), // NEW
-                            endTime: Timestamp.fromDate(endDate),     // NEW
-                            time: selectedTime,
-                            day: dayIdx,
-                            date: date.toISOString(),
-                            status: 'Scheduled',
-                            siteId: SITE_ID,
-                            seriesId: editingSession.seriesId,
-                            recurringDetails: newRecurringDetails,
-                            createdAt: new Date().toISOString(),
-                            createdBy: profile?.name || 'Unknown User'
-                        };
-                    };
-
-                    let sessionBatch = writeBatch(db);
-                    let opCount = 0;
-                    const commitIfFull = async () => {
-                        if (opCount >= 450) {
-                            await sessionBatch.commit();
-                            sessionBatch = writeBatch(db);
-                            opCount = 0;
-                        }
-                    };
-
-                    for (const dayIdx of effectiveDays) {
-                        let currentDate = new Date(baseDate);
-                        const currentDay = currentDate.getDay();
-                        const targetDay = (dayIdx + 1) % 7;
-                        let diff = targetDay - currentDay;
-                        if (diff < 0) diff += 7;
-                        if (diff === 0 && currentDate < todayStart) diff = 7;
-                        currentDate.setDate(currentDate.getDate() + diff);
-                        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
-
-                        while (currentDate < endDate) {
-                            sessionBatch.set(doc(collection(db, 'sessions')), newSeriesData(new Date(currentDate), dayIdx));
-                            opCount++;
-                            await commitIfFull();
-                            currentDate.setDate(currentDate.getDate() + 7);
-                        }
-                    }
-                    if (opCount > 0) await sessionBatch.commit();
-                    await logActivity('rescheduled', getBookingData(baseDate, computedDayIdx), newRecurringDetails);
+                    // Deletes all future occurrences of this series and recreates them with the
+                    // new day selection, server-side in one call (see functions/index.js).
+                    const updateRecurringSeriesFuture = httpsCallable(functions, 'updateRecurringSeriesFuture');
+                    await updateRecurringSeriesFuture({
+                        siteId: SITE_ID,
+                        seriesId: editingSession.seriesId,
+                        fromDateISO: editingSession.date,
+                        time: selectedTime,
+                        baseDateISO: baseDate.toISOString(),
+                        effectiveDays,
+                        trainerId: trainer?.id || editingSession.trainerId,
+                        trainerName: selectedTrainer,
+                        serviceId: service?.id || editingSession.serviceId,
+                        serviceName: selectedService || editingSession.serviceName,
+                        clientId: editingSession.clientId,
+                        clientName: editingSession.clientName,
+                        clientsArray: editingSession.clients,
+                        recurringDetails: newRecurringDetails,
+                        createdBy: profile?.name || 'Unknown User'
+                    });
                 } else {
                     const updatedData = getBookingData(baseDate, computedDayIdx);
                     await updateDoc(doc(db, 'sessions', editingSession.id), updatedData);
@@ -840,8 +770,6 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     recurringDetails = `Weekly on ${dayNames.join(', ')}`;
                 }
 
-                // Admin/managers: always weekly, 2 years out
-                // Clients: max 14 days
                 // Admin/managers: always weekly, 2 years out
                 // Clients: max 14 days
                 const endDate = isClient
@@ -865,105 +793,33 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     phone: isClient ? (profile?.phone || null) : (currentClient?.phone || null)
                 };
 
-                // Fetch ALL existing sessions for this trainer to handle group appends
-                const existingSnap = await getDocs(
-                    query(
-                        collection(db, 'sessions'), 
-                        where('trainerId', '==', trainer?.id),
-                        where('siteId', '==', SITE_ID)
-                    )
-                );
-                const existingMap = new Map<string, { id: string, clients: any[], serviceName: string }>();
-                existingSnap.forEach(d => {
-                    const data = d.data();
-                    const key = `${new Date(data.date).toDateString()}|${data.time}`;
-                    existingMap.set(key, { id: d.id, clients: data.clients || [], serviceName: data.serviceName });
-                });
+                const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
 
-                const getSeriesData = (date: Date, dayIdx: number) => ({
-                    ...getBookingData(date, dayIdx),
+                // Creates/appends every occurrence server-side in a handful of batched writes,
+                // instead of one client-side write per occurrence (see functions/index.js).
+                const createRecurringSeries = httpsCallable(functions, 'createRecurringSeries');
+                await createRecurringSeries({
+                    siteId: SITE_ID,
+                    time: selectedTime,
+                    baseDateISO: baseDate.toISOString(),
+                    effectiveDays: selectedDays,
+                    frequency: effectiveFrequency,
+                    endDateISO: endDate.toISOString(),
+                    trainerId: trainer?.id || null,
+                    trainerName: selectedTrainer,
+                    serviceId: activeService?.id || null,
+                    serviceName: currentServiceName,
+                    clientId: clientObj.id,
+                    clientName: clientObj.name,
+                    clientEmail: clientObj.email,
+                    clientPhone: clientObj.phone,
+                    clientUid: clientObj.uid,
+                    bookingType,
+                    createdBy: profile?.name || 'Unknown User',
+                    conflictKeysToSkip: skipKeys ? Array.from(skipKeys) : [],
                     seriesId,
                     recurringDetails
                 });
-
-                let sessionBatch = writeBatch(db);
-                let opCount = 0;
-
-                const commitIfFull = async () => {
-                    if (opCount >= 450) { // Safety margin
-                        await sessionBatch.commit();
-                        sessionBatch = writeBatch(db);
-                        opCount = 0;
-                    }
-                };
-
-                const processDate = async (currentDate: Date, dayIdx: number) => {
-                    const key = `${currentDate.toDateString()}|${selectedTime}`;
-                    const existing = existingMap.get(key);
-
-                    if (existing) {
-                        // If same service and has room, append
-                        if (existing.serviceName === currentServiceName && existing.clients.length < (activeService?.max_capacity || 1)) {
-                            // Only append if not already there
-                            if (!existing.clients.some((c: any) => c.id === clientObj.id)) {
-                                sessionBatch.update(doc(db, 'sessions', existing.id), {
-                                    clients: [...existing.clients, clientObj],
-                                    clientIds: Array.from(new Set([...existing.clients.map((c: any) => c.id), clientObj.id])).filter(Boolean)
-                                });
-                                opCount++;
-                            }
-                        }
-                        // Otherwise skip (clash logic already handled or we just don't overwrite)
-                    } else {
-                        // Create new
-                        sessionBatch.set(doc(collection(db, 'sessions')), getSeriesData(new Date(currentDate), dayIdx));
-                        opCount++;
-                    }
-                    await commitIfFull();
-                };
-
-                if (effectiveFrequency === 'daily') {
-                    let currentDate = new Date(baseDate);
-                    const todayStart = new Date();
-                    todayStart.setHours(0, 0, 0, 0);
-                    if (currentDate < todayStart) currentDate = new Date(todayStart);
-
-                    while (currentDate < endDate) {
-                        const sessDay = (currentDate.getDay() + 6) % 7;
-                        const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
-                        const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
-                        
-                        if (!skipKeys || !skipKeys.has(skipKey)) {
-                            await processDate(new Date(currentDate), sessDay);
-                        }
-                        currentDate.setDate(currentDate.getDate() + 1);
-                    }
-                } else {
-                    const todayStart = new Date();
-                    todayStart.setHours(0, 0, 0, 0);
-
-                    for (const dayIdx of selectedDays) {
-                        let currentDate = new Date(baseDate);
-                        const currentDay = currentDate.getDay();
-                        const targetDay = (dayIdx + 1) % 7;
-                        let diff = targetDay - currentDay;
-                        if (diff < 0) diff += 7;
-                        currentDate.setDate(currentDate.getDate() + diff);
-
-                        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
-
-                        while (currentDate < endDate) {
-                            const skipKey = `${currentDate.toDateString()}|${selectedTime}`;
-                            const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
-                            if (!skipKeys || !skipKeys.has(skipKey)) {
-                                await processDate(new Date(currentDate), dayIdx);
-                            }
-                            currentDate.setDate(currentDate.getDate() + 7);
-                        }
-                    }
-                }
-                if (opCount > 0) await sessionBatch.commit();
-                await logActivity('booked', getBookingData(baseDate, selectedDay), recurringDetails);
             } else {
                 // Single booking
                 const currentDay = baseDate.getDay();

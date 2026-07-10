@@ -129,10 +129,14 @@ exports.onSessionWritten = functions.firestore
         const data = isDelete ? beforeData : afterData;
         const sessionId = context.params.sessionId;
 
-        // Sync trainer_busy_slots collection for conflict detection
+        // Sync trainer_busy_slots collection for conflict detection.
+        // Bulk recurring-series writes (createRecurringSeries / updateRecurringSeriesFuture)
+        // already write the matching trainer_busy_slots doc in the same batch as the session,
+        // and mark the session with busySlotSynced so we don't redundantly re-write it here
+        // via ~hundreds of separate trigger invocations for one series action.
         if (isDelete) {
             await db.collection('trainer_busy_slots').doc(sessionId).delete();
-        } else {
+        } else if (!data.busySlotSynced) {
             await db.collection('trainer_busy_slots').doc(sessionId).set({
                 trainerId: data.trainerId,
                 date: data.date,
@@ -565,7 +569,324 @@ exports.processTrialBooking = functions.region('us-central1').https.onCall(async
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        
+
         throw new functions.https.HttpsError('internal', `Backend error: ${error.message || 'Unknown failure'}`);
     }
+});
+
+/**
+ * Firestore write-limit safety margin, matching the client's existing convention.
+ */
+const BATCH_SAFETY_LIMIT = 450;
+
+/**
+ * Builds a session document, mirroring BookingModal.tsx's getBookingData()/getSeriesData().
+ */
+function buildSeriesSessionData({ date, dayIdx, time, trainerId, trainerName, serviceId, serviceName,
+    clientId, clientName, clientEmail, clientPhone, clientUid, bookingType, siteId, createdBy, seriesId, recurringDetails }) {
+
+    const [timePart, modifier] = time.split(' ');
+    let [hours, minutes] = timePart.split(':').map(Number);
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+
+    const startDate = new Date(date);
+    startDate.setHours(hours, minutes, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setMinutes(endDate.getMinutes() + 60);
+
+    const clientObj = bookingType === 'block'
+        ? { id: 'blocked', name: 'Blocked', email: '', uid: 'blocked', phone: '' }
+        : { id: clientId || null, name: clientName || 'Unknown Client', email: clientEmail || null, uid: clientUid || null, phone: clientPhone || null };
+
+    return {
+        clients: [clientObj],
+        clientIds: [clientObj.id].filter(Boolean),
+        clientName: clientObj.name,
+        clientPhone: clientObj.phone || null,
+        trainerName,
+        trainerId: trainerId || null,
+        serviceName: bookingType === 'block' ? 'Blocked Slot' : serviceName,
+        serviceId: bookingType === 'block' ? 'blocked' : (serviceId || null),
+        startTime: admin.firestore.Timestamp.fromDate(startDate),
+        endTime: admin.firestore.Timestamp.fromDate(endDate),
+        time,
+        day: dayIdx,
+        date: date.toISOString(),
+        status: bookingType === 'block' ? 'Blocked' : 'Scheduled',
+        siteId,
+        seriesId,
+        recurringDetails,
+        createdAt: new Date().toISOString(),
+        createdBy: createdBy || 'Unknown User',
+        busySlotSynced: true
+    };
+}
+
+/**
+ * createRecurringSeries: Bulk-creates a recurring session series (staff: weekly, up to 2 years;
+ * clients: capped at 14 days by the client before calling this).
+ *
+ * Replaces BookingModal.tsx's client-side writeBatch loop for this path. The client-side loop
+ * wrote one session document at a time via the client SDK, and each resulting write independently
+ * triggered onSessionWritten (a separate Cloud Function invocation per document, each mirroring
+ * its own trainer_busy_slots doc). For a 2-year weekly series across a few weekdays that's up to
+ * ~300 documents and ~300 separate trigger invocations. This function does the equivalent work
+ * server-side in a handful of batched Admin SDK writes, covering sessions AND trainer_busy_slots
+ * together, so the busy-slot mirror is consistent the moment this call returns instead of trailing
+ * in via ~300 straggling trigger invocations.
+ *
+ * All validation (conflicts, capacity, tier restrictions, confirmation) already happens client-side
+ * before this is called, exactly as before — this function only performs the writes.
+ */
+exports.createRecurringSeries = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const {
+        siteId, time, baseDateISO, effectiveDays, frequency, endDateISO,
+        trainerId, trainerName, serviceId, serviceName,
+        clientId, clientName, clientEmail, clientPhone, clientUid,
+        bookingType, createdBy, conflictKeysToSkip, seriesId, recurringDetails
+    } = data;
+
+    if (!time || !baseDateISO || !endDateISO || !Array.isArray(effectiveDays) || !seriesId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    const baseDate = new Date(baseDateISO);
+    const endDate = new Date(endDateISO);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const skipKeys = new Set(conflictKeysToSkip || []);
+
+    // Mirror the client's existingMap: find sessions this trainer already has, so we can
+    // append to a same-service session with room instead of creating a duplicate.
+    const existingSnap = await db.collection('sessions')
+        .where('trainerId', '==', trainerId)
+        .where('siteId', '==', siteId)
+        .get();
+
+    const existingMap = new Map();
+    existingSnap.forEach(d => {
+        const s = d.data();
+        const key = `${new Date(s.date).toDateString()}|${s.time}`;
+        existingMap.set(key, { id: d.id, clients: s.clients || [], serviceName: s.serviceName });
+    });
+
+    let batch = db.batch();
+    let opCount = 0;
+    let created = 0;
+    let appended = 0;
+
+    const commitIfFull = async () => {
+        if (opCount >= BATCH_SAFETY_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            opCount = 0;
+        }
+    };
+
+    const activeServiceSnap = await db.collection('services').doc(serviceId || '').get();
+    const maxCapacity = activeServiceSnap.exists ? (activeServiceSnap.data().max_capacity || 1) : 1;
+
+    const processDate = async (currentDate, dayIdx) => {
+        const key = `${currentDate.toDateString()}|${time}`;
+        if (skipKeys.has(key)) return;
+
+        const existing = existingMap.get(key);
+        if (existing) {
+            if (existing.serviceName === serviceName && existing.clients.length < maxCapacity) {
+                if (!existing.clients.some(c => c.id === clientId)) {
+                    const clientObj = { id: clientId || null, name: clientName || 'Unknown Client', email: clientEmail || null, uid: clientUid || null, phone: clientPhone || null };
+                    const newClients = [...existing.clients, clientObj];
+                    const newClientIds = Array.from(new Set(newClients.map(c => c.id))).filter(Boolean);
+                    batch.update(db.collection('sessions').doc(existing.id), { clients: newClients, clientIds: newClientIds });
+                    opCount++;
+                    appended++;
+                    await commitIfFull();
+                }
+            }
+            return;
+        }
+
+        const sessionRef = db.collection('sessions').doc();
+        const sessionData = buildSeriesSessionData({
+            date: new Date(currentDate), dayIdx, time, trainerId, trainerName, serviceId, serviceName,
+            clientId, clientName, clientEmail, clientPhone, clientUid, bookingType, siteId, createdBy, seriesId, recurringDetails
+        });
+        batch.set(sessionRef, sessionData);
+        batch.set(db.collection('trainer_busy_slots').doc(sessionRef.id), {
+            trainerId: sessionData.trainerId,
+            date: sessionData.date,
+            time: sessionData.time,
+            siteId: sessionData.siteId
+        });
+        opCount += 2;
+        created++;
+        await commitIfFull();
+    };
+
+    if (frequency === 'daily') {
+        let currentDate = new Date(baseDate < todayStart ? todayStart : baseDate);
+        while (currentDate < endDate) {
+            const sessDay = (currentDate.getDay() + 6) % 7;
+            await processDate(new Date(currentDate), sessDay);
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+    } else {
+        for (const dayIdx of effectiveDays) {
+            let currentDate = new Date(baseDate);
+            const currentDay = currentDate.getDay();
+            const targetDay = (dayIdx + 1) % 7;
+            let diff = targetDay - currentDay;
+            if (diff < 0) diff += 7;
+            currentDate.setDate(currentDate.getDate() + diff);
+            if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+
+            while (currentDate < endDate) {
+                await processDate(new Date(currentDate), dayIdx);
+                currentDate.setDate(currentDate.getDate() + 7);
+            }
+        }
+    }
+
+    if (opCount > 0) await batch.commit();
+
+    await db.collection('activity_logs').add({
+        action: 'booked',
+        isRecurring: true,
+        sessionDetails: { clientName, trainerName, serviceName, date: baseDate.toISOString(), time, recurringDetails: recurringDetails || null },
+        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
+        timestamp: new Date().toISOString(),
+        siteId
+    });
+
+    return { success: true, created, appended };
+});
+
+/**
+ * updateRecurringSeriesFuture: Deletes and recreates all future occurrences of an existing
+ * recurring series (editMode === 'future' in BookingModal.tsx), for the same reason and in the
+ * same batched, server-side way as createRecurringSeries above.
+ */
+exports.updateRecurringSeriesFuture = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const {
+        siteId, seriesId, fromDateISO, time, baseDateISO, effectiveDays,
+        trainerId, trainerName, serviceId, serviceName,
+        clientId, clientName, clientPhone, clientsArray,
+        recurringDetails, createdBy
+    } = data;
+
+    if (!seriesId || !fromDateISO || !time || !baseDateISO || !Array.isArray(effectiveDays)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    const baseDate = new Date(baseDateISO);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // Step 1: delete all future sessions in this series (from the edited occurrence onward).
+    const deleteSnap = await db.collection('sessions')
+        .where('seriesId', '==', seriesId)
+        .where('date', '>=', fromDateISO)
+        .where('siteId', '==', siteId)
+        .get();
+
+    let batch = db.batch();
+    let opCount = 0;
+    const commitIfFull = async () => {
+        if (opCount >= BATCH_SAFETY_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            opCount = 0;
+        }
+    };
+
+    for (const docSnap of deleteSnap.docs) {
+        batch.delete(docSnap.ref);
+        batch.delete(db.collection('trainer_busy_slots').doc(docSnap.id));
+        opCount += 2;
+        await commitIfFull();
+    }
+
+    // Step 2: recreate from baseDate forward with the new day selection.
+    const clients = Array.isArray(clientsArray) && clientsArray.length > 0
+        ? clientsArray
+        : [{ id: clientId, name: clientName }];
+    const clientIds = [clientId].filter(Boolean);
+    const endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
+    let created = 0;
+
+    for (const dayIdx of effectiveDays) {
+        let currentDate = new Date(baseDate);
+        const currentDay = currentDate.getDay();
+        const targetDay = (dayIdx + 1) % 7;
+        let diff = targetDay - currentDay;
+        if (diff < 0) diff += 7;
+        if (diff === 0 && currentDate < todayStart) diff = 7;
+        currentDate.setDate(currentDate.getDate() + diff);
+        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+
+        while (currentDate < endDate) {
+            const [timePart, modifier] = time.split(' ');
+            let [hours, minutes] = timePart.split(':').map(Number);
+            if (modifier === 'PM' && hours !== 12) hours += 12;
+            if (modifier === 'AM' && hours === 12) hours = 0;
+            const startDate = new Date(currentDate);
+            startDate.setHours(hours, minutes, 0, 0);
+            const endTime = new Date(startDate);
+            endTime.setMinutes(endTime.getMinutes() + 60);
+
+            const sessionRef = db.collection('sessions').doc();
+            const sessionData = {
+                clientName,
+                clientIds,
+                clients,
+                trainerName,
+                trainerId,
+                serviceName,
+                serviceId,
+                startTime: admin.firestore.Timestamp.fromDate(startDate),
+                endTime: admin.firestore.Timestamp.fromDate(endTime),
+                time,
+                day: dayIdx,
+                date: new Date(currentDate).toISOString(),
+                status: 'Scheduled',
+                siteId,
+                seriesId,
+                recurringDetails,
+                createdAt: new Date().toISOString(),
+                createdBy: createdBy || 'Unknown User',
+                busySlotSynced: true
+            };
+            batch.set(sessionRef, sessionData);
+            batch.set(db.collection('trainer_busy_slots').doc(sessionRef.id), {
+                trainerId, date: sessionData.date, time, siteId
+            });
+            opCount += 2;
+            created++;
+            await commitIfFull();
+
+            currentDate.setDate(currentDate.getDate() + 7);
+        }
+    }
+
+    if (opCount > 0) await batch.commit();
+
+    await db.collection('activity_logs').add({
+        action: 'rescheduled',
+        isRecurring: true,
+        sessionDetails: { clientName, trainerName, serviceName, date: baseDate.toISOString(), time, recurringDetails: recurringDetails || null },
+        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
+        timestamp: new Date().toISOString(),
+        siteId
+    });
+
+    return { success: true, created };
 });
