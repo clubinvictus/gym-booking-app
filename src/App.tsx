@@ -1,10 +1,20 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { LoginPage } from './components/LoginPage';
-import { Dashboard } from './components/Dashboard';
 import { AuthProvider, useAuth } from './AuthContext';
 import { ConfirmProvider } from './ConfirmContext';
 import ErrorBoundary from './components/ErrorBoundary';
-import { TrialBookingPage } from './TrialBookingPage';
+
+// Split the authenticated app shell from the public-facing pages: a visitor
+// hitting /login or /book-trial shouldn't pay for the entire Dashboard bundle.
+const LoginPage = lazy(() => import('./components/LoginPage').then(m => ({ default: m.LoginPage })));
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const TrialBookingPage = lazy(() => import('./TrialBookingPage').then(m => ({ default: m.TrialBookingPage })));
+
+const RouteFallback = () => (
+  <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+    <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>LOADING...</p>
+  </div>
+);
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, profile, loading } = useAuth();
@@ -31,6 +41,7 @@ function App() {
       <ConfirmProvider>
         <AuthProvider>
           <Router>
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/book-trial" element={<TrialBookingPage />} />
@@ -50,6 +61,7 @@ function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
+            </Suspense>
           </Router>
         </AuthProvider>
       </ConfirmProvider>

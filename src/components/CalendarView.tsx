@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { where } from 'firebase/firestore';
 import { ChevronLeft, ChevronRight, Plus, ChevronDown, Filter } from 'lucide-react';
 import { BookingModal } from './BookingModal';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -106,9 +107,16 @@ export const CalendarView = () => {
         }
     }, [profile, selectedTrainerId]);
 
-    const limitDate = new Date();
-    limitDate.setHours(23, 59, 59, 999);
-    limitDate.setDate(limitDate.getDate() + 14);
+    // Memoized so it's a stable reference across renders within the same day —
+    // otherwise a fresh Date object every render would defeat React.memo on
+    // WeekGrid/ResourceGrid, which receive this as a prop.
+    const todayKey = new Date().toDateString();
+    const limitDate = useMemo(() => {
+        const d = new Date();
+        d.setHours(23, 59, 59, 999);
+        d.setDate(d.getDate() + 14);
+        return d;
+    }, [todayKey]);
 
     const isMobile = window.innerWidth <= 768;
     const daysToShow = viewMode === 'day' ? 1 : (isMobile ? 2 : 7);
@@ -150,9 +158,23 @@ export const CalendarView = () => {
         trainerId: resolvedTrainerId,
         fetchMode: determineFetchMode()
     });
-    const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
+    // Scope busy-slot and off-day listeners to the visible week only.
+    // These collections grow with every session ever created (site-wide, unbounded)
+    // and an unscoped listener re-fires — for every connected client — on every
+    // write anywhere in the collection, not just writes relevant to what's on screen.
+    const busySlotConstraints = useMemo(() => [
+        where('date', '>=', weekStartDate.toISOString()),
+        where('date', '<=', weekEndDate.toISOString())
+    ], [weekStartDate, weekEndDate]);
+
+    const offDayConstraints = useMemo(() => [
+        where('date', '>=', weekStartDate.toISOString().split('T')[0]),
+        where('date', '<=', weekEndDate.toISOString().split('T')[0])
+    ], [weekStartDate, weekEndDate]);
+
+    const { data: busySlots } = useFirestore<any>('trainer_busy_slots', busySlotConstraints);
     const { data: trainers } = useFirestore<any>('trainers');
-    const { data: offDays } = useFirestore<any>('off_days');
+    const { data: offDays } = useFirestore<any>('off_days', offDayConstraints);
     const { data: services } = useFirestore<any>('services');
 
     const [confirmOffDayOpen, setConfirmOffDayOpen] = useState(false);
@@ -201,7 +223,7 @@ export const CalendarView = () => {
         setViewMode('week');
     };
 
-    const handleDayHeaderClick = async (dayIndex: number) => {
+    const handleDayHeaderClick = useCallback((dayIndex: number) => {
         if (!(isAdmin || isManager) || selectedTrainerId === 'all' || selectedTrainerId === 'my') return;
 
         const date = new Date(currentWeekStart);
@@ -209,7 +231,7 @@ export const CalendarView = () => {
 
         setOffDayDate(date);
         setConfirmOffDayOpen(true);
-    };
+    }, [isAdmin, isManager, selectedTrainerId, currentWeekStart]);
 
     const handleBookButtonClick = () => {
         const nextHour = new Date();

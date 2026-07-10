@@ -1,22 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { LayoutDashboard, Calendar, Users, Briefcase, Settings, LogOut, Menu, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarView } from './CalendarView';
-import { ServiceManagement } from './ServiceManagement';
-import { ClientManagement } from './ClientManagement';
-import { SettingsView } from './SettingsView';
 import { useFirestore } from '../hooks/useFirestore';
+
+// Heavy per-view screens are code-split: most sessions only ever touch one or
+// two of these (e.g. a client never opens Team/Services/Activity/Settings),
+// so eagerly bundling all of them cost every user the full combined weight.
+const CalendarView = lazy(() => import('./CalendarView').then(m => ({ default: m.CalendarView })));
+const ServiceManagement = lazy(() => import('./ServiceManagement').then(m => ({ default: m.ServiceManagement })));
+const ClientManagement = lazy(() => import('./ClientManagement').then(m => ({ default: m.ClientManagement })));
+const SettingsView = lazy(() => import('./SettingsView').then(m => ({ default: m.SettingsView })));
+const ActivityLogView = lazy(() => import('./ActivityLogView').then(m => ({ default: m.ActivityLogView })));
+const TrainerProfile = lazy(() => import('./TrainerProfile').then(m => ({ default: m.TrainerProfile })));
+const ClientProfile = lazy(() => import('./ClientProfile').then(m => ({ default: m.ClientProfile })));
+const TeamManagement = lazy(() => import('./TeamManagement').then(m => ({ default: m.TeamManagement })));
 
 // New Components
 import { collection, doc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { ActivityLogView } from './ActivityLogView';
 import { SITE_ID } from '../constants';
-import { TrainerProfile } from './TrainerProfile';
-import { ClientProfile } from './ClientProfile';
 import { useSessions } from '../hooks/useSessions';
 import { SessionDetailModal } from './SessionDetailModal';
-import { TeamManagement } from './TeamManagement';
 import { AddTrainerModal } from './AddTrainerModal';
 import { AddManagerModal } from './AddManagerModal';
 import { AddClientModal } from './AddClientModal';
@@ -635,7 +639,9 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
             </aside>
 
             <main className="main-content">
-                {renderContent()}
+                <Suspense fallback={<div style={{ padding: '40px', fontWeight: 800 }}>LOADING...</div>}>
+                    {renderContent()}
+                </Suspense>
             </main>
 
             <AddTrainerModal

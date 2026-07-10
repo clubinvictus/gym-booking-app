@@ -20,7 +20,7 @@ export interface GridProps {
     onDayHeaderClick: (dayIndex: number) => void;
 }
 
-export const WeekGrid: React.FC<GridProps> = ({
+export const WeekGrid: React.FC<GridProps> = React.memo(({
     sessions,
     trainers,
     services,
@@ -510,4 +510,4 @@ export const WeekGrid: React.FC<GridProps> = ({
             </div>
         </div>
     );
-};
+});

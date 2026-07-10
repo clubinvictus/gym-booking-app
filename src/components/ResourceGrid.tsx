@@ -1,7 +1,7 @@
 import React from 'react';
 import type { GridProps } from './WeekGrid';
 
-export const ResourceGrid: React.FC<GridProps> = ({
+export const ResourceGrid: React.FC<GridProps> = React.memo(({
     sessions,
     trainers,
     services,
@@ -349,4 +349,4 @@ export const ResourceGrid: React.FC<GridProps> = ({
             </div>
         </div>
     );
-};
+});
