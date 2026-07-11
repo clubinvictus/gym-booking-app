@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Clock, User, Briefcase, Calendar as CalendarIcon, Trash2, Edit2, RefreshCw } from 'lucide-react';
-import { db } from '../firebase';
-import { doc, deleteDoc, collection, getDocs, query, where, writeBatch, QueryDocumentSnapshot, addDoc, updateDoc } from 'firebase/firestore';
+import { db, functions } from '../firebase';
+import { doc, deleteDoc, collection, addDoc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '../AuthContext';
 import { useConfirm } from '../ConfirmContext';
 import { useFirestore } from '../hooks/useFirestore';
@@ -150,64 +151,50 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                 // Explicit Intent Flag: Inform backend this is a bulk operation before deleting
                 await updateDoc(doc(db, 'sessions', session.id), { deletionIntent: 'bulk' });
 
-                const batch = writeBatch(db);
-                // For recurring, we'll keep the logic simple for now: delete the documents
-                // In a multi-client world, this might need refinement (e.g. only remove THIS client from the documents)
-                const baseQueries: any[] = [where('seriesId', '==', session.seriesId)];
-                
-                const q = query(collection(db, 'sessions'), ...baseQueries);
-                
-                const snapshot = await getDocs(q);
-                snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => {
-                    const docData = docSnap.data();
-                    if (docData.date >= session.date) {
-                        // If multi-client, just remove THIS client from all future docs
-                                if (clientId) {
-                                    const updatedClients = (docData.clients || []).filter((c: any) => c.id !== clientId);
-                                    if (updatedClients.length === 0) {
-                                        batch.delete(docSnap.ref);
-                                    } else {
-                                        const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
-                                        batch.update(docSnap.ref, { 
-                                            clients: updatedClients,
-                                            clientIds: newClientIds, // legacy
-                                            client_ids: newClientIds, // new standard
-                                            clientId: newClientIds[0] || null
-                                        });
-                                    }
-                                } else {
-                                    batch.delete(docSnap.ref);
-                                }
-                            }
-                        });
-                        await batch.commit();
-        
-                        await logActivity(true, clientId);
-                        onDelete(session.id);
-                        onClose();
-                    } catch (err: any) {
-                        console.error('Error deleting series:', err);
-                        alert('Failed to delete series. Please try again.');
-                        setIsProcessing(false);
-                    }
-                } else {
-                    // Single delete/removal
-                    try {
-                        // Explicit Intent Flag: Inform backend this is a single operation before deleting
-                        await updateDoc(doc(db, 'sessions', session.id), { deletionIntent: 'single' });
+                // Retires the rule from this occurrence onward and trims its materialized docs,
+                // bounded to whatever's actually materialized (the rolling window) rather than
+                // the old unbounded `where('seriesId','==',...)` scan (see functions/index.js —
+                // cancelRecurringSeriesFuture).
+                const cancelRecurringSeriesFuture = httpsCallable(functions, 'cancelRecurringSeriesFuture');
+                await cancelRecurringSeriesFuture({
+                    seriesId: session.seriesId,
+                    siteId: SITE_ID,
+                    fromDateISO: session.date,
+                    clientId: clientId || null
+                });
 
-                        if (clientId && session.clients && session.clients.length > 1) {
-                            const updatedClients = session.clients.filter((c: any) => c.id !== clientId);
-                            const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
-                            await updateDoc(doc(db, 'sessions', session.id), { 
-                                clients: updatedClients,
-                                clientIds: newClientIds, // legacy
-                                client_ids: newClientIds, // new standard
-                                clientId: newClientIds[0] || null
-                            });
-                        } else {
-                            await deleteDoc(doc(db, 'sessions', session.id));
-                        }
+                await logActivity(true, clientId);
+                onDelete(session.id);
+                onClose();
+            } catch (err: any) {
+                console.error('Error deleting series:', err);
+                alert('Failed to delete series. Please try again.');
+                setIsProcessing(false);
+            }
+        } else {
+            // Single delete/removal
+            try {
+                if (session.seriesId) {
+                    // Deletes (or detaches this client from) the occurrence, and atomically
+                    // records the date in the rule's exceptions so a scheduled materializer
+                    // run can't regenerate it (see functions/index.js — deleteRecurringOccurrence).
+                    const deleteRecurringOccurrence = httpsCallable(functions, 'deleteRecurringOccurrence');
+                    await deleteRecurringOccurrence({
+                        sessionId: session.id,
+                        seriesId: session.seriesId,
+                        dateISO: session.date,
+                        clientId: clientId || null
+                    });
+                } else if (clientId && session.clients && session.clients.length > 1) {
+                    const updatedClients = session.clients.filter((c: any) => c.id !== clientId);
+                    const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
+                    await updateDoc(doc(db, 'sessions', session.id), {
+                        clients: updatedClients,
+                        clientIds: newClientIds
+                    });
+                } else {
+                    await deleteDoc(doc(db, 'sessions', session.id));
+                }
                 await logActivity(false, clientId);
                 onDelete(session.id);
                 onClose();
@@ -234,58 +221,25 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             };
 
             if (addScope === 'future' && session.seriesId) {
-                const q = query(
-                    collection(db, 'sessions'),
-                    where('seriesId', '==', session.seriesId)
-                );
-                const snapshot = await getDocs(q);
-                const batch = writeBatch(db);
-                let updatedAny = false;
-
-                snapshot.forEach((docSnap: QueryDocumentSnapshot<any>) => {
-                    const docData = docSnap.data();
-                    if (docData.date >= session.date && selectedWeekdays.includes(docData.day)) {
-                        const docClients = docData.clients || [];
-                        const isAlreadyBooked = docClients.some((c: any) => c.id === clientToAdd.id);
-                        
-                        if (!isAlreadyBooked && docClients.length < maxCapacity) {
-                            const updatedClients = [...docClients, clientObj];
-                            const newClientIds = Array.from(new Set(updatedClients.map((c: any) => c.id))).filter(Boolean) as string[];
-                            
-                            batch.update(docSnap.ref, {
-                                clients: updatedClients,
-                                clientIds: newClientIds,
-                                client_ids: newClientIds,
-                                clientId: newClientIds[0] || null
-                            });
-                            updatedAny = true;
-                        }
-                    }
-                });
-
-                if (updatedAny) {
-                    await batch.commit();
-                }
-
-                // Log activity for recurring booking
-                await addDoc(collection(db, 'activity_logs'), {
-                    action: 'booked',
-                    isRecurring: true,
-                    sessionDetails: {
-                        clientName: clientToAdd.name,
-                        trainerName: session.trainerName,
-                        serviceName: session.serviceName,
-                        date: session.date,
-                        time: session.time,
-                        recurringDetails: session.recurringDetails || null
-                    },
-                    performedBy: {
-                        uid: profile?.uid || 'unknown',
-                        name: profile?.name || 'Unknown User',
-                        role: profile?.role || 'unknown'
-                    },
-                    timestamp: new Date().toISOString(),
-                    siteId: SITE_ID
+                // Creates a new sibling recurring_series rule for the added client (mirroring
+                // the target series' trainer/time/end-date) and materializes it immediately,
+                // instead of batch-mutating the target series' own documents directly (see
+                // functions/index.js — addClientToRecurringSeries). This is a real rule
+                // creation, so the added client now gets a WhatsApp confirmation — previously
+                // this path was an `isUpdate`, which onSessionWritten's recurring branch never
+                // sent a notification for at all.
+                const addClientToRecurringSeries = httpsCallable(functions, 'addClientToRecurringSeries');
+                await addClientToRecurringSeries({
+                    siteId: SITE_ID,
+                    targetSeriesId: session.seriesId,
+                    fromDateISO: session.date,
+                    clientId: clientToAdd.id,
+                    clientName: clientToAdd.name,
+                    clientEmail: clientToAdd.email || null,
+                    clientPhone: clientToAdd.phone || null,
+                    clientUid: clientToAdd.uid || null,
+                    selectedDays: selectedWeekdays,
+                    createdBy: profile?.name || 'Unknown User'
                 });
 
                 alert('Client added to future sessions successfully!');

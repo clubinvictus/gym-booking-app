@@ -129,6 +129,16 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false; // Only manageable by Cloud Functions
     }
+
+    // Recurring series rules (e.g. "every Monday 9am with Trainer X, indefinitely").
+    // Public read so client-side conflict-checking can see commitments beyond the
+    // materialized session window; write-only-via-Cloud-Functions because a rule
+    // silently governs conflict-checking for months and is much higher-leverage
+    // than any single session document.
+    match /recurring_series/{seriesId} {
+      allow read: if true;
+      allow write: if false; // Only manageable by Cloud Functions
+    }
     
     match /off_days/{offDayId} {
       allow read: if true;

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { GridProps } from './WeekGrid';
+import { isDateCoveredByRule } from '../hooks/useActiveRecurringRules';
 
 export const ResourceGrid: React.FC<GridProps> = React.memo(({
     sessions,
@@ -7,6 +8,7 @@ export const ResourceGrid: React.FC<GridProps> = React.memo(({
     services,
     busySlots,
     offDays,
+    recurringRules,
     currentWeekStart, // In Day view, we'll treat this as the 'active' day for now
     selectedTrainerId,
     clientIds,
@@ -172,7 +174,16 @@ export const ResourceGrid: React.FC<GridProps> = React.memo(({
                             });
 
                             const isAvailable = checkTrainerAvailable(trainer, activeDate, time);
-                            const isCellUnavailable = isBusyByOthers || !isAvailable;
+
+                            // Beyond the materialized busySlots window, a recurring_series rule
+                            // can still commit this slot arbitrarily far in the future (a rule
+                            // may run indefinitely). Scoped to isClient like isBusyByOthers above,
+                            // matching existing behavior — staff aren't restricted by this check.
+                            const isRuleCovered = isClient
+                                && !slotSessions.some(s => s.clients?.some((c: any) => clientIds.includes(c.id)))
+                                && isDateCoveredByRule(recurringRules, trainer.id, activeDate.toISOString().split('T')[0], time);
+
+                            const isCellUnavailable = isBusyByOthers || !isAvailable || isRuleCovered;
 
                             // If cell is clicked, we pass dayIndex=0 since we are strictly looking at 'activeDate'
                             // The container's modal relies on dayIndex to map to the week. 

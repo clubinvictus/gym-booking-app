@@ -1,6 +1,34 @@
 {
   "indexes": [
     {
+      "collectionGroup": "recurring_series",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "siteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "recurring_series",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "materializedThrough",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "off_days",
       "queryScope": "COLLECTION",
       "fields": [

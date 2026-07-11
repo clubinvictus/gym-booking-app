@@ -8,6 +8,7 @@ import { ConfirmOffDayModal } from './ConfirmOffDayModal';
 import { WeekGrid } from './WeekGrid';
 import { ResourceGrid } from './ResourceGrid';
 import { useFirestore } from '../hooks/useFirestore';
+import { useActiveRecurringRules } from '../hooks/useActiveRecurringRules';
 import { useAuth } from '../AuthContext';
 import { useSessions } from '../hooks/useSessions';
 
@@ -176,6 +177,7 @@ export const CalendarView = () => {
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: offDays } = useFirestore<any>('off_days', offDayConstraints);
     const { data: services } = useFirestore<any>('services');
+    const recurringRules = useActiveRecurringRules();
 
     const [confirmOffDayOpen, setConfirmOffDayOpen] = useState(false);
 
@@ -522,6 +524,7 @@ export const CalendarView = () => {
                     services={services}
                     busySlots={busySlots}
                     offDays={offDays}
+                    recurringRules={recurringRules}
                     currentWeekStart={currentWeekStart}
                     selectedTrainerId={selectedTrainerId}
                     clientIds={clientIds}
@@ -542,6 +545,7 @@ export const CalendarView = () => {
                     services={services}
                     busySlots={busySlots}
                     offDays={offDays}
+                    recurringRules={recurringRules}
                     currentWeekStart={currentWeekStart}
                     selectedTrainerId={selectedTrainerId}
                     clientIds={clientIds}

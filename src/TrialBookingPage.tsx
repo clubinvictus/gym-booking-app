@@ -12,6 +12,8 @@ import { db } from './firebase';
 import { collection, getDocs, query, where, onSnapshot, QuerySnapshot, type DocumentData } from 'firebase/firestore';
 import { SITE_ID } from './constants';
 import { submitTrialBooking } from './utils/trialBooking';
+import { isDateCoveredByRule } from './hooks/useActiveRecurringRules';
+import type { RecurringRule } from './hooks/useActiveRecurringRules';
 import { useNavigate } from 'react-router-dom';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -35,6 +37,7 @@ export const TrialBookingPage = () => {
     const [sessions, setSessions] = useState<any[]>([]);
     const [busySlots, setBusySlots] = useState<any[]>([]);
     const [offDays, setOffDays] = useState<any[]>([]);
+    const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
 
     // Selection state
     const [currentWeekStart, setCurrentWeekStart] = useState(() => {
@@ -75,6 +78,7 @@ export const TrialBookingPage = () => {
         let unsubSessions: (() => void) | null = null;
         let unsubOffDays: (() => void) | null = null;
         let unsubBusySlots: (() => void) | null = null;
+        let unsubRecurringRules: (() => void) | null = null;
 
         const fetchData = async () => {
             try {
@@ -117,6 +121,12 @@ export const TrialBookingPage = () => {
                     setBusySlots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
+                // A recurring_series rule can commit a slot arbitrarily far in the future (a
+                // rule may run indefinitely) beyond what's materialized into busySlots yet.
+                unsubRecurringRules = onSnapshot(query(collection(db, 'recurring_series'), where('siteId', '==', SITE_ID), where('status', '==', 'active')), (snap: QuerySnapshot<DocumentData>) => {
+                    setRecurringRules(snap.docs.map(d => ({ id: d.id, ...d.data() } as RecurringRule)));
+                });
+
             } catch (err: any) {
                 console.error('Fetch error:', err);
                 setError(err.message);
@@ -132,15 +142,26 @@ export const TrialBookingPage = () => {
             if (unsubSessions) unsubSessions();
             if (unsubOffDays) unsubOffDays();
             if (unsubBusySlots) unsubBusySlots();
+            if (unsubRecurringRules) unsubRecurringRules();
         };
     }, []);
+
+    // recurring_series.time is stored "09:00 AM" (matching BookingModal's format); this page's
+    // TIME_SLOTS are 24h ("09:00") — convert before comparing against a rule.
+    const to12Hour = (time24: string) => {
+        const [h, m] = time24.split(':').map(Number);
+        const period = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 === 0 ? 12 : h % 12;
+        return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+    };
 
     // Calendar Helper
     const getSlotAvailability = (date: Date, time: string) => {
         if (!trialService) return [];
-        
+
         const dateStr = date.toISOString().split('T')[0];
         const dateISO = date.toISOString();
+        const time12 = to12Hour(time);
         const available: any[] = [];
 
         for (const trainer of trainers) {
@@ -176,6 +197,10 @@ export const TrialBookingPage = () => {
 
             const isBusy = busySlots.some(bs => bs.trainerId === trainer.id && bs.time === time && bs.date === dateISO);
             if (isBusy) continue;
+
+            // Beyond the materialized busySlots window, a recurring_series rule can still
+            // commit this slot arbitrarily far in the future (a rule may run indefinitely).
+            if (isDateCoveredByRule(recurringRules, trainer.id, dateStr, time12)) continue;
 
             available.push({ id: trainer.id, name: trainer.name });
         }

@@ -1,4 +1,6 @@
 import React from 'react';
+import { isDateCoveredByRule } from '../hooks/useActiveRecurringRules';
+import type { RecurringRule } from '../hooks/useActiveRecurringRules';
 
 export interface GridProps {
     sessions: any[];
@@ -6,6 +8,7 @@ export interface GridProps {
     services: any[];
     busySlots: any[];
     offDays: any[];
+    recurringRules: RecurringRule[];
     currentWeekStart: Date;
     selectedTrainerId: string;
     clientIds: string[];
@@ -26,6 +29,7 @@ export const WeekGrid: React.FC<GridProps> = React.memo(({
     services,
     busySlots,
     offDays,
+    recurringRules,
     currentWeekStart,
     selectedTrainerId,
     clientIds,
@@ -135,6 +139,10 @@ export const WeekGrid: React.FC<GridProps> = React.memo(({
                 return bs.trainerId === selectedTrainerId && bsDate === dateStr && bs.time === time;
             });
             if (isBusy) available = false;
+
+            // Beyond the materialized busySlots window, a recurring_series rule can still
+            // commit this slot arbitrarily far in the future (a rule may run indefinitely).
+            if (isDateCoveredByRule(recurringRules, selectedTrainerId, dateStr, time)) available = false;
         }
 
         if (available) {

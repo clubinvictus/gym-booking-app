@@ -2,6 +2,7 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const axios = require("axios");
 const qs = require("qs");
+const { DateTime } = require("luxon");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -258,7 +259,17 @@ exports.onSessionWritten = functions.firestore
                 await db.runTransaction(async (t) => {
                     const doc = await t.get(lockRef);
                     if (!doc.exists) {
-                        t.set(lockRef, { processedAt: admin.firestore.FieldValue.serverTimestamp() });
+                        // expiresAt: consumed by a Firestore TTL policy on this field (configured
+                        // via `gcloud firestore fields ttls update`, not deployable through
+                        // firestore.rules/indexes.json) — long-lived recurring_series rules make
+                        // this collection's growth pattern worse than before, since a rule can now
+                        // run indefinitely instead of a one-shot 2-year materialization.
+                        const expiresAt = new Date();
+                        expiresAt.setDate(expiresAt.getDate() + 90);
+                        t.set(lockRef, {
+                            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            expiresAt: admin.firestore.Timestamp.fromDate(expiresAt)
+                        });
                         gotLock = true;
                     }
                 });
@@ -580,20 +591,22 @@ exports.processTrialBooking = functions.region('us-central1').https.onCall(async
 const BATCH_SAFETY_LIMIT = 450;
 
 /**
- * Builds a session document, mirroring BookingModal.tsx's getBookingData()/getSeriesData().
+ * How far ahead an active recurring_series rule is kept materialized as real `sessions`
+ * documents. Extended on a rolling basis by materializeRecurringWindows below, rather than
+ * generating the rule's entire lifetime (which may be indefinite) up front.
  */
-function buildSeriesSessionData({ date, dayIdx, time, trainerId, trainerName, serviceId, serviceName,
+const WINDOW_WEEKS = 10;
+const DEFAULT_TIMEZONE = 'Europe/Dublin';
+
+/**
+ * Builds a session document for a single recurring occurrence, given the exact (already
+ * timezone-correct) UTC instant it should start at. Mirrors BookingModal.tsx's
+ * getBookingData()/getSeriesData() shape.
+ */
+function buildSeriesSessionData({ startInstant, dayIdx, time, trainerId, trainerName, serviceId, serviceName,
     clientId, clientName, clientEmail, clientPhone, clientUid, bookingType, siteId, createdBy, seriesId, recurringDetails }) {
 
-    const [timePart, modifier] = time.split(' ');
-    let [hours, minutes] = timePart.split(':').map(Number);
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-
-    const startDate = new Date(date);
-    startDate.setHours(hours, minutes, 0, 0);
-    const endDate = new Date(startDate);
-    endDate.setMinutes(endDate.getMinutes() + 60);
+    const endInstant = new Date(startInstant.getTime() + 60 * 60 * 1000);
 
     const clientObj = bookingType === 'block'
         ? { id: 'blocked', name: 'Blocked', email: '', uid: 'blocked', phone: '' }
@@ -608,11 +621,11 @@ function buildSeriesSessionData({ date, dayIdx, time, trainerId, trainerName, se
         trainerId: trainerId || null,
         serviceName: bookingType === 'block' ? 'Blocked Slot' : serviceName,
         serviceId: bookingType === 'block' ? 'blocked' : (serviceId || null),
-        startTime: admin.firestore.Timestamp.fromDate(startDate),
-        endTime: admin.firestore.Timestamp.fromDate(endDate),
+        startTime: admin.firestore.Timestamp.fromDate(startInstant),
+        endTime: admin.firestore.Timestamp.fromDate(endInstant),
         time,
         day: dayIdx,
-        date: date.toISOString(),
+        date: startInstant.toISOString(),
         status: bookingType === 'block' ? 'Blocked' : 'Scheduled',
         siteId,
         seriesId,
@@ -623,176 +636,153 @@ function buildSeriesSessionData({ date, dayIdx, time, trainerId, trainerName, se
     };
 }
 
+function parseTimeToHM(time) {
+    const [timePart, modifier] = time.split(' ');
+    let [hours, minutes] = timePart.split(':').map(Number);
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return { hours, minutes };
+}
+
 /**
- * createRecurringSeries: Bulk-creates a recurring session series (staff: weekly, up to 2 years;
- * clients: capped at 14 days by the client before calling this).
- *
- * Replaces BookingModal.tsx's client-side writeBatch loop for this path. The client-side loop
- * wrote one session document at a time via the client SDK, and each resulting write independently
- * triggered onSessionWritten (a separate Cloud Function invocation per document, each mirroring
- * its own trainer_busy_slots doc). For a 2-year weekly series across a few weekdays that's up to
- * ~300 documents and ~300 separate trigger invocations. This function does the equivalent work
- * server-side in a handful of batched Admin SDK writes, covering sessions AND trainer_busy_slots
- * together, so the busy-slot mirror is consistent the moment this call returns instead of trailing
- * in via ~300 straggling trigger invocations.
- *
- * All validation (conflicts, capacity, tier restrictions, confirmation) already happens client-side
- * before this is called, exactly as before — this function only performs the writes.
+ * Enumerates occurrence instants (as UTC-instant JS Dates) for a recurring_series rule between
+ * fromDate and toDate (both plain JS Dates), computed timezone-aware via luxon so a rule's wall-
+ * clock time (e.g. "9am Dublin") stays correct across DST transitions — this runs unattended,
+ * indefinitely, with no human reviewing the output, unlike the old synchronous booking flow.
  */
-exports.createRecurringSeries = functions.region('us-central1').https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
-    }
+function enumerateOccurrenceDates(rule, fromDate, toDate) {
+    const zone = rule.timezone || DEFAULT_TIMEZONE;
+    const { hours, minutes } = parseTimeToHM(rule.time);
 
-    const {
-        siteId, time, baseDateISO, effectiveDays, frequency, endDateISO,
-        trainerId, trainerName, serviceId, serviceName,
-        clientId, clientName, clientEmail, clientPhone, clientUid,
-        bookingType, createdBy, conflictKeysToSkip, seriesId, recurringDetails
-    } = data;
+    const ruleStart = DateTime.fromISO(rule.startDate, { zone });
+    const windowStartRaw = DateTime.fromJSDate(fromDate, { zone });
+    let windowStart = windowStartRaw > ruleStart ? windowStartRaw : ruleStart;
+    windowStart = windowStart.startOf('day');
 
-    if (!time || !baseDateISO || !endDateISO || !Array.isArray(effectiveDays) || !seriesId) {
-        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
-    }
+    const windowEnd = DateTime.fromJSDate(toDate, { zone });
+    const ruleEnd = rule.endDate ? DateTime.fromISO(rule.endDate, { zone }) : null;
+    const effectiveEnd = ruleEnd && ruleEnd < windowEnd ? ruleEnd : windowEnd;
 
-    const baseDate = new Date(baseDateISO);
-    const endDate = new Date(endDateISO);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const skipKeys = new Set(conflictKeysToSkip || []);
+    const dates = [];
 
-    // Mirror the client's existingMap: find sessions this trainer already has, so we can
-    // append to a same-service session with room instead of creating a duplicate.
-    const existingSnap = await db.collection('sessions')
-        .where('trainerId', '==', trainerId)
-        .where('siteId', '==', siteId)
-        .get();
-
-    const existingMap = new Map();
-    existingSnap.forEach(d => {
-        const s = d.data();
-        const key = `${new Date(s.date).toDateString()}|${s.time}`;
-        existingMap.set(key, { id: d.id, clients: s.clients || [], serviceName: s.serviceName });
-    });
-
-    let batch = db.batch();
-    let opCount = 0;
-    let created = 0;
-    let appended = 0;
-
-    const commitIfFull = async () => {
-        if (opCount >= BATCH_SAFETY_LIMIT) {
-            await batch.commit();
-            batch = db.batch();
-            opCount = 0;
-        }
-    };
-
-    const activeServiceSnap = await db.collection('services').doc(serviceId || '').get();
-    const maxCapacity = activeServiceSnap.exists ? (activeServiceSnap.data().max_capacity || 1) : 1;
-
-    const processDate = async (currentDate, dayIdx) => {
-        const key = `${currentDate.toDateString()}|${time}`;
-        if (skipKeys.has(key)) return;
-
-        const existing = existingMap.get(key);
-        if (existing) {
-            if (existing.serviceName === serviceName && existing.clients.length < maxCapacity) {
-                if (!existing.clients.some(c => c.id === clientId)) {
-                    const clientObj = { id: clientId || null, name: clientName || 'Unknown Client', email: clientEmail || null, uid: clientUid || null, phone: clientPhone || null };
-                    const newClients = [...existing.clients, clientObj];
-                    const newClientIds = Array.from(new Set(newClients.map(c => c.id))).filter(Boolean);
-                    batch.update(db.collection('sessions').doc(existing.id), { clients: newClients, clientIds: newClientIds });
-                    opCount++;
-                    appended++;
-                    await commitIfFull();
-                }
-            }
-            return;
-        }
-
-        const sessionRef = db.collection('sessions').doc();
-        const sessionData = buildSeriesSessionData({
-            date: new Date(currentDate), dayIdx, time, trainerId, trainerName, serviceId, serviceName,
-            clientId, clientName, clientEmail, clientPhone, clientUid, bookingType, siteId, createdBy, seriesId, recurringDetails
-        });
-        batch.set(sessionRef, sessionData);
-        batch.set(db.collection('trainer_busy_slots').doc(sessionRef.id), {
-            trainerId: sessionData.trainerId,
-            date: sessionData.date,
-            time: sessionData.time,
-            siteId: sessionData.siteId
-        });
-        opCount += 2;
-        created++;
-        await commitIfFull();
-    };
-
-    if (frequency === 'daily') {
-        let currentDate = new Date(baseDate < todayStart ? todayStart : baseDate);
-        while (currentDate < endDate) {
-            const sessDay = (currentDate.getDay() + 6) % 7;
-            await processDate(new Date(currentDate), sessDay);
-            currentDate.setDate(currentDate.getDate() + 1);
+    if (rule.frequency === 'daily') {
+        let cursor = windowStart;
+        while (cursor <= effectiveEnd) {
+            dates.push(cursor.set({ hour: hours, minute: minutes, second: 0, millisecond: 0 }).toJSDate());
+            cursor = cursor.plus({ days: 1 });
         }
     } else {
-        for (const dayIdx of effectiveDays) {
-            let currentDate = new Date(baseDate);
-            const currentDay = currentDate.getDay();
-            const targetDay = (dayIdx + 1) % 7;
-            let diff = targetDay - currentDay;
+        for (const dayIdx of rule.days) {
+            const targetWeekday = dayIdx + 1; // our Mon=0..Sun=6 -> luxon Mon=1..Sun=7
+            let cursor = windowStart;
+            let diff = targetWeekday - cursor.weekday;
             if (diff < 0) diff += 7;
-            currentDate.setDate(currentDate.getDate() + diff);
-            if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+            cursor = cursor.plus({ days: diff });
 
-            while (currentDate < endDate) {
-                await processDate(new Date(currentDate), dayIdx);
-                currentDate.setDate(currentDate.getDate() + 7);
+            while (cursor <= effectiveEnd) {
+                dates.push(cursor.set({ hour: hours, minute: minutes, second: 0, millisecond: 0 }).toJSDate());
+                cursor = cursor.plus({ weeks: 1 });
             }
         }
     }
 
-    if (opCount > 0) await batch.commit();
+    return dates.sort((a, b) => a - b);
+}
 
-    await db.collection('activity_logs').add({
-        action: 'booked',
-        isRecurring: true,
-        sessionDetails: { clientName, trainerName, serviceName, date: baseDate.toISOString(), time, recurringDetails: recurringDetails || null },
-        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
-        timestamp: new Date().toISOString(),
-        siteId
-    });
-
-    return { success: true, created, appended };
-});
+async function getServiceMaxCapacity(serviceId) {
+    if (!serviceId) return 1;
+    const snap = await db.collection('services').doc(serviceId).get();
+    return snap.exists ? (snap.data().max_capacity || 1) : 1;
+}
 
 /**
- * updateRecurringSeriesFuture: Deletes and recreates all future occurrences of an existing
- * recurring series (editMode === 'future' in BookingModal.tsx), for the same reason and in the
- * same batched, server-side way as createRecurringSeries above.
+ * Materializes concrete `sessions` documents for a recurring_series rule, for occurrences
+ * between fromDate and toDate. Shared by createRecurringSeries (initial window),
+ * materializeRecurringWindows (the daily scheduled extension job), updateRecurringSeriesFuture
+ * and addClientToRecurringSeries (both create a sibling rule and materialize its window) — one
+ * function, so create-or-append-if-room behavior can't drift between call sites the way it did
+ * before (the old updateRecurringSeriesFuture had no existing-session check at all, unlike the
+ * old createRecurringSeries — a latent duplicate-booking bug, fixed here by consolidation).
+ *
+ * Each occurrence is checked-and-written inside its own Firestore transaction rather than a
+ * shared batch — the rolling window is small (tens of documents, not hundreds), so this is cheap,
+ * and it closes the race where two near-simultaneous requests could both see a slot as free and
+ * both write to it.
  */
-exports.updateRecurringSeriesFuture = functions.region('us-central1').https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+async function materializeRuleWindow(rule, seriesId, fromDate, toDate) {
+    const exceptionsSet = new Set(rule.exceptions || []);
+    const maxCapacity = await getServiceMaxCapacity(rule.serviceId);
+    const occurrenceDates = enumerateOccurrenceDates(rule, fromDate, toDate);
+    const zone = rule.timezone || DEFAULT_TIMEZONE;
+
+    let created = 0;
+    let appended = 0;
+    const newSkips = [];
+    let materializedThrough = rule.materializedThrough ? new Date(rule.materializedThrough) : fromDate;
+
+    for (const occInstant of occurrenceDates) {
+        const occDateTime = DateTime.fromJSDate(occInstant, { zone });
+        const dateKey = occDateTime.toISODate();
+        if (exceptionsSet.has(dateKey)) continue;
+
+        const dayIdx = (occDateTime.weekday - 1 + 7) % 7;
+        const sessionData = buildSeriesSessionData({
+            startInstant: occInstant, dayIdx, time: rule.time, trainerId: rule.trainerId, trainerName: rule.trainerName,
+            serviceId: rule.serviceId, serviceName: rule.serviceName, clientId: rule.clientId, clientName: rule.clientName,
+            clientEmail: rule.clientEmail, clientPhone: rule.clientPhone, clientUid: rule.clientUid,
+            bookingType: rule.bookingType, siteId: rule.siteId, createdBy: rule.createdBy, seriesId, recurringDetails: rule.recurringDetails
+        });
+
+        const outcome = await db.runTransaction(async (t) => {
+            const existingSnap = await t.get(
+                db.collection('sessions')
+                    .where('trainerId', '==', rule.trainerId)
+                    .where('siteId', '==', rule.siteId)
+                    .where('date', '==', sessionData.date)
+                    .where('time', '==', rule.time)
+                    .limit(1)
+            );
+
+            if (!existingSnap.empty) {
+                const existingDoc = existingSnap.docs[0];
+                const existing = existingDoc.data();
+                if (existing.serviceName === rule.serviceName && (existing.clients?.length || 0) < maxCapacity) {
+                    if (existing.clients?.some(c => c.id === rule.clientId)) {
+                        return { type: 'noop' };
+                    }
+                    const clientObj = { id: rule.clientId || null, name: rule.clientName || 'Unknown Client', email: rule.clientEmail || null, uid: rule.clientUid || null, phone: rule.clientPhone || null };
+                    const newClients = [...(existing.clients || []), clientObj];
+                    const newClientIds = Array.from(new Set(newClients.map(c => c.id))).filter(Boolean);
+                    t.update(existingDoc.ref, { clients: newClients, clientIds: newClientIds });
+                    return { type: 'appended' };
+                }
+                return { type: 'skipped' };
+            }
+
+            const sessionRef = db.collection('sessions').doc();
+            t.set(sessionRef, sessionData);
+            t.set(db.collection('trainer_busy_slots').doc(sessionRef.id), {
+                trainerId: sessionData.trainerId,
+                date: sessionData.date,
+                time: sessionData.time,
+                siteId: sessionData.siteId
+            });
+            return { type: 'created' };
+        });
+
+        if (outcome.type === 'created') created++;
+        else if (outcome.type === 'appended') appended++;
+        else if (outcome.type === 'skipped') newSkips.push(dateKey);
+
+        if (occInstant > materializedThrough) materializedThrough = occInstant;
     }
 
-    const {
-        siteId, seriesId, fromDateISO, time, baseDateISO, effectiveDays,
-        trainerId, trainerName, serviceId, serviceName,
-        clientId, clientName, clientPhone, clientsArray,
-        recurringDetails, createdBy
-    } = data;
+    return { created, appended, skippedDates: newSkips, materializedThrough };
+}
 
-    if (!seriesId || !fromDateISO || !time || !baseDateISO || !Array.isArray(effectiveDays)) {
-        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
-    }
-
-    const baseDate = new Date(baseDateISO);
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    // Step 1: delete all future sessions in this series (from the edited occurrence onward).
-    const deleteSnap = await db.collection('sessions')
+/** Deletes materialized sessions/trainer_busy_slots for a series from fromDateISO onward. */
+async function trimRuleFrom(seriesId, siteId, fromDateISO) {
+    const snap = await db.collection('sessions')
         .where('seriesId', '==', seriesId)
         .where('date', '>=', fromDateISO)
         .where('siteId', '==', siteId)
@@ -800,6 +790,342 @@ exports.updateRecurringSeriesFuture = functions.region('us-central1').https.onCa
 
     let batch = db.batch();
     let opCount = 0;
+    for (const docSnap of snap.docs) {
+        batch.delete(docSnap.ref);
+        batch.delete(db.collection('trainer_busy_slots').doc(docSnap.id));
+        opCount += 2;
+        if (opCount >= BATCH_SAFETY_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            opCount = 0;
+        }
+    }
+    if (opCount > 0) await batch.commit();
+    return snap.size;
+}
+
+/** Materializes a rule's rolling window and persists materializedThrough/skippedDates. */
+async function materializeAndPersist(rule, seriesId) {
+    const fromDate = new Date(rule.materializedThrough || rule.startDate);
+    const windowEnd = new Date();
+    windowEnd.setDate(windowEnd.getDate() + WINDOW_WEEKS * 7);
+    const toDate = rule.endDate && new Date(rule.endDate) < windowEnd ? new Date(rule.endDate) : windowEnd;
+
+    const result = await materializeRuleWindow(rule, seriesId, fromDate, toDate);
+
+    const updatePayload = { materializedThrough: result.materializedThrough.toISOString() };
+    if (result.skippedDates.length > 0) {
+        updatePayload.skippedDates = admin.firestore.FieldValue.arrayUnion(...result.skippedDates);
+    }
+    await db.collection('recurring_series').doc(seriesId).update(updatePayload);
+
+    return result;
+}
+
+/**
+ * createRecurringSeries: Creates a recurring_series rule document and materializes its first
+ * rolling window (WINDOW_WEEKS ahead, or the rule's endDate if sooner). Staff bookings may pass
+ * endDateISO: null for a true indefinite rule (no more "2 years" as a stand-in for "forever") —
+ * client bookings continue to pass their existing 14-day cap, which naturally fits inside one
+ * window so no scheduled extension is ever needed for them in practice.
+ *
+ * Replaces the old per-occurrence client-side writeBatch loop for this path, which independently
+ * triggered onSessionWritten (a separate Cloud Function invocation) per document — up to ~300 for
+ * a 2-year weekly series. This function does the equivalent work server-side, and (unlike before)
+ * only ever materializes a bounded window regardless of how long the rule itself runs for.
+ *
+ * All validation (conflicts, capacity, tier restrictions, confirmation) already happens
+ * client-side before this is called, exactly as before — this function performs the writes.
+ */
+exports.createRecurringSeries = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const {
+        siteId, time, startDateISO, days, frequency, endDateISO, timezone,
+        trainerId, trainerName, serviceId, serviceName,
+        clientId, clientName, clientEmail, clientPhone, clientUid,
+        bookingType, createdBy, conflictKeysToSkip, seriesId, recurringDetails
+    } = data;
+
+    if (!time || !startDateISO || !Array.isArray(days) || days.length === 0 || !seriesId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    const zone = timezone || DEFAULT_TIMEZONE;
+    // conflictKeysToSkip (from the client's pre-flight conflict-check UI) are "toDateString()|time"
+    // formatted date-only keys; normalize into the rule's ISO-date exceptions format.
+    const exceptions = (conflictKeysToSkip || []).map(key => {
+        const [dateStr] = key.split('|');
+        return DateTime.fromJSDate(new Date(dateStr), { zone }).toISODate();
+    });
+
+    const rule = {
+        siteId, trainerId, trainerName, serviceId, serviceName,
+        clientId, clientName, clientEmail, clientPhone, clientUid,
+        bookingType: bookingType || 'client',
+        time,
+        days,
+        frequency: frequency === 'daily' ? 'daily' : 'weekly',
+        startDate: startDateISO,
+        endDate: endDateISO || null,
+        timezone: zone,
+        exceptions,
+        materializedThrough: startDateISO,
+        skippedDates: [],
+        status: 'active',
+        recurringDetails,
+        createdAt: new Date().toISOString(),
+        createdBy: createdBy || 'Unknown User'
+    };
+
+    await db.collection('recurring_series').doc(seriesId).set(rule);
+    const { created, appended, skippedDates } = await materializeAndPersist(rule, seriesId);
+
+    await db.collection('activity_logs').add({
+        action: 'booked',
+        isRecurring: true,
+        sessionDetails: { clientName, trainerName, serviceName, date: startDateISO, time, recurringDetails: recurringDetails || null },
+        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
+        timestamp: new Date().toISOString(),
+        siteId
+    });
+
+    return { success: true, created, appended, skippedCount: skippedDates.length };
+});
+
+/**
+ * updateRecurringSeriesFuture: "Editing" a series (days/time/frequency change from a chosen
+ * occurrence forward) always retires the existing rule and creates a new sibling rule, rather
+ * than mutating days/time in place — this collapses what were three divergent "edit a series"
+ * code paths (this function, and SessionDetailModal's two future-scope flows) into one shared
+ * "split rule at date, create new rule" primitive built on materializeAndPersist above.
+ */
+exports.updateRecurringSeriesFuture = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const {
+        siteId, seriesId, fromDateISO, time, startDateISO, days, frequency, endDateISO, timezone,
+        trainerId, trainerName, serviceId, serviceName,
+        clientId, clientName, clientEmail, clientPhone, clientUid, bookingType,
+        recurringDetails, createdBy
+    } = data;
+
+    if (!seriesId || !fromDateISO || !time || !startDateISO || !Array.isArray(days) || days.length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    // 1. Retire the old rule: end it the day before the edited occurrence, and trim its
+    //    materialized docs from that point onward.
+    const oldRuleRef = db.collection('recurring_series').doc(seriesId);
+    const oldRuleSnap = await oldRuleRef.get();
+    if (oldRuleSnap.exists) {
+        const dayBefore = new Date(fromDateISO);
+        dayBefore.setDate(dayBefore.getDate() - 1);
+        await oldRuleRef.update({ endDate: dayBefore.toISOString() });
+    }
+    await trimRuleFrom(seriesId, siteId, fromDateISO);
+
+    // 2. Create a new sibling rule for the new day/time selection, from the edited date forward.
+    const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newRule = {
+        siteId, trainerId, trainerName, serviceId, serviceName,
+        clientId, clientName, clientEmail, clientPhone, clientUid,
+        bookingType: bookingType || 'client',
+        time,
+        days,
+        frequency: frequency === 'daily' ? 'daily' : 'weekly',
+        startDate: startDateISO,
+        endDate: endDateISO || null,
+        timezone: timezone || DEFAULT_TIMEZONE,
+        exceptions: [],
+        materializedThrough: startDateISO,
+        skippedDates: [],
+        status: 'active',
+        recurringDetails,
+        createdAt: new Date().toISOString(),
+        createdBy: createdBy || 'Unknown User'
+    };
+    await db.collection('recurring_series').doc(newSeriesId).set(newRule);
+    const { created, appended, skippedDates } = await materializeAndPersist(newRule, newSeriesId);
+
+    await db.collection('activity_logs').add({
+        action: 'rescheduled',
+        isRecurring: true,
+        sessionDetails: { clientName, trainerName, serviceName, date: startDateISO, time, recurringDetails: recurringDetails || null },
+        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
+        timestamp: new Date().toISOString(),
+        siteId
+    });
+
+    return { success: true, created, appended, skippedCount: skippedDates.length, newSeriesId };
+});
+
+/**
+ * addClientToRecurringSeries: Replaces SessionDetailModal's old "add client to future
+ * occurrences" (which mutated another client's series' documents directly). Creates a new
+ * sibling recurring_series rule for the added client — mirroring the target series' trainer/
+ * time/end-date — and materializes it immediately. This is a real rule creation (a genuine
+ * onSessionWritten `create` event for the new sessions), so the added client now receives a
+ * WhatsApp confirmation, unlike before where the old update-based path sent nothing.
+ */
+exports.addClientToRecurringSeries = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const {
+        siteId, targetSeriesId, fromDateISO,
+        clientId, clientName, clientEmail, clientPhone, clientUid,
+        selectedDays, createdBy
+    } = data;
+
+    if (!targetSeriesId || !fromDateISO || !Array.isArray(selectedDays) || selectedDays.length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    const targetRuleSnap = await db.collection('recurring_series').doc(targetSeriesId).get();
+    if (!targetRuleSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Target series not found.');
+    }
+    const targetRule = targetRuleSnap.data();
+
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const sortedDays = [...selectedDays].sort((a, b) => a - b);
+    const recurringDetails = `Weekly on ${sortedDays.map(d => dayNames[d]).join(', ')}`;
+
+    const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newRule = {
+        siteId: siteId || targetRule.siteId,
+        trainerId: targetRule.trainerId, trainerName: targetRule.trainerName,
+        serviceId: targetRule.serviceId, serviceName: targetRule.serviceName,
+        clientId, clientName, clientEmail: clientEmail || null, clientPhone: clientPhone || null, clientUid: clientUid || null,
+        bookingType: 'client',
+        time: targetRule.time,
+        days: selectedDays,
+        frequency: 'weekly',
+        startDate: fromDateISO,
+        endDate: targetRule.endDate || null,
+        timezone: targetRule.timezone || DEFAULT_TIMEZONE,
+        exceptions: [],
+        materializedThrough: fromDateISO,
+        skippedDates: [],
+        status: 'active',
+        recurringDetails,
+        createdAt: new Date().toISOString(),
+        createdBy: createdBy || 'Unknown User'
+    };
+
+    await db.collection('recurring_series').doc(newSeriesId).set(newRule);
+    const { created, appended, skippedDates } = await materializeAndPersist(newRule, newSeriesId);
+
+    await db.collection('activity_logs').add({
+        action: 'booked',
+        isRecurring: true,
+        sessionDetails: { clientName, trainerName: targetRule.trainerName, serviceName: targetRule.serviceName, date: fromDateISO, time: targetRule.time, recurringDetails },
+        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
+        timestamp: new Date().toISOString(),
+        siteId: siteId || targetRule.siteId
+    });
+
+    return { success: true, created, appended, skippedCount: skippedDates.length, newSeriesId };
+});
+
+/**
+ * deleteRecurringOccurrence: Deletes (or, for a multi-client session, detaches this client from)
+ * a single occurrence, and atomically records the date in the rule's exceptions array in the same
+ * transaction — so a scheduled materializeRecurringWindows run can't land in the gap between the
+ * two writes and regenerate the just-deleted occurrence.
+ */
+exports.deleteRecurringOccurrence = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const { sessionId, seriesId, dateISO, clientId, timezone } = data;
+    if (!sessionId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing sessionId.');
+    }
+
+    const sessionRef = db.collection('sessions').doc(sessionId);
+    const ruleRef = seriesId ? db.collection('recurring_series').doc(seriesId) : null;
+
+    // Explicit Intent Flag, written before the delete below: tells onSessionWritten this is a
+    // single-occurrence cancellation (routes to the single-cancel notification), not a full
+    // series cancellation (which would otherwise fire the once-per-series recurring-cancel
+    // notification instead) — matches the original client-side behavior this replaces.
+    if (seriesId) {
+        await sessionRef.update({ deletionIntent: 'single' }).catch(() => {});
+    }
+
+    await db.runTransaction(async (t) => {
+        const sessionSnap = await t.get(sessionRef);
+        if (!sessionSnap.exists) return;
+        const s = sessionSnap.data();
+
+        if (clientId && Array.isArray(s.clients) && s.clients.length > 1) {
+            const updatedClients = s.clients.filter(c => c.id !== clientId);
+            const newClientIds = Array.from(new Set(updatedClients.map(c => c.id))).filter(Boolean);
+            t.update(sessionRef, { clients: updatedClients, clientIds: newClientIds });
+        } else {
+            t.delete(sessionRef);
+            t.delete(db.collection('trainer_busy_slots').doc(sessionId));
+        }
+
+        if (ruleRef && dateISO) {
+            const dateKey = DateTime.fromISO(dateISO, { zone: timezone || DEFAULT_TIMEZONE }).toISODate();
+            t.update(ruleRef, { exceptions: admin.firestore.FieldValue.arrayUnion(dateKey) });
+        }
+    });
+
+    return { success: true };
+});
+
+/**
+ * cancelRecurringSeriesFuture: Cancels this occurrence and all future occurrences of a series
+ * (SessionDetailModal's deleteScope === 'future') — distinct from updateRecurringSeriesFuture,
+ * which changes the days/time going forward; this just ends the commitment. Retires the rule
+ * (endDate = day before fromDate, or status: 'cancelled' if fromDate is at/before the rule's
+ * own start) and trims materialized docs from fromDate onward — bounded to the rolling window
+ * a series ever has materialized, unlike the old unbounded `where('seriesId','==',...)` scan
+ * this replaces. If clientId is provided and a future occurrence has other clients on it (a
+ * shared/group session), only that client is removed rather than deleting the whole session.
+ */
+exports.cancelRecurringSeriesFuture = functions.region('us-central1').https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const { seriesId, siteId, fromDateISO, clientId } = data;
+    if (!seriesId || !fromDateISO || !siteId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    const ruleRef = db.collection('recurring_series').doc(seriesId);
+    const ruleSnap = await ruleRef.get();
+    if (ruleSnap.exists) {
+        const rule = ruleSnap.data();
+        const dayBefore = new Date(fromDateISO);
+        dayBefore.setDate(dayBefore.getDate() - 1);
+        if (new Date(rule.startDate) >= new Date(fromDateISO)) {
+            await ruleRef.update({ status: 'cancelled', endDate: dayBefore.toISOString() });
+        } else {
+            await ruleRef.update({ endDate: dayBefore.toISOString() });
+        }
+    }
+
+    const snap = await db.collection('sessions')
+        .where('seriesId', '==', seriesId)
+        .where('date', '>=', fromDateISO)
+        .where('siteId', '==', siteId)
+        .get();
+
+    let batch = db.batch();
+    let opCount = 0;
+    let affected = 0;
     const commitIfFull = async () => {
         if (opCount >= BATCH_SAFETY_LIMIT) {
             await batch.commit();
@@ -808,85 +1134,68 @@ exports.updateRecurringSeriesFuture = functions.region('us-central1').https.onCa
         }
     };
 
-    for (const docSnap of deleteSnap.docs) {
-        batch.delete(docSnap.ref);
-        batch.delete(db.collection('trainer_busy_slots').doc(docSnap.id));
-        opCount += 2;
+    for (const docSnap of snap.docs) {
+        const docData = docSnap.data();
+        if (clientId && Array.isArray(docData.clients) && docData.clients.length > 1) {
+            const updatedClients = docData.clients.filter(c => c.id !== clientId);
+            if (updatedClients.length === 0) {
+                batch.delete(docSnap.ref);
+                batch.delete(db.collection('trainer_busy_slots').doc(docSnap.id));
+                opCount += 2;
+            } else {
+                const newClientIds = Array.from(new Set(updatedClients.map(c => c.id))).filter(Boolean);
+                batch.update(docSnap.ref, { clients: updatedClients, clientIds: newClientIds });
+                opCount += 1;
+            }
+        } else {
+            batch.delete(docSnap.ref);
+            batch.delete(db.collection('trainer_busy_slots').doc(docSnap.id));
+            opCount += 2;
+        }
+        affected++;
         await commitIfFull();
     }
+    if (opCount > 0) await batch.commit();
 
-    // Step 2: recreate from baseDate forward with the new day selection.
-    const clients = Array.isArray(clientsArray) && clientsArray.length > 0
-        ? clientsArray
-        : [{ id: clientId, name: clientName }];
-    const clientIds = [clientId].filter(Boolean);
-    const endDate = new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
-    let created = 0;
+    return { success: true, affected };
+});
 
-    for (const dayIdx of effectiveDays) {
-        let currentDate = new Date(baseDate);
-        const currentDay = currentDate.getDay();
-        const targetDay = (dayIdx + 1) % 7;
-        let diff = targetDay - currentDay;
-        if (diff < 0) diff += 7;
-        if (diff === 0 && currentDate < todayStart) diff = 7;
-        currentDate.setDate(currentDate.getDate() + diff);
-        if (currentDate < todayStart) currentDate.setDate(currentDate.getDate() + 7);
+/**
+ * materializeRecurringWindows: Daily scheduled extension of every active rule's rolling window.
+ * Idempotent per rule (guarded by materializedThrough, not by "did this run today"), so retries
+ * or duplicate invocations are safe. A rule that can't place an occurrence (conflict) has that
+ * date recorded in skippedDates rather than silently dropped — this job runs unattended,
+ * indefinitely, with no human reviewing its output, so a silent failure here would be permanent
+ * and invisible, unlike the one-shot creation-time equivalent.
+ */
+exports.materializeRecurringWindows = functions.region('us-central1').pubsub.schedule('every 24 hours').onRun(async () => {
+    const now = new Date();
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() + WINDOW_WEEKS * 7 - 14); // extend once within 2 weeks of the window edge
 
-        while (currentDate < endDate) {
-            const [timePart, modifier] = time.split(' ');
-            let [hours, minutes] = timePart.split(':').map(Number);
-            if (modifier === 'PM' && hours !== 12) hours += 12;
-            if (modifier === 'AM' && hours === 12) hours = 0;
-            const startDate = new Date(currentDate);
-            startDate.setHours(hours, minutes, 0, 0);
-            const endTime = new Date(startDate);
-            endTime.setMinutes(endTime.getMinutes() + 60);
+    const activeSnap = await db.collection('recurring_series')
+        .where('status', '==', 'active')
+        .where('materializedThrough', '<=', threshold.toISOString())
+        .get();
 
-            const sessionRef = db.collection('sessions').doc();
-            const sessionData = {
-                clientName,
-                clientIds,
-                clients,
-                trainerName,
-                trainerId,
-                serviceName,
-                serviceId,
-                startTime: admin.firestore.Timestamp.fromDate(startDate),
-                endTime: admin.firestore.Timestamp.fromDate(endTime),
-                time,
-                day: dayIdx,
-                date: new Date(currentDate).toISOString(),
-                status: 'Scheduled',
-                siteId,
-                seriesId,
-                recurringDetails,
-                createdAt: new Date().toISOString(),
-                createdBy: createdBy || 'Unknown User',
-                busySlotSynced: true
-            };
-            batch.set(sessionRef, sessionData);
-            batch.set(db.collection('trainer_busy_slots').doc(sessionRef.id), {
-                trainerId, date: sessionData.date, time, siteId
-            });
-            opCount += 2;
-            created++;
-            await commitIfFull();
+    console.log(`materializeRecurringWindows: ${activeSnap.size} rule(s) need extension`);
 
-            currentDate.setDate(currentDate.getDate() + 7);
+    for (const doc of activeSnap.docs) {
+        const rule = doc.data();
+        const seriesId = doc.id;
+
+        if (rule.endDate && new Date(rule.endDate) < now) {
+            // Rule has already ended — nothing left to extend; mark inactive for hygiene.
+            await doc.ref.update({ status: 'cancelled' });
+            continue;
+        }
+
+        try {
+            await materializeAndPersist(rule, seriesId);
+        } catch (err) {
+            console.error(`materializeRecurringWindows: failed to extend ${seriesId}`, err);
         }
     }
 
-    if (opCount > 0) await batch.commit();
-
-    await db.collection('activity_logs').add({
-        action: 'rescheduled',
-        isRecurring: true,
-        sessionDetails: { clientName, trainerName, serviceName, date: baseDate.toISOString(), time, recurringDetails: recurringDetails || null },
-        performedBy: { uid: context.auth.uid, name: createdBy || 'Unknown User', role: 'unknown' },
-        timestamp: new Date().toISOString(),
-        siteId
-    });
-
-    return { success: true, created };
+    return null;
 });

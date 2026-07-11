@@ -6,6 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '../AuthContext';
 import { SITE_ID } from '../constants';
 import { useFirestore } from '../hooks/useFirestore';
+import { useActiveRecurringRules, isDateCoveredByRule } from '../hooks/useActiveRecurringRules';
 import { useConfirm } from '../ConfirmContext';
 
 interface BookingModalProps {
@@ -28,6 +29,10 @@ const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const daysMap: { [key: number]: string } = {
     0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday', 5: 'saturday', 6: 'sunday'
 };
+
+// The business's own timezone, not the browser's — a manager booking while traveling shouldn't
+// accidentally create a recurring_series rule anchored to a different timezone than the studio.
+const SITE_TIMEZONE = 'Europe/Dublin';
 
 export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, excludedTrainerId, onBook }: BookingModalProps) => {
     const confirm = useConfirm();
@@ -61,7 +66,23 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const { data: trainers } = useFirestore<any>('trainers');
     const { data: services } = useFirestore<any>('services');
     const { data: offDays } = useFirestore<any>('off_days');
-    const { data: busySlots } = useFirestore<any>('trainer_busy_slots');
+    // Scoped to a window around "now" (matching the backend's rolling materialization window,
+    // see functions/index.js WINDOW_WEEKS) — this used to fetch the *entire* trainer_busy_slots
+    // collection unbounded, which only "worked" as a complete conflict oracle because every
+    // recurring series used to be materialized 2 years upfront. Anything beyond this window is
+    // now covered by the recurringRules check below instead of a materialized busy-slot doc.
+    const busySlotConstraints = useMemo(() => {
+        const start = new Date();
+        start.setDate(start.getDate() - 7);
+        const end = new Date();
+        end.setDate(end.getDate() + 100);
+        return [
+            where('date', '>=', start.toISOString()),
+            where('date', '<=', end.toISOString())
+        ];
+    }, []);
+    const { data: busySlots } = useFirestore<any>('trainer_busy_slots', busySlotConstraints);
+    const recurringRules = useActiveRecurringRules();
 
     const [selectedClient, setSelectedClient] = useState('');
     const [showClientDropdown, setShowClientDropdown] = useState(false);
@@ -223,6 +244,14 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             return bs.trainerId === trainer.id && bsDate === targetDateStr && bs.time === selectedTime;
         });
         if (isBusy) return false;
+
+        // Beyond the materialized busySlots window, a recurring_series rule can still commit
+        // this slot arbitrarily far in the future (a rule may run indefinitely) — check it
+        // directly rather than relying on a materialized document existing yet.
+        const rulesForCheck = editingSession?.seriesId
+            ? recurringRules.filter(r => r.id !== editingSession.seriesId)
+            : recurringRules;
+        if (isDateCoveredByRule(rulesForCheck, trainer.id, targetDateStr, selectedTime)) return false;
 
         const slotTime = convertTo24h(selectedTime);
 
@@ -730,23 +759,30 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     const trainer = trainers.find((t: any) => t.name === selectedTrainer);
                     const service = services.find((s: any) => s.name === (selectedService || editingSession?.serviceName));
 
-                    // Deletes all future occurrences of this series and recreates them with the
-                    // new day selection, server-side in one call (see functions/index.js).
+                    // Retires the old rule at this occurrence and creates a new sibling rule for
+                    // the new day/time selection, materializing its window server-side in one
+                    // call (see functions/index.js — updateRecurringSeriesFuture).
                     const updateRecurringSeriesFuture = httpsCallable(functions, 'updateRecurringSeriesFuture');
                     await updateRecurringSeriesFuture({
                         siteId: SITE_ID,
                         seriesId: editingSession.seriesId,
                         fromDateISO: editingSession.date,
                         time: selectedTime,
-                        baseDateISO: baseDate.toISOString(),
-                        effectiveDays,
+                        startDateISO: baseDate.toISOString(),
+                        days: effectiveDays,
+                        frequency: 'weekly',
+                        endDateISO: null,
+                        timezone: SITE_TIMEZONE,
                         trainerId: trainer?.id || editingSession.trainerId,
                         trainerName: selectedTrainer,
                         serviceId: service?.id || editingSession.serviceId,
                         serviceName: selectedService || editingSession.serviceName,
                         clientId: editingSession.clientId,
                         clientName: editingSession.clientName,
-                        clientsArray: editingSession.clients,
+                        clientEmail: editingSession.clientEmail,
+                        clientPhone: editingSession.clientPhone,
+                        clientUid: editingSession.clientUid,
+                        bookingType: editingSession.status === 'Blocked' ? 'block' : 'client',
                         recurringDetails: newRecurringDetails,
                         createdBy: profile?.name || 'Unknown User'
                     });
@@ -770,16 +806,15 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
                     recurringDetails = `Weekly on ${dayNames.join(', ')}`;
                 }
 
-                // Admin/managers: always weekly, 2 years out
-                // Clients: max 14 days
-                const endDate = isClient
-                    ? getClientMaxDate()
-                    : new Date(new Date().getFullYear() + 2, new Date().getMonth(), new Date().getDate());
+                // Admin/managers: indefinite (no end date) — a recurring_series rule, not a
+                // materialized 2-year stand-in for "forever" (see functions/index.js).
+                // Clients: max 14 days, still passed as a real endDate.
+                const endDateISO = isClient ? getClientMaxDate().toISOString() : null;
 
                 // For admin/managers, always use weekly
                 const effectiveFrequency = isStaff ? 'weekly' : repeatFrequency;
 
-                console.log(`[BOOKING] Recurring: freq=${effectiveFrequency}, endDate=${endDate.toISOString()}, selectedDays=${JSON.stringify(selectedDays)}`);
+                console.log(`[BOOKING] Recurring: freq=${effectiveFrequency}, endDateISO=${endDateISO}, selectedDays=${JSON.stringify(selectedDays)}`);
 
                 const trainer = trainers.find((t: any) => t.name === selectedTrainer);
                 const currentServiceName = selectedService || editingSession?.serviceName;
@@ -795,16 +830,18 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
 
                 const skipKeys: Set<string> | null = (window as any).__conflictKeys || null;
 
-                // Creates/appends every occurrence server-side in a handful of batched writes,
-                // instead of one client-side write per occurrence (see functions/index.js).
+                // Creates a recurring_series rule and materializes its first rolling window
+                // server-side, instead of one client-side write per occurrence for the rule's
+                // entire lifetime (see functions/index.js).
                 const createRecurringSeries = httpsCallable(functions, 'createRecurringSeries');
                 await createRecurringSeries({
                     siteId: SITE_ID,
                     time: selectedTime,
-                    baseDateISO: baseDate.toISOString(),
-                    effectiveDays: selectedDays,
+                    startDateISO: baseDate.toISOString(),
+                    days: selectedDays,
                     frequency: effectiveFrequency,
-                    endDateISO: endDate.toISOString(),
+                    endDateISO,
+                    timezone: SITE_TIMEZONE,
                     trainerId: trainer?.id || null,
                     trainerName: selectedTrainer,
                     serviceId: activeService?.id || null,
