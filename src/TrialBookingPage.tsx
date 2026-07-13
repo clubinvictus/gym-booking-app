@@ -73,23 +73,17 @@ export const TrialBookingPage = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // 1. Initial Data Fetch
+    // 1. One-time fetch: trial service + assigned trainers (small, doesn't change per page-view).
     useEffect(() => {
-        let unsubSessions: (() => void) | null = null;
-        let unsubOffDays: (() => void) | null = null;
-        let unsubBusySlots: (() => void) | null = null;
-        let unsubRecurringRules: (() => void) | null = null;
-
         const fetchData = async () => {
             try {
-                // Fetch service info
                 const qService = query(
                     collection(db, 'services'),
                     where('siteId', '==', SITE_ID),
                     where('allowed_tiers', 'array-contains', 'lead')
                 );
                 const serviceSnap = await getDocs(qService);
-                
+
                 if (serviceSnap.empty) {
                     setError('Trial service not configured for this site.');
                     return;
@@ -98,7 +92,6 @@ export const TrialBookingPage = () => {
                 const s = { id: serviceSnap.docs[0].id, ...(serviceSnap.docs[0].data() as any) };
                 setTrialService(s);
 
-                // Fetch trainers assigned to the trial service
                 const trainerIds = s.assigned_trainer_ids || [];
                 if (trainerIds.length === 0) {
                     setError('No trainers assigned to the Trial service.');
@@ -107,26 +100,6 @@ export const TrialBookingPage = () => {
 
                 const trainersSnap = await getDocs(query(collection(db, 'trainers'), where('__name__', 'in', trainerIds.slice(0, 10))));
                 setTrainers(trainersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-                // Use real-time listeners for dynamic availability data
-                unsubSessions = onSnapshot(query(collection(db, 'sessions'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
-                    setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                });
-
-                unsubOffDays = onSnapshot(query(collection(db, 'off_days'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
-                    setOffDays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                });
-
-                unsubBusySlots = onSnapshot(query(collection(db, 'trainer_busy_slots'), where('siteId', '==', SITE_ID)), (snap: QuerySnapshot<DocumentData>) => {
-                    setBusySlots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                });
-
-                // A recurring_series rule can commit a slot arbitrarily far in the future (a
-                // rule may run indefinitely) beyond what's materialized into busySlots yet.
-                unsubRecurringRules = onSnapshot(query(collection(db, 'recurring_series'), where('siteId', '==', SITE_ID), where('status', '==', 'active')), (snap: QuerySnapshot<DocumentData>) => {
-                    setRecurringRules(snap.docs.map(d => ({ id: d.id, ...d.data() } as RecurringRule)));
-                });
-
             } catch (err: any) {
                 console.error('Fetch error:', err);
                 setError(err.message);
@@ -136,14 +109,70 @@ export const TrialBookingPage = () => {
         };
 
         fetchData();
+    }, []);
 
-        // Cleanup listeners on unmount
+    // 2. Availability data, scoped to the currently visible week and re-subscribed whenever the
+    // user pages forward/backward — these were previously unbounded, whole-collection listeners
+    // (every session and every busy-slot ever created, site-wide), which is exactly the pattern
+    // already diagnosed and fixed on the main app's calendar: a public, anonymous page pulling
+    // down thousands of documents and re-scanning all of them per rendered cell on every render
+    // is precisely what produces a long-blocking main thread and Chrome's "Page Unresponsive".
+    useEffect(() => {
+        const weekStart = new Date(currentWeekStart);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + daysToShow - 1);
+        weekEnd.setHours(23, 59, 59, 999);
+        const weekStartDateOnly = weekStart.toISOString().split('T')[0];
+        const weekEndDateOnly = weekEnd.toISOString().split('T')[0];
+
+        const unsubSessions = onSnapshot(
+            query(
+                collection(db, 'sessions'),
+                where('siteId', '==', SITE_ID),
+                where('date', '>=', weekStart.toISOString()),
+                where('date', '<=', weekEnd.toISOString())
+            ),
+            (snap: QuerySnapshot<DocumentData>) => setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        );
+
+        const unsubOffDays = onSnapshot(
+            query(
+                collection(db, 'off_days'),
+                where('siteId', '==', SITE_ID),
+                where('date', '>=', weekStartDateOnly),
+                where('date', '<=', weekEndDateOnly)
+            ),
+            (snap: QuerySnapshot<DocumentData>) => setOffDays(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        );
+
+        const unsubBusySlots = onSnapshot(
+            query(
+                collection(db, 'trainer_busy_slots'),
+                where('siteId', '==', SITE_ID),
+                where('date', '>=', weekStart.toISOString()),
+                where('date', '<=', weekEnd.toISOString())
+            ),
+            (snap: QuerySnapshot<DocumentData>) => setBusySlots(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        );
+
         return () => {
-            if (unsubSessions) unsubSessions();
-            if (unsubOffDays) unsubOffDays();
-            if (unsubBusySlots) unsubBusySlots();
-            if (unsubRecurringRules) unsubRecurringRules();
+            unsubSessions();
+            unsubOffDays();
+            unsubBusySlots();
         };
+    }, [currentWeekStart, daysToShow]);
+
+    // 3. Active recurring_series rules — a rule can commit a slot arbitrarily far in the future
+    // (it may run indefinitely) beyond what's materialized into busySlots yet, but active-rule
+    // count for the whole site is small (bounded by ongoing commitments), so this doesn't need
+    // date-scoping the way the collections above do.
+    useEffect(() => {
+        const unsub = onSnapshot(
+            query(collection(db, 'recurring_series'), where('siteId', '==', SITE_ID), where('status', '==', 'active')),
+            (snap: QuerySnapshot<DocumentData>) => setRecurringRules(snap.docs.map(d => ({ id: d.id, ...d.data() } as RecurringRule)))
+        );
+        return () => unsub();
     }, []);
 
     // recurring_series.time is stored "09:00 AM" (matching BookingModal's format); this page's
