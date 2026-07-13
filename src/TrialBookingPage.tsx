@@ -26,6 +26,22 @@ const TIME_SLOTS = [
 // commitment, so there's no need to browse further than this.
 const VISIBLE_DAYS = 14;
 
+// Mon=0..Sun=6, matching the app-wide convention (BookingModal, WeekGrid) and trainer.availability's keys.
+const DAY_NAME_KEYS: { [key: number]: string } = {
+    0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday', 4: 'friday', 5: 'saturday', 6: 'sunday'
+};
+
+const convertTo24h = (timeStr: string) => {
+    if (!timeStr) return '';
+    if (timeStr.includes(':') && timeStr.length === 5) return timeStr;
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':');
+    if (hours === '12') hours = '00';
+    if (modifier === 'PM') hours = (parseInt(hours, 10) + 12).toString().padStart(2, '0');
+    else hours = hours.padStart(2, '0');
+    return `${hours}:${minutes}`;
+};
+
 // Zero-padded to match the format sessions/recurring_series store the time in elsewhere in the
 // app (BookingModal's TIME_SLOTS, e.g. "09:00 AM") — this value isn't just for display, it's also
 // compared directly against rule.time in isDateCoveredByRule below, so the formats must match
@@ -187,9 +203,31 @@ export const TrialBookingPage = () => {
         const available: any[] = [];
 
         for (const trainer of trainers) {
+            // Is the trainer actually scheduled to work this day/time at all? This check never
+            // existed here (confirmed against every prior version of this file) \u2014 every trainer
+            // with no off-day, no conflicting session, and no busy-slot was shown regardless of
+            // whether they were ever rostered for that hour.
+            const dayName = DAY_NAME_KEYS[(date.getDay() + 6) % 7];
+            const daySchedule = trainer.availability?.[dayName];
+            if (!daySchedule || !daySchedule.active) continue;
+
+            const isWithinShift = daySchedule.shifts
+                ? daySchedule.shifts.some((shift: { start: string, end: string }) => {
+                    const startTime = convertTo24h(shift.start);
+                    const endTime = convertTo24h(shift.end);
+                    return time >= startTime && time < endTime;
+                })
+                : daySchedule.start && daySchedule.end
+                    ? time >= convertTo24h(daySchedule.start) && time < convertTo24h(daySchedule.end)
+                    : false;
+            if (!isWithinShift) continue;
+
             const isOff = offDays.some(od => od.trainerId === trainer.id && od.date === dateStr);
             if (isOff) continue;
 
+            // sessions/trainer_busy_slots store time as 12-hour ("09:00 AM", matching
+            // BookingModal's TIME_SLOTS), not this page's 24-hour TIME_SLOTS \u2014 compare against
+            // time12, not the raw 24-hour time, or these never match real booked sessions.
             const existingSessions = sessions.filter(s => {
                 if (s.trainerId !== trainer.id) return false;
                 if (s.startTime) {
@@ -199,9 +237,9 @@ export const TrialBookingPage = () => {
                         minute: '2-digit',
                         hour12: true
                     }).replace(/\u202F/g, ' ');
-                    return start.toDateString() === date.toDateString() && sessionTimeStr === time;
+                    return start.toDateString() === date.toDateString() && sessionTimeStr === time12;
                 }
-                return s.time === time && s.date === dateISO;
+                return s.time === time12 && s.date === dateISO;
             });
 
             let hasConflict = false;
@@ -217,7 +255,7 @@ export const TrialBookingPage = () => {
             }
             if (hasConflict) continue;
 
-            const isBusy = busySlots.some(bs => bs.trainerId === trainer.id && bs.time === time && bs.date === dateISO);
+            const isBusy = busySlots.some(bs => bs.trainerId === trainer.id && bs.time === time12 && bs.date === dateISO);
             if (isBusy) continue;
 
             // Beyond the materialized busySlots window, a recurring_series rule can still
