@@ -86,7 +86,7 @@ export const TrialBookingPage = () => {
                 const qService = query(
                     collection(db, 'services'),
                     where('siteId', '==', SITE_ID),
-                    where('isTrial', '==', true)
+                    where('allowed_tiers', 'array-contains', 'lead')
                 );
                 const serviceSnap = await getDocs(qService);
                 

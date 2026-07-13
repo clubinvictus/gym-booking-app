@@ -96,12 +96,11 @@ service cloud.firestore {
       // Unauthenticated access is allowed for trial booking availability checks.
       allow list: if true;
 
-      // Individual document reads: allow staff, or if the user's uid/clientId is in the session
+      // Individual document reads: allow staff, or if the user's clientId is in the session
       allow get: if (
         isStaff() ||
-        (isSignedIn() && resource.data.uids != null && request.auth.uid in resource.data.uids) ||
-        (isSignedIn() && resource.data.client_ids != null && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId in resource.data.client_ids) ||
+        (isSignedIn() && resource.data.clientIds != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId in resource.data.clientIds) ||
         resource.data.status == 'Scheduled' // Public availability check
       );
 

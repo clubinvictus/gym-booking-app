@@ -494,9 +494,7 @@ exports.processTrialBooking = functions.region('us-central1').https.onCall(async
                     name: name,
                     email: normalizedEmail
                 }],
-                client_ids: [clientRef.id], // UPDATED: Changed from clientIds to client_ids
-                uids: [authUser.uid], // ADDED: Mirror UID for secure rules lookup
-                clientId: clientRef.id, // Legacy support
+                clientIds: [clientRef.id], // Canonical field used by SessionService queries
                 clientName: name, // Legacy support
                 trainerId: slot.trainerId,
                 trainerName: slot.trainerName,
