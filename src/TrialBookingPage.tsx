@@ -318,23 +318,23 @@ export const TrialBookingPage = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                                     <h3 style={{ fontSize: '1.2rem', fontWeight: 900, textTransform: 'uppercase' }}>SELECT A TIME</h3>
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button 
+                                        <button
                                             onClick={() => {
                                                 const d = new Date(currentWeekStart);
                                                 d.setDate(d.getDate() - daysToShow);
                                                 setCurrentWeekStart(d);
                                             }}
-                                            style={{ padding: '8px', background: 'transparent', border: '2px solid #000', cursor: 'pointer', color: '#000', borderRadius: '6px' }}
+                                            style={{ minWidth: '44px', minHeight: '44px', padding: '8px', background: 'transparent', border: '2px solid #000', cursor: 'pointer', color: '#000', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                         >
                                             <ChevronLeft size={20} />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => {
                                                 const d = new Date(currentWeekStart);
                                                 d.setDate(d.getDate() + daysToShow);
                                                 setCurrentWeekStart(d);
                                             }}
-                                            style={{ padding: '8px', background: 'transparent', border: '2px solid #000', cursor: 'pointer', color: '#000', borderRadius: '6px' }}
+                                            style={{ minWidth: '44px', minHeight: '44px', padding: '8px', background: 'transparent', border: '2px solid #000', cursor: 'pointer', color: '#000', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                         >
                                             <ChevronRight size={20} />
                                         </button>
@@ -352,13 +352,13 @@ export const TrialBookingPage = () => {
                                     display: 'grid', 
                                     gridTemplateColumns: `${isMobile ? '60px' : '80px'} repeat(${daysToShow}, 1fr)` 
                                 }}>
-                                    <div style={{ borderRight: '1px solid #000' }}></div>
+                                    <div style={{ borderRight: '1px solid #000', borderBottom: '1px solid #000', position: 'sticky', top: 0, zIndex: 10, background: '#fff' }}></div>
                                     {DAYS.slice(0, daysToShow).map((day, i) => {
                                         const date = new Date(currentWeekStart);
                                         date.setDate(date.getDate() + i);
                                         const isToday = date.toDateString() === new Date().toDateString();
                                         return (
-                                            <div key={day} style={{ padding: isMobile ? '8px 4px' : '16px', borderRight: '1px solid #000', textAlign: 'center', background: isToday ? '#f0f0f0' : 'transparent' }}>
+                                            <div key={day} style={{ padding: isMobile ? '8px 4px' : '16px', borderRight: '1px solid #000', borderBottom: '1px solid #000', textAlign: 'center', background: isToday ? '#f0f0f0' : '#fff', position: 'sticky', top: 0, zIndex: 10 }}>
                                                 <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#000', textTransform: 'uppercase' }}>{day}</div>
                                                 <div style={{ fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: 900 }}>{date.getDate()}</div>
                                             </div>
@@ -384,14 +384,18 @@ export const TrialBookingPage = () => {
                                                 const isAvailable = availableTrainers.length > 0 && !isPast;
 
                                                 return (
-                                                    <div 
+                                                    <div
                                                         key={`${i}-${time}`}
                                                         onClick={() => isAvailable && handleSlotClick(date, time, availableTrainers)}
-                                                        style={{ 
-                                                            minHeight: '80px', 
-                                                            borderTop: '1px solid #000', 
+                                                        style={{
+                                                            minHeight: isMobile ? '56px' : '80px',
+                                                            borderTop: '1px solid #000',
                                                             borderRight: '1px solid #000',
-                                                            background: isAvailable ? '#fff' : '#f9f9f9',
+                                                            // A persistent, always-visible tint for available slots — the previous
+                                                            // #fff vs #f9f9f9 distinction was nearly imperceptible, and the "BOOK"
+                                                            // label below only ever appeared on :hover, which touch devices don't
+                                                            // have, so mobile users had no way to see which slots were bookable.
+                                                            background: isAvailable ? '#eef9f0' : '#f9f9f9',
                                                             cursor: isAvailable ? 'pointer' : 'default',
                                                             padding: '4px',
                                                             transition: 'all 0.2s',
@@ -402,9 +406,12 @@ export const TrialBookingPage = () => {
                                                         className={isAvailable ? 'calendar-cell available' : 'calendar-cell'}
                                                     >
                                                         {isAvailable && (
-                                                            <div className="book-btn" style={{ height: '100%', border: 'none', background: '#000', color: '#fff', display: 'none', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 900, borderRadius: '6px' }}>
-                                                                BOOK
-                                                            </div>
+                                                            <>
+                                                                <div style={{ position: 'absolute', top: '6px', right: '6px', width: '8px', height: '8px', borderRadius: '50%', background: '#2ecc71' }} />
+                                                                <div className="book-btn" style={{ height: '100%', border: 'none', background: '#000', color: '#fff', display: 'none', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 900, borderRadius: '6px' }}>
+                                                                    BOOK
+                                                                </div>
+                                                            </>
                                                         )}
                                                         {!isAvailable && isPast && (
                                                             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#999', textTransform: 'uppercase' }}>
@@ -500,7 +507,7 @@ export const TrialBookingPage = () => {
                                                 />
                                             </div>
 
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                            <div className="phone-password-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                                                 <div>
                                                     <label style={{ display: 'block', fontWeight: 900, fontSize: '0.65rem', color: '#000', textTransform: 'uppercase', marginBottom: '4px' }}>Phone</label>
                                                     <input 
@@ -607,9 +614,15 @@ export const TrialBookingPage = () => {
                 .calendar-cell.available:hover {
                     background: #f5f5f5 !important;
                 }
-                
+
                 .calendar-cell.available:hover .book-btn {
                     display: flex !important;
+                }
+
+                /* :active fires on tap-down on touch devices (unlike :hover), so mobile users
+                   get immediate visual feedback that a tap registered before the modal opens. */
+                .calendar-cell.available:active {
+                    background: #d9f2df !important;
                 }
 
                 .brutalist-input:focus {
@@ -690,6 +703,14 @@ export const TrialBookingPage = () => {
 
                     .calendar-header h3 {
                         font-size: 1rem !important;
+                    }
+                }
+
+                /* Phone/Password only need to stack on genuinely narrow phones (e.g. iPhone SE,
+                   ~375px) — at tablet widths (up to 768px) there's room for both columns. */
+                @media (max-width: 420px) {
+                    .phone-password-grid {
+                        grid-template-columns: 1fr !important;
                     }
                 }
             `}</style>
