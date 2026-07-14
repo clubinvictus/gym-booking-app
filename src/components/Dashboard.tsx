@@ -16,8 +16,9 @@ const ClientProfile = lazy(() => import('./ClientProfile').then(m => ({ default:
 const TeamManagement = lazy(() => import('./TeamManagement').then(m => ({ default: m.TeamManagement })));
 
 // New Components
-import { collection, doc, addDoc, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { collection, doc, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { db, auth, functions } from '../firebase';
 import { SITE_ID } from '../constants';
 import { useSessions } from '../hooks/useSessions';
 import { SessionDetailModal } from './SessionDetailModal';
@@ -125,12 +126,26 @@ export const Dashboard = ({ view = 'dashboard' }: DashboardProps) => {
 
     const handleTrainerDelete = async (id: string) => {
         try {
-            await deleteDoc(doc(db, 'trainers', id));
+            const deleteTrainerIfNoHistory = httpsCallable(functions, 'deleteTrainerIfNoHistory');
+            await deleteTrainerIfNoHistory({ trainerId: id });
             setSelectedTrainerId(null);
             alert('Trainer deleted successfully.');
-        } catch (error) {
-            console.error('Error deleting trainer:', error);
-            alert('Failed to delete trainer.');
+        } catch (error: any) {
+            if (error?.code === 'functions/failed-precondition') {
+                // Trainer has session/recurring history — hard-delete isn't safe. Deactivate
+                // instead so they drop out of new-booking pickers; their existing sessions
+                // stay intact and can be resolved from this same profile view.
+                try {
+                    await updateDoc(doc(db, 'trainers', id), { status: 'Inactive' });
+                    alert('This trainer has booking history, so they were deactivated instead of deleted. You can now reassign or cancel their upcoming sessions below.');
+                } catch (deactivateError) {
+                    console.error('Error deactivating trainer:', deactivateError);
+                    alert('Failed to deactivate trainer.');
+                }
+            } else {
+                console.error('Error deleting trainer:', error);
+                alert('Failed to delete trainer.');
+            }
         }
     };
 

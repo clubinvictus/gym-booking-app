@@ -203,6 +203,8 @@ export const TrialBookingPage = () => {
         const available: any[] = [];
 
         for (const trainer of trainers) {
+            if (trainer.status === 'Inactive') continue;
+
             // Is the trainer actually scheduled to work this day/time at all? This check never
             // existed here (confirmed against every prior version of this file) \u2014 every trainer
             // with no off-day, no conflicting session, and no busy-slot was shown regardless of

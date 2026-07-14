@@ -274,7 +274,11 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
     const availableTrainers = trainers.filter(t =>
         (selectedService ? (t.specialties?.includes(selectedService)) : true) &&
         isAvailable(t) &&
-        (excludedTrainerId ? t.id !== excludedTrainerId : true)
+        (excludedTrainerId ? t.id !== excludedTrainerId : true) &&
+        // Inactive trainers are hidden from new bookings, but a session already assigned to one
+        // must still show them so an unrelated edit (e.g. nudging the time) doesn't blank the
+        // required trainer field and block the save.
+        (t.status !== 'Inactive' || (editingSession && t.name === editingSession.trainerName && t.id !== excludedTrainerId))
     );
 
     const currentClientName = isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName);

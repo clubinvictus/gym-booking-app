@@ -61,6 +61,28 @@ async function getManagerPhones() {
 }
 
 /**
+ * Throws permission-denied unless the calling user is a manager/admin. Every existing onCall
+ * function in this file only checks context.auth (fine for self-service actions on a client's
+ * own booking), but trainer management is deliberately restricted to isManager() at the
+ * firestore.rules level — a callable that bypasses rules via the Admin SDK needs the same
+ * restriction re-checked explicitly inside the function body.
+ */
+async function requireManager(context) {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+    const uid = context.auth.uid;
+    const [managerDoc, userDoc] = await Promise.all([
+        db.collection('managers').doc(uid).get(),
+        db.collection('users').doc(uid).get()
+    ]);
+    const role = userDoc.data()?.role;
+    if (!managerDoc.exists && role !== 'manager' && role !== 'admin') {
+        throw new functions.https.HttpsError('permission-denied', 'Managers only.');
+    }
+}
+
+/**
  * Sends a WhatsApp Template message via an EasySocial Webhook
  */
 async function sendWhatsAppTemplate(to, templateName, variables) {
@@ -377,6 +399,7 @@ exports.onSessionWritten = functions.firestore
             }
         } else if (isUpdate) {
             const timeChanged = beforeData.time !== afterData.time || beforeData.date !== afterData.date;
+            const trainerChanged = beforeData.trainerId !== afterData.trainerId;
 
             if (timeChanged) {
                 // Client Reschedule
@@ -397,6 +420,18 @@ exports.onSessionWritten = functions.firestore
                         await sendWhatsAppTemplate(mPhone, "manager_single_reschedule", singleVars);
                         await delay(1500);
                     }
+                }
+            }
+
+            // Trainer reassignment (e.g. from resolving a deactivated trainer's upcoming
+            // sessions) — same date/time, different trainer, so timeChanged above won't have
+            // fired anything. Only the client is notified here; the outgoing trainer isn't (they
+            // already know they're being deactivated, and the incoming trainer already gets
+            // trainer_single_alert-equivalent context via their own calendar).
+            if (trainerChanged && !timeChanged) {
+                if (clientPhone) {
+                    await sendWhatsAppTemplate(clientPhone, "client_trainer_changed", singleVars);
+                    await delay(1500);
                 }
             }
         }
@@ -708,6 +743,23 @@ async function getServiceMaxCapacity(serviceId) {
  * both write to it.
  */
 async function materializeRuleWindow(rule, seriesId, fromDate, toDate) {
+    // Defense-in-depth: the trainers/{id} onUpdate trigger cancels a trainer's active rules the
+    // moment they're deactivated, but this scheduled job can lag up to one run behind that (it
+    // re-queries status:'active' fresh every run) — without this check, a rule could still get
+    // extended once during that window. This also guards against a rule staying active for a
+    // trainer through any other path (manual Firestore edit, a bug), since it doesn't depend on
+    // the trigger having fired at all. Missing status is treated as Active, matching the
+    // fallback convention already used client-side (EditTrainerModal, TrainerProfile).
+    if (rule.trainerId) {
+        const trainerSnap = await db.collection('trainers').doc(rule.trainerId).get();
+        if (!trainerSnap.exists || trainerSnap.data().status === 'Inactive') {
+            return {
+                created: 0, appended: 0, skippedDates: [],
+                materializedThrough: rule.materializedThrough ? new Date(rule.materializedThrough) : fromDate
+            };
+        }
+    }
+
     const exceptionsSet = new Set(rule.exceptions || []);
     const maxCapacity = await getServiceMaxCapacity(rule.serviceId);
     const occurrenceDates = enumerateOccurrenceDates(rule, fromDate, toDate);
@@ -1196,4 +1248,136 @@ exports.materializeRecurringWindows = functions.region('us-central1').pubsub.sch
     }
 
     return null;
+});
+
+/**
+ * onTrainerDeactivated: fires only on an explicit status transition Active -> Inactive on a
+ * trainer doc (onUpdate, not onWrite, so ordinary name/phone/availability edits via
+ * EditTrainerModal don't re-trigger this, and the create/delete cases don't apply). Cancels
+ * every active recurring_series rule owned by that trainer — a rule silently continuing to book
+ * an inactive trainer forever (materializeRecurringWindows never checked trainer existence) is
+ * unambiguously wrong and needs no human judgment call, unlike what happens to the trainer's
+ * already-materialized future sessions, which surface in the manager-facing resolution list
+ * instead of being touched here.
+ */
+exports.onTrainerDeactivated = functions.region('us-central1').firestore
+    .document('trainers/{trainerId}')
+    .onUpdate(async (change, context) => {
+        const before = change.before.data();
+        const after = change.after.data();
+        if (before.status !== 'Active' || after.status !== 'Inactive') {
+            return null;
+        }
+
+        const trainerId = context.params.trainerId;
+        const rulesSnap = await db.collection('recurring_series')
+            .where('trainerId', '==', trainerId)
+            .where('status', '==', 'active')
+            .get();
+
+        if (rulesSnap.empty) return null;
+
+        let batch = db.batch();
+        let opCount = 0;
+        for (const doc of rulesSnap.docs) {
+            batch.update(doc.ref, { status: 'cancelled' });
+            opCount++;
+            if (opCount >= BATCH_SAFETY_LIMIT) {
+                await batch.commit();
+                batch = db.batch();
+                opCount = 0;
+            }
+        }
+        if (opCount > 0) await batch.commit();
+
+        const logBatch = db.batch();
+        rulesSnap.docs.forEach(doc => {
+            const rule = doc.data();
+            logBatch.set(db.collection('activity_logs').doc(), {
+                action: 'series_auto_cancelled_trainer_inactive',
+                isRecurring: true,
+                sessionDetails: {
+                    clientName: rule.clientName, trainerName: rule.trainerName,
+                    serviceName: rule.serviceName, recurringDetails: rule.recurringDetails || null
+                },
+                performedBy: { uid: 'system', role: 'system', name: 'Trainer Deactivation Cascade' },
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                siteId: rule.siteId
+            });
+        });
+        await logBatch.commit();
+
+        console.log(`onTrainerDeactivated: cancelled ${rulesSnap.size} rule(s) for trainer ${trainerId}`);
+        return null;
+    });
+
+/**
+ * deleteTrainerIfNoHistory: the only path allowed to hard-delete a trainer doc now
+ * (firestore.rules blocks direct client deletes). Only succeeds for a trainer with zero session
+ * history ever — not just zero upcoming — since a trainer with completed past sessions still has
+ * real history worth preserving (activity logs, reporting). Anyone with any history must go
+ * through deactivation (a plain status update) instead.
+ */
+exports.deleteTrainerIfNoHistory = functions.region('us-central1').https.onCall(async (data, context) => {
+    await requireManager(context);
+
+    const { trainerId } = data;
+    if (!trainerId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing trainerId.');
+    }
+
+    const [sessSnap, ruleSnap] = await Promise.all([
+        db.collection('sessions').where('trainerId', '==', trainerId).limit(1).get(),
+        db.collection('recurring_series').where('trainerId', '==', trainerId).limit(1).get()
+    ]);
+
+    if (!sessSnap.empty || !ruleSnap.empty) {
+        throw new functions.https.HttpsError('failed-precondition', 'This trainer has session history and cannot be deleted — deactivate them instead.');
+    }
+
+    await db.collection('trainers').doc(trainerId).delete();
+    return { success: true };
+});
+
+/**
+ * bulkReassignSessions: reassigns every listed session to a new trainer in one call, for
+ * resolving a deactivated trainer's upcoming-sessions backlog in bulk rather than one row at a
+ * time (a single weekly recurring rule alone can leave ~WINDOW_WEEKS materialized occurrences,
+ * and a busy trainer can have several concurrent rules). Clears seriesId on every reassigned
+ * occurrence — required, not cosmetic: onSessionWritten's recurring branch only handles
+ * isCreate/isDelete, so a session that keeps its seriesId after reassignment would fall through
+ * to a silent no-op (no client notification) and would also leave materializeRuleWindow's
+ * dedupe check unable to recognize the slot as covered, since it matches on the rule's own
+ * trainerId — the next scheduled run would create a duplicate session for the original trainer.
+ */
+exports.bulkReassignSessions = functions.region('us-central1').https.onCall(async (data, context) => {
+    await requireManager(context);
+
+    const { sessionIds, newTrainerId, newTrainerName } = data;
+    if (!Array.isArray(sessionIds) || sessionIds.length === 0 || !newTrainerId || !newTrainerName) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    let batch = db.batch();
+    let opCount = 0;
+    let reassigned = 0;
+
+    for (const sessionId of sessionIds) {
+        const ref = db.collection('sessions').doc(sessionId);
+        batch.update(ref, {
+            trainerId: newTrainerId,
+            trainerName: newTrainerName,
+            seriesId: admin.firestore.FieldValue.delete()
+        });
+        opCount++;
+        reassigned++;
+        if (opCount >= BATCH_SAFETY_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            opCount = 0;
+        }
+    }
+    if (opCount > 0) await batch.commit();
+
+    return { success: true, reassigned };
 });

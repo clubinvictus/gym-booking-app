@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { ArrowLeft, User, Mail, Calendar, Star, Edit2, Trash2, AlertTriangle, Phone } from 'lucide-react';
+import { ArrowLeft, User, Mail, Calendar, Star, Edit2, Trash2, Phone, AlertCircle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { useConfirm } from '../ConfirmContext';
 import { db } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, addDoc, collection } from 'firebase/firestore';
+import { SITE_ID } from '../constants';
 import { useSessions } from '../hooks/useSessions';
+import { BookingModal } from './BookingModal';
 
 interface TrainerProfileProps {
     onBack: () => void;
@@ -12,22 +15,90 @@ interface TrainerProfileProps {
     onDelete: (id: string) => void;
 }
 
+const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerProfileProps) => {
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState(trainer.name);
     const [editRole, setEditRole] = useState(trainer.role || 'trainer');
     const [editPhone, setEditPhone] = useState(trainer.phone || '');
     const [phoneError, setPhoneError] = useState('');
     const { user, profile } = useAuth();
+    const confirm = useConfirm();
     const isManager = profile?.role === 'manager';
 
-    const { sessions, loading: sessionsLoading } = useSessions({
+    // Reassign flow state — mirrors CalendarView's off-day "Reschedule" mechanism
+    // (excludedTrainerId + BookingModal with editingSession) rather than a bespoke picker.
+    const [reassignSlot, setReassignSlot] = useState<any>(null);
+    const [reassignSession, setReassignSession] = useState<any>(null);
+
+    const { sessions, loading: sessionsLoading, hasMore, loadMore } = useSessions({
         role: profile?.role as any,
         userId: user?.uid || '',
         trainerId: trainer.id,
-        pageSize: 10
+        pageSize: 50
     });
+
+    const upcomingSessions = sessions
+        .filter((s: any) => s.status !== 'Cancelled' && (s.date || '') >= todayStr())
+        .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)) || String(a.time).localeCompare(String(b.time)));
+
+    const handleDeleteClick = async () => {
+        const confirmed = await confirm({
+            title: 'Delete Trainer?',
+            message: 'This trainer will no longer be bookable for new sessions. If they have any booking history, they\'ll be deactivated instead of deleted — any active recurring series will be cancelled, and you\'ll be able to resolve their upcoming sessions below.',
+            confirmLabel: 'Continue',
+            type: 'danger'
+        });
+        if (confirmed) onDelete(trainer.id);
+    };
+
+    const handleCancelSession = async (session: any) => {
+        const confirmed = await confirm({
+            title: 'Cancel Session?',
+            message: `Are you sure you want to cancel the session for ${session.clientName || 'Group'} at ${session.time}? This action cannot be undone.`,
+            confirmLabel: 'Yes, Cancel',
+            type: 'danger'
+        });
+        if (!confirmed) return;
+
+        try {
+            await deleteDoc(doc(db, 'sessions', session.id));
+            await addDoc(collection(db, 'activity_logs'), {
+                action: 'cancelled',
+                sessionDetails: {
+                    clientName: session.clientName || session.clients?.map((c: any) => c.name).join(', ') || 'Group',
+                    trainerName: session.trainerName,
+                    serviceName: session.serviceName,
+                    date: session.date,
+                    time: session.time
+                },
+                performedBy: {
+                    uid: profile?.uid || 'unknown',
+                    name: profile?.name || 'Unknown User',
+                    role: profile?.role || 'unknown'
+                },
+                timestamp: new Date().toISOString(),
+                siteId: SITE_ID
+            });
+        } catch (error) {
+            console.error('Error cancelling session:', error);
+            alert('Failed to cancel session.');
+        }
+    };
+
+    const handleReassignClick = (session: any) => {
+        setReassignSession(session);
+        setReassignSlot({
+            day: session.day,
+            time: session.time,
+            trainerId: session.trainerId,
+            date: session.date ? new Date(session.date) : new Date()
+        });
+    };
 
     const handleSaveEdit = async () => {
         // E.164 basic validation
@@ -83,39 +154,7 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                     Back to Trainers
                 </button>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    {showDeleteConfirm ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#fff1f1', padding: '8px 16px', border: '2px solid #ff4444' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ff4444', fontWeight: 800, fontSize: '0.85rem' }}>
-                                <AlertTriangle size={18} />
-                                CONFIRM DELETE?
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); onDelete(trainer.id); }}
-                                    style={{
-                                        padding: '6px 16px',
-                                        background: '#ff4444',
-                                        color: '#fff',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontWeight: 800,
-                                        fontSize: '0.8rem'
-                                    }}
-                                >
-                                    YES, DELETE
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
-                                    className="button-secondary"
-                                    style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-                                >
-                                    CANCEL
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
+                    {
                         isManager ? (
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 {isEditing ? (
@@ -150,7 +189,7 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                                             <Edit2 size={16} /> Edit
                                         </button>
                                         <button
-                                            onClick={() => setShowDeleteConfirm(true)}
+                                            onClick={handleDeleteClick}
                                             style={{
                                                 display: 'flex',
                                                 alignItems: 'center',
@@ -180,7 +219,7 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(); }}
                                     style={{
                                         padding: '8px 16px',
                                         fontSize: '0.9rem',
@@ -199,7 +238,7 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                                 </button>
                             </>
                         )
-                    )}
+                    }
                 </div>
             </div>
 
@@ -231,7 +270,7 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                             fontWeight: 700,
                             marginBottom: '24px'
                         }}>
-                            {trainer.status}
+                            {trainer.status === 'Inactive' ? 'Inactive — not bookable' : trainer.status}
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'left' }}>
@@ -350,10 +389,112 @@ export const TrainerProfile = ({ onBack, trainer, onEdit, onDelete }: TrainerPro
                             )) : (
                                 <p className="text-muted">No upcoming sessions scheduled.</p>
                             )}
+                            {hasMore && !sessionsLoading && (
+                                <button
+                                    onClick={loadMore}
+                                    className="button-secondary"
+                                    style={{ padding: '10px 16px', fontSize: '0.85rem', alignSelf: 'center' }}
+                                >
+                                    Load more
+                                </button>
+                            )}
                         </div>
                     </div>
+
+                    {trainer.status === 'Inactive' && upcomingSessions.length > 0 && (
+                        <div className="card" style={{ padding: '32px', border: '2px solid #ff4444' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                                <AlertCircle size={22} color="#ff4444" />
+                                <h3 style={{ fontSize: '1.3rem', margin: 0 }}>Resolve Upcoming Sessions</h3>
+                            </div>
+                            <p className="text-muted" style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '20px' }}>
+                                This trainer is inactive. Reassign or cancel their remaining sessions below, or leave them to resolve later.
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {upcomingSessions.map((session: any) => {
+                                    const dateObj = session.date ? new Date(session.date) : null;
+                                    const formattedDate = dateObj
+                                        ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                                        : '';
+                                    return (
+                                        <div
+                                            key={session.id}
+                                            style={{
+                                                padding: '16px',
+                                                border: '2px solid #000',
+                                                display: 'flex',
+                                                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                                                justifyContent: 'space-between',
+                                                alignItems: window.innerWidth <= 768 ? 'flex-start' : 'center',
+                                                gap: '16px',
+                                                background: '#fcfcfc'
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>
+                                                    {formattedDate} at {session.time} — {session.clientName || 'Group'}
+                                                </div>
+                                                <div style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>
+                                                    {session.serviceName}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '10px', width: window.innerWidth <= 768 ? '100%' : 'auto' }}>
+                                                <button
+                                                    onClick={() => handleReassignClick(session)}
+                                                    className="button-secondary"
+                                                    style={{
+                                                        flex: 1,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '6px',
+                                                        padding: '8px 12px',
+                                                        fontSize: '0.8rem',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    <Edit2 size={14} />
+                                                    Reassign
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCancelSession(session)}
+                                                    style={{
+                                                        flex: 1,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '6px',
+                                                        padding: '8px 12px',
+                                                        background: '#fff5f5',
+                                                        color: '#f44336',
+                                                        border: '2px solid #f44336',
+                                                        fontWeight: 800,
+                                                        fontSize: '0.8rem',
+                                                        cursor: 'pointer',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    <Trash2 size={14} />
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
+
+            <BookingModal
+                isOpen={!!reassignSlot}
+                onClose={() => { setReassignSlot(null); setReassignSession(null); }}
+                selectedSlot={reassignSlot}
+                editingSession={reassignSession}
+                excludedTrainerId={trainer.id}
+                onBook={() => { setReassignSlot(null); setReassignSession(null); }}
+            />
         </div>
     );
 };
