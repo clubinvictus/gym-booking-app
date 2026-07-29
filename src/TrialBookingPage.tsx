@@ -112,14 +112,28 @@ export const TrialBookingPage = () => {
                 const s = { id: serviceSnap.docs[0].id, ...(serviceSnap.docs[0].data() as any) };
                 setTrialService(s);
 
-                const trainerIds = s.assigned_trainer_ids || [];
-                if (trainerIds.length === 0) {
+                // Trainers qualify either by being explicitly assigned on the service doc, or by
+                // having a specialty naming this service / mentioning "trial" — a trainer added to
+                // the roster after the service doc's assigned_trainer_ids was last edited shouldn't
+                // be invisible here. Mirrors the same broadened eligibility check in BookingModal.tsx
+                // for staff-side trial bookings, so both booking surfaces agree on who qualifies.
+                const assignedIds = s.assigned_trainer_ids || s.assignedTrainerIds || [];
+                const allTrainersSnap = await getDocs(query(collection(db, 'trainers'), where('siteId', '==', SITE_ID)));
+                const eligible = allTrainersSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() } as any))
+                    .filter((t: any) =>
+                        t.status !== 'Inactive' &&
+                        (assignedIds.includes(t.id) ||
+                         t.specialties?.includes(s.name) ||
+                         t.specialties?.some((sp: string) => sp.toLowerCase().includes('trial')))
+                    );
+
+                if (eligible.length === 0) {
                     setError('No trainers assigned to the Trial service.');
                     return;
                 }
 
-                const trainersSnap = await getDocs(query(collection(db, 'trainers'), where('__name__', 'in', trainerIds.slice(0, 10))));
-                setTrainers(trainersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                setTrainers(eligible);
             } catch (err: any) {
                 console.error('Fetch error:', err);
                 setError(err.message);

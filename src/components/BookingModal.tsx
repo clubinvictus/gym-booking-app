@@ -271,15 +271,31 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
         return false;
     };
 
-    const availableTrainers = trainers.filter(t =>
-        (selectedService ? (t.specialties?.includes(selectedService)) : true) &&
-        isAvailable(t) &&
-        (excludedTrainerId ? t.id !== excludedTrainerId : true) &&
+    const currentServiceName = selectedService || editingSession?.serviceName;
+    const matchingService = services?.find((s: any) => s.name === currentServiceName);
+    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym'];
+
+    // Declared before availableTrainers (unlike before this merge) because the trial-permission
+    // check below needs matchingService already resolved.
+    const availableTrainers = trainers.filter(t => {
+        if (!isAvailable(t)) return false;
+        if (excludedTrainerId && t.id === excludedTrainerId) return false;
         // Inactive trainers are hidden from new bookings, but a session already assigned to one
         // must still show them so an unrelated edit (e.g. nudging the time) doesn't blank the
         // required trainer field and block the save.
-        (t.status !== 'Inactive' || (editingSession && t.name === editingSession.trainerName && t.id !== excludedTrainerId))
-    );
+        if (t.status === 'Inactive' && !(editingSession && t.name === editingSession.trainerName && t.id !== excludedTrainerId)) return false;
+        if (selectedService) {
+            // A trainer qualifies either by having the exact service name in their specialties,
+            // or — for services flagged isTrial — by having any specialty mentioning "trial"
+            // (a trial-qualified trainer doesn't necessarily list the exact service name), or by
+            // being explicitly assigned on the service doc itself.
+            const hasSpecialty = t.specialties?.includes(selectedService) ||
+                                 (matchingService?.isTrial && t.specialties?.some((sp: string) => sp.toLowerCase().includes('trial')));
+            const isAssigned = matchingService?.assigned_trainer_ids?.includes(t.id) || matchingService?.assignedTrainerIds?.includes(t.id);
+            return hasSpecialty || isAssigned;
+        }
+        return true;
+    });
 
     const currentClientName = isClient ? (profile?.name || user?.displayName || 'Client') : (selectedClient || editingSession?.clientName);
     const matchingClient = clients?.find((c: any) => c.name === currentClientName);
@@ -292,10 +308,6 @@ export const BookingModal = ({ isOpen, onClose, selectedSlot, editingSession, ex
             return allowed.includes(clientTier);
         });
     }, [services, isClient, clientTier]);
-
-    const currentServiceName = selectedService || editingSession?.serviceName;
-    const matchingService = services?.find((s: any) => s.name === currentServiceName);
-    const allowedTiersForService = matchingService?.allowed_tiers || ['limitless', 'limitless_open', 'classic_gym'];
 
     const isTierRestricted = !!(currentServiceName && currentClientName && !allowedTiersForService.includes(clientTier));
 
