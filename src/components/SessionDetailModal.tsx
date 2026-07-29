@@ -104,7 +104,11 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
             const initialDays = getWeekdaysFromRecurringDetails(session?.recurringDetails || '', session?.day || 0);
             setSelectedWeekdays(initialDays.map(d => d.dayNum));
         }
-    }, [isOpen, session]);
+        // Deliberately [isOpen] only, not [isOpen, session] — session is a live Firestore-synced
+        // object, so including it here meant a real-time update arriving mid-delete (e.g. this
+        // trigger's own busySlotSynced write) would re-run this effect and silently reset
+        // isDeleting/isProcessing, dropping the user back to the start of the delete flow.
+    }, [isOpen]);
 
     const toggleWeekday = (dayNum: number) => {
         setSelectedWeekdays(prev => 
@@ -760,7 +764,24 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                                 RESCHEDULE
                                             </button>
                                             <button
-                                                onClick={() => setIsDeleting(true)}
+                                                onClick={async () => {
+                                                    // Recurring sessions still need the Delete Options screen to
+                                                    // choose single-vs-future scope; a single session has no such
+                                                    // choice to make, so skip straight to the confirm dialog instead
+                                                    // of making the user click through a redundant screen first.
+                                                    if (session.seriesId) {
+                                                        setIsDeleting(true);
+                                                    } else {
+                                                        const confirmed = await confirm({
+                                                            title: 'Delete Session?',
+                                                            message: 'Are you sure you want to delete this session? This action cannot be undone.',
+                                                            confirmLabel: 'Yes, Delete',
+                                                            type: 'danger'
+                                                        });
+                                                        if (confirmed) await confirmDelete(targetClientId);
+                                                    }
+                                                }}
+                                                disabled={isProcessing}
                                                 style={{
                                                     flex: 1,
                                                     height: '54px',
@@ -768,7 +789,8 @@ export const SessionDetailModal = ({ isOpen, onClose, session, onDelete, onResch
                                                     color: '#fff',
                                                     border: 'none',
                                                     fontWeight: 800,
-                                                    cursor: 'pointer',
+                                                    cursor: isProcessing ? 'not-allowed' : 'pointer',
+                                                    opacity: isProcessing ? 0.5 : 1,
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',

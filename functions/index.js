@@ -102,18 +102,19 @@ async function sendWhatsAppTemplate(to, templateName, variables) {
         const webhooks = settingsSnap.data();
         const webhookUrl = webhooks[templateName];
 
-        if (!webhookUrl) {
-            console.warn(`No webhook URL configured for template: '${templateName}'. Skipping.`);
-            return false;
-        }
-
         // Flatten payload for EasySocial's custom mapping
         // We send it as standard form data instead of a JSON string per test_webhook.js
+        // (built before the URL check below so a missing config still logs what would have sent)
         const payload = qs.stringify({
             phone: to.replace('+', ''),
             template: templateName,
             ...variables
         });
+
+        if (!webhookUrl) {
+            console.warn(`No webhook URL configured for template: '${templateName}'. Payload would have been:`, payload);
+            return false;
+        }
 
         console.log(`Sending webhook for '${templateName}' to ${webhookUrl}...`);
         await axios.post(webhookUrl, payload, {
@@ -343,6 +344,57 @@ exports.onSessionWritten = functions.firestore
             }
 
             return null;
+        }
+
+        // --- LIMITLESS OPEN ROUTING ---
+        // Limitless Open is a shared session (up to 3 clients per slot, see WeekGrid/ResourceGrid's
+        // 3-cap chip logic) — it gets its own WhatsApp templates instead of the generic single-
+        // booking ones below, and needs the *joining* client's contact details, not necessarily the
+        // original booker's (data.clientId/clientName/clientPhone only ever reflect whoever created
+        // the session — BookingModal's handleJoin only arrayUnion's onto `clients`, it never updates
+        // those top-level fields). data.clients is the real roster; its last entry is the most
+        // recent joiner on both create and join-triggered updates.
+        if (data.serviceName === 'Limitless Open') {
+            const rosterClients = Array.isArray(data.clients) ? data.clients : [];
+            const latestClient = rosterClients.length > 0 ? rosterClients[rosterClients.length - 1] : {};
+            const latestClientId = latestClient.id || data.clientId || null;
+            const latestClientName = latestClient.name || data.clientName || 'Client';
+
+            let latestClientPhone = latestClient.phone || data.clientPhone || null;
+            if (!latestClientPhone && latestClientId) {
+                const clientSnap = await db.collection('clients').doc(latestClientId).get();
+                if (clientSnap.exists) {
+                    latestClientPhone = clientSnap.data().phone || null;
+                } else {
+                    const userSnap = await db.collection('users').doc(latestClientId).get();
+                    if (userSnap.exists) latestClientPhone = userSnap.data().phone || null;
+                }
+            }
+
+            const limitlessVars = {
+                clientName: latestClientName,
+                trainerName: data.trainerName,
+                date: sessionDate,
+                time: sessionTime
+            };
+
+            const isLimitClientBooking = (data.createdBy === latestClientName) && latestClientName;
+            const shouldAlertLimitManagers = isLimitClientBooking || (data.createdBy !== "Unknown User" && data.createdBy !== "System");
+
+            if (isCreate && !data.seriesId) {
+                if (isLimitClientBooking) {
+                    if (latestClientPhone) await sendWhatsAppTemplate(latestClientPhone, 'open_single_client_booking_client', limitlessVars);
+                    if (trainerPhone) await sendWhatsAppTemplate(trainerPhone, 'open_single_client_booking_trainer', limitlessVars);
+                    if (shouldAlertLimitManagers) {
+                        const managerPhones = await getManagerPhones();
+                        for (const mPhone of managerPhones) await sendWhatsAppTemplate(mPhone, 'open_single_client_booking_manager', limitlessVars);
+                    }
+                } else {
+                    if (latestClientPhone) await sendWhatsAppTemplate(latestClientPhone, 'open_single_admin_booking_client', limitlessVars);
+                    if (trainerPhone) await sendWhatsAppTemplate(trainerPhone, 'open_single_admin_booking_trainer', limitlessVars);
+                }
+            }
+            return null; // Early exit so the generic single-booking logic below doesn't also fire
         }
 
         // --- SINGLE BOOKING LOGIC ---
