@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 // Split the authenticated app shell from the public-facing pages: a visitor
 // hitting /login or /book-trial shouldn't pay for the entire Dashboard bundle.
-const LoginPage = lazy(() => import('./components/LoginPage').then(m => ({ default: m.LoginPage })));
+const CalendarRetiredPage = lazy(() => import('./components/CalendarRetiredPage').then(m => ({ default: m.CalendarRetiredPage })));
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const TrialBookingPage = lazy(() => import('./TrialBookingPage').then(m => ({ default: m.TrialBookingPage })));
 
@@ -43,7 +43,7 @@ function App() {
           <Router>
             <Suspense fallback={<RouteFallback />}>
             <Routes>
-              <Route path="/login" element={<LoginPage />} />
+              <Route path="/login" element={<CalendarRetiredPage />} />
               <Route path="/book-trial" element={<TrialBookingPage />} />
 
               {/* Admin/Trainer/Client Routes */}
